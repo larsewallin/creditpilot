@@ -111,6 +111,7 @@ export async function initDemo() {
 
   // ── 3. Mark demo as initialized ───────────────────────────────────────────
 
+  sessionStorage.removeItem('cia_question_count');
   sessionStorage.setItem("demo_initialized", "true");
   sessionStorage.setItem("demo_activated", "true");
   sessionStorage.setItem(

@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+import { DEMO_MODE, CIA_DEMO_QUESTION_LIMIT } from "@/lib/constants";
 import ReactMarkdown from "react-markdown";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -91,6 +92,22 @@ function AnswerSkeleton({ question }: { question: string }) {
   );
 }
 
+// ─── Demo rate limit helpers ──────────────────────────────────────────────────
+
+const CIA_COUNT_KEY = 'cia_question_count'
+
+function getDemoQuestionCount(): number {
+  if (!DEMO_MODE) return 0
+  return parseInt(sessionStorage.getItem(CIA_COUNT_KEY) ?? '0', 10)
+}
+
+function incrementDemoQuestionCount(): number {
+  if (!DEMO_MODE) return 0
+  const next = getDemoQuestionCount() + 1
+  sessionStorage.setItem(CIA_COUNT_KEY, String(next))
+  return next
+}
+
 // ─── Fallback suggestions ─────────────────────────────────────────────────────
 
 const DEMO_SUGGESTIONS = [
@@ -121,11 +138,24 @@ export default function CIA() {
     setRelated([]);
     setIsLoading(true);
 
+    if (DEMO_MODE && getDemoQuestionCount() >= CIA_DEMO_QUESTION_LIMIT) {
+      setAnswer({
+        answer: `You've reached the ${CIA_DEMO_QUESTION_LIMIT}-question demo limit. Deploy your own instance of CreditPilot for unlimited access — it takes about 5 minutes. See the [GitHub repo](https://github.com/Lawa18/creditpilot) for instructions.`,
+        sources: [],
+        confidence: 'Low',
+        confidence_reason: 'Demo question limit reached.',
+        relatedQuestions: [],
+      });
+      setIsLoading(false);
+      return;
+    }
+
     supabase.functions
       .invoke("cia-agent", { body: { mode: "question", question } })
       .then(({ data, error: fnError }) => {
         if (fnError) throw new Error(fnError.message);
         if (data?.error) throw new Error(data.error);
+        incrementDemoQuestionCount();
         setAnswer(data as CIAAnswer);
       })
       .catch(err => setError(err instanceof Error ? err.message : "Unknown error"))
@@ -254,6 +284,12 @@ export default function CIA() {
             </div>
           )}
         </>
+      )}
+
+      {DEMO_MODE && (
+        <p className="text-xs text-muted-foreground text-center mt-4">
+          Demo: {getDemoQuestionCount()}/{CIA_DEMO_QUESTION_LIMIT} questions used
+        </p>
       )}
     </div>
   );

@@ -1,5 +1,7 @@
 export const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
 
+export const CIA_DEMO_QUESTION_LIMIT = 5;
+
 export const AGENT_CONFIG = {
   news_monitor_agent: {
     label: "News Monitor",
