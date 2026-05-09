@@ -162,16 +162,20 @@ export async function initDemo() {
     await supabase.from("customers").update({ credit_limit: limit }).eq("id", id);
   }
 
-  // Delete-then-insert for sec_monitoring — avoids upsert conflict resolution issues.
-  // Any agent-written rows (ai_risk_score, ai_summary) are cleared on reset by design.
-  await supabase.from("sec_monitoring").delete().eq("is_demo", true);
-  await supabase.from("sec_monitoring").insert(SEED_SEC_MONITORING);
+  // Upsert sec_monitoring seed rows — onConflict: 'id' avoids ambiguity.
+  // ignoreDuplicates: true preserves any agent-written fields (ai_risk_score etc).
+  await supabase.from("sec_monitoring").upsert(SEED_SEC_MONITORING, { onConflict: "id", ignoreDuplicates: true });
+  await supabase
+    .from("sec_monitoring")
+    .update({ alert_triggered: true })
+    .in("customer_id", [
+      "c0000001-0000-0000-0000-000000000021",
+      "c0000001-0000-0000-0000-000000000049",
+    ]);
 
-  // Delete-then-insert for negative_news — avoids conflict with content_fingerprint unique index.
-  // Any agent-added news rows are cleared on reset by design.
-  await supabase.from("negative_news").delete().eq("is_demo", true);
-  await supabase.from("negative_news").insert(SEED_NEGATIVE_NEWS);
-  // Reset reviewed state on any rows not covered by the seed insert (e.g. live-mode rows)
+  // Upsert negative_news seed rows — onConflict: 'id' avoids conflict with
+  // content_fingerprint unique index. INSERT policy added in migration 20260509000000.
+  await supabase.from("negative_news").upsert(SEED_NEGATIVE_NEWS, { onConflict: "id" });
   await supabase
     .from("negative_news")
     .update({ reviewed: false, reviewed_by: null, reviewed_at: null })
