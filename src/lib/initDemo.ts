@@ -1,5 +1,4 @@
 import { supabase } from "@/integrations/supabase/client";
-import { DEMO_MODE } from "@/lib/constants";
 
 // All 5 seed pending_actions — exact values from migrations.
 // Rows 1-3: 20260419220602_demo_seed_data.sql (agent updated to cia-agent by 20260429000000)
@@ -103,6 +102,7 @@ const SEED_NEGATIVE_NEWS = [
     reviewed_by: null,
     reviewed_at: null,
     agent_name: "news_monitor_agent",
+    is_demo: true,
   },
   {
     id: "n0000001-0000-0000-0000-000000000002",
@@ -118,6 +118,7 @@ const SEED_NEGATIVE_NEWS = [
     reviewed_by: null,
     reviewed_at: null,
     agent_name: "news_monitor_agent",
+    is_demo: true,
   },
 ];
 
@@ -127,12 +128,14 @@ const SEED_SEC_MONITORING = [
     customer_id: "c0000001-0000-0000-0000-000000000021", // Triumph Group
     cik: "1021162",
     alert_triggered: true,
+    is_demo: true,
   },
   {
     id: "s0000001-0000-0000-0000-000000000002",
     customer_id: "c0000001-0000-0000-0000-000000000049", // Heliogen Inc
     cik: "1840292",
     alert_triggered: true,
+    is_demo: true,
   },
 ];
 
@@ -144,12 +147,7 @@ const SEED_SEC_MONITORING = [
 export async function initDemo() {
   // ── 1. Reset all tables to seed state ────────────────────────────────────
 
-  // Step 1 — ensure all 5 seed rows exist (creates any that were hard-deleted)
-  await supabase
-    .from("pending_actions")
-    .upsert(SEED_PENDING_ACTIONS, { onConflict: "id", ignoreDuplicates: false });
-
-  // Step 2 — force reset all demo pending_actions back to pending regardless of prior upsert behaviour
+  // Reset all demo pending_actions back to pending
   await supabase
     .from("pending_actions")
     .update({ status: "pending", reviewed_by: null, reviewed_at: null, review_note: null })
@@ -166,7 +164,7 @@ export async function initDemo() {
 
   // Upsert sec_monitoring seed rows (ensures they exist), then update alert state.
   // ignoreDuplicates=true on upsert preserves ai_risk_score/ai_summary set by agents.
-  await supabase.from("sec_monitoring").upsert(SEED_SEC_MONITORING, { ignoreDuplicates: true });
+  await supabase.from("sec_monitoring").upsert(SEED_SEC_MONITORING, { onConflict: "id", ignoreDuplicates: true });
   await supabase
     .from("sec_monitoring")
     .update({ alert_triggered: true })
@@ -177,7 +175,7 @@ export async function initDemo() {
 
   // Upsert negative_news seed rows (ensures they exist and resets reviewed state),
   // then reset reviewed state on any additional rows added by the agent.
-  await supabase.from("negative_news").upsert(SEED_NEGATIVE_NEWS);
+  await supabase.from("negative_news").upsert(SEED_NEGATIVE_NEWS, { onConflict: "id" });
   await supabase
     .from("negative_news")
     .update({ reviewed: false, reviewed_by: null, reviewed_at: null })
