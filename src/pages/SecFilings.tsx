@@ -12,7 +12,7 @@ export default function SecFilings() {
       const { data } = await supabase
         .from("sec_monitoring")
         .select("*, customers!inner(company_name, ticker)")
-        .eq("is_demo", DEMO_MODE)
+        .eq("is_demo", true)
         .order("alert_triggered", { ascending: false });
       return data ?? [];
     },
@@ -25,7 +25,7 @@ export default function SecFilings() {
         .from("credit_events")
         .select("customer_id, event_type, description, severity")
         .eq("source_agent", "sec_monitor_agent")
-        .eq("is_demo", DEMO_MODE);
+        .eq("is_demo", true);
       return data ?? [];
     },
   });

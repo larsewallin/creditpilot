@@ -80,7 +80,7 @@ export default function ArAging() {
         .select("*, customers!inner(company_name, ticker)")
         .eq("agent_name", "ar_aging_agent")
         .eq("status", "pending")
-        .eq("is_demo", DEMO_MODE)
+        .eq("is_demo", true)
         .order("created_at", { ascending: false })
         .limit(20);
       return data ?? [];

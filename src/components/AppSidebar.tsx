@@ -25,14 +25,14 @@ export function AppSidebar() {
         .from("negative_news")
         .select("id", { count: "exact", head: true })
         .eq("reviewed", false)
-        .eq("is_demo", DEMO_MODE)
+        .eq("is_demo", true)
         .then(({ count }) => count ?? 0);
 
       const { count: secCount } = await supabase
         .from("sec_filings")
         .select("id", { count: "exact", head: true })
         .eq("reviewed", false)
-        .eq("is_demo", DEMO_MODE);
+        .eq("is_demo", true);
 
       return { news: newsCount, sec: secCount ?? 0 };
     },

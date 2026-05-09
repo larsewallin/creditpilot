@@ -29,7 +29,7 @@ export default function CreditEvents() {
         .from("pending_actions")
         .select("*", { count: "exact", head: true })
         .eq("status", "pending")
-        .eq("is_demo", DEMO_MODE);
+        .eq("is_demo", true);
       return count ?? 0;
     },
     refetchInterval: 30000,
@@ -41,7 +41,7 @@ export default function CreditEvents() {
       let query = supabase
         .from("credit_events")
         .select("*, customers(company_name, ticker)")
-        .eq("is_demo", DEMO_MODE)
+        .eq("is_demo", true)
         .order("created_at", { ascending: false })
         .limit(100);
 
