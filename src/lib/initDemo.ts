@@ -162,20 +162,16 @@ export async function initDemo() {
     await supabase.from("customers").update({ credit_limit: limit }).eq("id", id);
   }
 
-  // Upsert sec_monitoring seed rows (ensures they exist), then update alert state.
-  // ignoreDuplicates=true on upsert preserves ai_risk_score/ai_summary set by agents.
-  await supabase.from("sec_monitoring").upsert(SEED_SEC_MONITORING, { onConflict: "id", ignoreDuplicates: true });
-  await supabase
-    .from("sec_monitoring")
-    .update({ alert_triggered: true })
-    .in("customer_id", [
-      "c0000001-0000-0000-0000-000000000021",
-      "c0000001-0000-0000-0000-000000000049",
-    ]);
+  // Delete-then-insert for sec_monitoring — avoids upsert conflict resolution issues.
+  // Any agent-written rows (ai_risk_score, ai_summary) are cleared on reset by design.
+  await supabase.from("sec_monitoring").delete().eq("is_demo", true);
+  await supabase.from("sec_monitoring").insert(SEED_SEC_MONITORING);
 
-  // Upsert negative_news seed rows (ensures they exist and resets reviewed state),
-  // then reset reviewed state on any additional rows added by the agent.
-  await supabase.from("negative_news").upsert(SEED_NEGATIVE_NEWS, { onConflict: "id" });
+  // Delete-then-insert for negative_news — avoids conflict with content_fingerprint unique index.
+  // Any agent-added news rows are cleared on reset by design.
+  await supabase.from("negative_news").delete().eq("is_demo", true);
+  await supabase.from("negative_news").insert(SEED_NEGATIVE_NEWS);
+  // Reset reviewed state on any rows not covered by the seed insert (e.g. live-mode rows)
   await supabase
     .from("negative_news")
     .update({ reviewed: false, reviewed_by: null, reviewed_at: null })

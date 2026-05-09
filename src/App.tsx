@@ -8,6 +8,7 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { CIAChat } from "@/components/CIAChat";
 import { DEMO_MODE } from "@/lib/constants";
 import { initDemo } from "@/lib/initDemo";
+import { supabase } from "@/integrations/supabase/client";
 import CreditEvents from "@/pages/CreditEvents";
 import NewsMonitor from "@/pages/NewsMonitor";
 import ArAging from "@/pages/ArAging";
@@ -22,10 +23,17 @@ const queryClient = new QueryClient();
 function SidebarLayout() {
   useEffect(() => {
     if (!DEMO_MODE) return;
-    if (sessionStorage.getItem("demo_initialized") === "true") return;
 
-    initDemo()
-      .then(() => queryClient.invalidateQueries())
+    supabase
+      .from("pending_actions")
+      .select("*", { count: "exact", head: true })
+      .eq("is_demo", true)
+      .eq("status", "pending")
+      .then(({ count }) => {
+        if (!count || count < 5) {
+          return initDemo().then(() => queryClient.invalidateQueries());
+        }
+      })
       .catch(() => {
         // silent — demo still works via manual run
       });
