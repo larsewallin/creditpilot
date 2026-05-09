@@ -144,9 +144,16 @@ const SEED_SEC_MONITORING = [
 export async function initDemo() {
   // ── 1. Reset all tables to seed state ────────────────────────────────────
 
+  // Step 1 — ensure all 5 seed rows exist (creates any that were hard-deleted)
   await supabase
     .from("pending_actions")
-    .upsert(SEED_PENDING_ACTIONS, { onConflict: "id" });
+    .upsert(SEED_PENDING_ACTIONS, { onConflict: "id", ignoreDuplicates: false });
+
+  // Step 2 — force reset all demo pending_actions back to pending regardless of prior upsert behaviour
+  await supabase
+    .from("pending_actions")
+    .update({ status: "pending", reviewed_by: null, reviewed_at: null, review_note: null })
+    .eq("is_demo", true);
 
   await supabase
     .from("agent_messages")
