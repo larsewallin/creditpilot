@@ -21,7 +21,6 @@ const queryClient = new QueryClient();
 
 function SidebarLayout() {
   useEffect(() => {
-    console.log('DEMO_MODE:', DEMO_MODE, 'flag:', sessionStorage.getItem('demo_initialized'));
     if (!DEMO_MODE) return;
     if (sessionStorage.getItem("demo_initialized") === "true") return;
 
