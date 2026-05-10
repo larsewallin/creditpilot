@@ -48,10 +48,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Anthropic from "https://esm.sh/@anthropic-ai/sdk@0.27.0";
 import { assessCompositeRisk } from "../_shared/skills/analytical/assess-composite-risk.ts";
 import { calculateCreditLimitProposal } from "../_shared/skills/analytical/calculate-credit-limit-proposal.ts";
-import { aggregateCreditScores } from "../_shared/skills/analytical/aggregate-credit-scores.ts";
-import { detectRatingChange } from "../_shared/skills/analytical/detect-rating-change.ts";
-import { composeTeamsAlert } from "../_shared/skills/generative/compose-teams-alert.ts";
-import { deliverMessage, EmailProvider, TeamsProvider, SlackProvider, LogProvider } from "../_shared/skills/integration/deliver-message.ts";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -84,7 +80,7 @@ interface Customer {
   ticker: string | null;
   company_type: "public" | "private" | "sme";
   credit_limit: number | null;
-  current_exposure: number | null;
+  current_balance: number | null;
 }
 
 interface AgentRun {
@@ -181,7 +177,7 @@ function severityRank(s: string): number {
 
 function buildSystemPrompt(customers: Customer[]): string {
   const customerMap = customers.map(c =>
-    `- ${c.name} (id: ${c.id}, type: ${c.company_type}, credit limit: $${c.credit_limit?.toLocaleString() ?? "N/A"}, balance: $${c.current_exposure?.toLocaleString() ?? "0"})`
+    `- ${c.name} (id: ${c.id}, type: ${c.company_type}, credit limit: $${c.credit_limit?.toLocaleString() ?? "N/A"}, balance: $${c.current_balance?.toLocaleString() ?? "0"})`
   ).join("\n");
 
   return `You are the Credit Intelligence Agent (CIA) for CreditPilot, an autonomous B2B trade credit management system.
@@ -249,11 +245,6 @@ function extractText(message: Anthropic.Message): string {
     .filter(b => b.type === "text")
     .map(b => (b as { type: "text"; text: string }).text)
     .join("");
-}
-
-function sanitize(s: string | null | undefined): string {
-  if (!s) return "";
-  return String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, " ").replace(/\r/g, "").trim();
 }
 
 // ─── Question router ─────────────────────────────────────────────────────────
@@ -331,61 +322,64 @@ async function fetchRelevantData(
     sec_filings: [],
   };
 
+  // customers must resolve BEFORE credit_events so events can be scoped to the
+  // customers that landed in the result set. Otherwise the two queries return
+  // different slices of the world and Claude self-rates Low confidence
+  // because the answer (built from customers) doesn't match the events
+  // (a global recent-N slice). Run customers first, then everything else in
+  // parallel.
+  if (tables.has("customers")) {
+    const baseQuery = supabase
+      .from("customers")
+      .select("id, company_name, ticker, company_type, credit_limit, current_balance, credit_rating_score, credit_rating_source, scenario, risk_tags, flags")
+      .order("company_name")
+      .limit(20);
+
+    if (words.length > 0) {
+      // Specific company names were mentioned — search for them
+      const nameFilter = words.map(w => `company_name.ilike.%${w}%`).join(",");
+      const { data: named } = await baseQuery.or(nameFilter);
+      // If we searched for a specific company and found nothing, return empty —
+      // don't fall back to the full list (would give Claude 20 unrelated customers)
+      results.customers = named ?? [];
+    } else {
+      // No company names mentioned — return full list for portfolio-level questions
+      const { data } = await baseQuery;
+      results.customers = data ?? [];
+    }
+  }
+
+  // Scope credit_events to the customers we just resolved (when both tables apply).
+  // For company-named questions this means events for that company.
+  // For portfolio questions this means events for the portfolio's customers,
+  // not a global recent-15 slice that drifts away from the answer.
+  const scopedCustomerIds: string[] = results.customers.map((c: any) => c.id);
+  const scopeEventsToCustomers = tables.has("customers") && tables.has("credit_events") && scopedCustomerIds.length > 0;
+
   await Promise.allSettled([
 
-    // credit_events — keyword search on title + description
+    // credit_events — scoped to resolved customers when possible; otherwise
+    // fall back to recent severity-ordered events. The previous keyword filter
+    // (ilike on title/description with words like "customers", "credit") was
+    // dropped because it produced near-random matches for natural-language
+    // questions and triggered a fallback that returned events for unrelated
+    // customers.
     tables.has("credit_events") && (async () => {
-      const orFilter = keywords.flatMap(kw => [
-        `title.ilike.%${kw}%`,
-        `description.ilike.%${kw}%`,
-      ]).join(",");
-
       let q = supabase
         .from("credit_events")
-        .select("id, event_type, severity, source_agent, title, description, payload, created_at, customers!left(company_name, ticker, credit_limit, current_exposure)")
+        .select("id, event_type, severity, source_agent, title, description, payload, created_at, customer_id, customers!left(company_name, ticker, credit_limit, current_balance)")
         .eq("is_demo", demoMode)
         .order("created_at", { ascending: false })
-        .limit(15);
-
-      if (keywords.length > 0) {
-        const { data: filtered, error: filteredErr } = await q.or(orFilter);
-        if (filteredErr) console.error("credit_events filter error:", filteredErr.message);
-        if (filtered && filtered.length >= 2) {
-          results.credit_events = filtered;
-          return;
-        }
-      }
-      const { data: fallback, error: fallbackErr } = await q;
-      if (fallbackErr) console.error("credit_events fallback error:", fallbackErr.message);
-      results.credit_events = fallback ?? [];
-    })(),
-
-    // customers — search by name or return top 20 by credit_limit (highest exposure first)
-    tables.has("customers") && (async () => {
-      const selectFields = "id, company_name, ticker, company_type, credit_limit, current_exposure, credit_rating_score, credit_rating_raw, credit_rating_source, scenario, risk_tags, flags, payment_on_time_rate, payment_trend, payment_health";
-
-      if (words.length > 0) {
-        // Specific company names mentioned — targeted name search
-        const nameFilter = words.map(w => `company_name.ilike.%${w}%`).join(",");
-        const { data: named, error: namedErr } = await supabase
-          .from("customers")
-          .select(selectFields)
-          .or(nameFilter)
-          .order("company_name")
-          .limit(20);
-        if (namedErr) console.error("customers named error:", namedErr.message);
-        // Don't fall back to full list — return whatever the name search found (even empty)
-        results.customers = named ?? [];
-        return;
-      }
-      // No names mentioned — portfolio-level question: return top 20 by credit_limit desc
-      const { data, error: allErr } = await supabase
-        .from("customers")
-        .select(selectFields)
-        .order("credit_limit", { ascending: false })
         .limit(20);
-      if (allErr) console.error("customers all error:", allErr.message);
-      results.customers = data ?? [];
+
+      if (scopeEventsToCustomers) {
+        // Include events for the resolved customers AND portfolio-scope events
+        // (customer_id is null) which apply across the book.
+        q = q.or(`customer_id.in.(${scopedCustomerIds.join(",")}),customer_id.is.null`);
+      }
+
+      const { data } = await q;
+      results.credit_events = data ?? [];
     })(),
 
     // invoices — filter by customer name mention or return at-risk
@@ -393,7 +387,7 @@ async function fetchRelevantData(
       const { data: customers } = await supabase
         .from("customers")
         .select("id, company_name")
-        .limit(20);
+        .limit(60);
 
       const customerMap = Object.fromEntries((customers ?? []).map((c: any) => [c.id, c.company_name]));
 
@@ -426,7 +420,7 @@ async function fetchRelevantData(
       const { data: customers } = await supabase
         .from("customers")
         .select("id, company_name")
-        .limit(20);
+        .limit(60);
 
       let custIds: string[] = [];
       if (words.length > 0) {
@@ -561,133 +555,165 @@ serve(async (req: Request) => {
     if (!authHeader) return jsonRes({ error: "Unauthorized" }, 401);
     if (!question) return jsonRes({ error: "question is required" }, 400);
 
-    try {
-
     // Route question to relevant tables
     const tables = routeQuestion(question);
+    console.log("DEBUG tables:", [...tables]);
+    const STOPWORDS_DEBUG = new Set(["What", "Which", "Who", "How", "When", "Where", "Why", "The", "Their", "Corporation", "Company", "Group", "Inc", "Ltd", "LLC", "Current", "Credit", "Limit", "Balance", "And", "For", "Has", "Have", "Does", "Should", "Could", "Would", "Tell", "Show", "Give", "Get"]);
+    const debugWords = (question.match(/[A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*/g) ?? []).flatMap(p => p.split(" ")).filter(w => !STOPWORDS_DEBUG.has(w) && w.length > 2);
+    console.log("DEBUG words:", debugWords);
 
     // Fetch data from all relevant tables in parallel
     const data = await fetchRelevantData(supabaseClient, question, tables, DEMO_MODE);
+    console.log("DEBUG customers found:", data.customers.length);
+    console.log("DEBUG credit_events found:", data.credit_events.length);
 
-    // Build context string — sanitize all text fields to prevent JSON parse errors
-    // in Claude's response (quotes, backslashes, newlines in DB fields break output JSON)
+    // Build context string from all retrieved data
     const contextParts: string[] = [];
 
     if (data.customers.length > 0) {
       contextParts.push("## CUSTOMERS TABLE\n" + data.customers.map((c: any) =>
-        `- ${sanitize(c.company_name)} (type:${sanitize(c.company_type)}, credit_limit=$${c.credit_limit?.toLocaleString()}, balance=$${c.current_exposure?.toLocaleString()}, utilization=${c.credit_limit ? Math.round(c.current_exposure / c.credit_limit * 100) : "N/A"}%, ${c.credit_rating_score != null ? `credit_score=${c.credit_rating_score}/100 (${sanitize(c.credit_rating_raw) || "N/A"} from ${sanitize(c.credit_rating_source) || "N/A"})` : "credit_score=NR (No Rating, provider=N/A)"}, scenario=${sanitize(c.scenario) || "N/A"}, payment_health=${sanitize(c.payment_health) || "unknown"}, risk_tags=[${(c.risk_tags ?? []).map(sanitize).join(", ")}])`
+        `- ${c.company_name} (${c.company_type}): credit_limit=$${c.credit_limit?.toLocaleString()}, balance=$${c.current_balance?.toLocaleString()}, utilization=${c.credit_limit ? Math.round(c.current_balance / c.credit_limit * 100) : "N/A"}%, credit_score=${c.credit_rating_score ?? "N/A"}, risk_tags=[${(c.risk_tags ?? []).join(", ")}]`
       ).join("\n"));
     }
 
     if (data.invoices.length > 0) {
       contextParts.push("## INVOICES TABLE\n" + data.invoices.map((inv: any) =>
-        `- ${sanitize(inv.company_name)}: invoice ${sanitize(inv.invoice_number)}, amount=$${inv.invoice_amount?.toLocaleString()}, outstanding=$${inv.outstanding_amount?.toLocaleString()}, due=${inv.due_date}, status=${inv.status}, days_overdue=${inv.days_overdue}`
+        `- ${inv.company_name}: invoice ${inv.invoice_number}, amount=$${inv.invoice_amount?.toLocaleString()}, outstanding=$${inv.outstanding_amount?.toLocaleString()}, due=${inv.due_date}, status=${inv.status}, days_overdue=${inv.days_overdue}`
       ).join("\n"));
     }
 
     if (data.payment_transactions.length > 0) {
       contextParts.push("## PAYMENT TRANSACTIONS TABLE\n" + data.payment_transactions.map((p: any) =>
-        `- ${sanitize(p.company_name)}: paid $${p.amount_paid?.toLocaleString()} on ${p.payment_date}, days_to_pay=${p.days_to_pay}, days_early_late=${p.days_early_late} (${p.days_early_late > 0 ? "late" : p.days_early_late < 0 ? "early" : "on time"}), method=${p.payment_method}`
+        `- ${p.company_name}: paid $${p.amount_paid?.toLocaleString()} on ${p.payment_date}, days_to_pay=${p.days_to_pay}, days_early_late=${p.days_early_late} (${p.days_early_late > 0 ? "late" : p.days_early_late < 0 ? "early" : "on time"}), method=${p.payment_method}`
       ).join("\n"));
     }
 
     if (data.negative_news.length > 0) {
       contextParts.push("## NEGATIVE NEWS TABLE\n" + data.negative_news.map((n: any) =>
-        `- ${sanitize(n.customers?.company_name) || "Unknown"}: ${sanitize(n.headline)} (${sanitize(n.source)}, ${n.news_date}), severity=${n.severity}, sentiment=${n.sentiment_score}`
+        `- ${n.customers?.company_name ?? "Unknown"}: "${n.headline}" (${n.source}, ${n.news_date}), severity=${n.severity}, sentiment=${n.sentiment_score}`
       ).join("\n"));
     }
 
     if (data.sec_filings.length > 0) {
       contextParts.push("## SEC FILINGS TABLE\n" + data.sec_filings.map((f: any) =>
-        `- ${sanitize(f.customers?.company_name) || "Unknown"}: ${f.filing_type} filed ${f.filing_date}, risk_signals=[${(f.risk_signals ?? []).map(sanitize).join(", ")}]`
+        `- ${f.customers?.company_name ?? "Unknown"}: ${f.filing_type} filed ${f.filing_date}, risk_signals=[${(f.risk_signals ?? []).join(", ")}]`
       ).join("\n"));
     }
 
     if (data.credit_events.length > 0) {
       contextParts.push("## CREDIT EVENTS TABLE\n" + data.credit_events.map((e: any) =>
-        `- ${sanitize(e.customers?.company_name) || "Portfolio"}: ${e.event_type} (${e.severity}) from ${e.source_agent} on ${e.created_at?.split("T")[0]} — ${sanitize(e.title)}${e.description ? ": " + sanitize(e.description) : ""}`
+        `- ID:${e.id} | ${e.customers?.company_name ?? "Portfolio"}: ${e.event_type} (${e.severity}) from ${e.source_agent} on ${e.created_at?.split("T")[0]} — ${e.title}${e.description ? ": " + e.description : ""}`
       ).join("\n"));
     }
 
     const context = contextParts.join("\n\n");
+    console.log("DEBUG context length:", context.length);
 
-    const model = DEMO_MODE ? "claude-haiku-4-5" : "claude-sonnet-4-20250514";
-    const maxTokens = DEMO_MODE ? 600 : 900;
+    // Split into TWO calls:
+    //   1) Answer  — plain markdown text, no JSON wrapper. Cannot break on
+    //      embedded quotes/newlines/specials in the markdown body.
+    //   2) Metadata — small structured JSON (confidence + sources). Tiny,
+    //      predictable, parses cleanly. Defaults applied if parse fails so
+    //      the user always sees the answer.
+    // The single-call version embedded a markdown answer inside a JSON string
+    // field, which intermittently failed JSON.parse and surfaced as Confidence: Low
+    // with stale/empty metadata.
+
+    const answerSystemPrompt = `You are the Credit Intelligence Agent (CIA) for CreditPilot — a Perplexity-style credit analyst that answers questions about a B2B trade credit portfolio.
+
+CRITICAL RULES:
+1. Answer ONLY from the data provided below. Never use training knowledge to fill gaps.
+2. If the data does not contain the answer, say exactly: "I don't have that information in the current data."
+3. Cite every specific fact with its source in parentheses — e.g. (customers table), (invoices table), (credit_events: NEGATIVE_NEWS_HIGH).
+4. Be specific: use exact amounts, dates, percentages from the data.
+5. If multiple data sources confirm the same fact, mention both.
+
+Output: 2–3 paragraphs of markdown-formatted analysis with **bold key terms** and inline source citations. Plain text only — do NOT wrap your answer in JSON or code fences.`;
+
+    const metadataSystemPrompt = `Return ONLY valid JSON, no other text, no code fences. Schema:
+{
+  "confidence": "High|Medium|Low",
+  "confidence_reason": "one sentence — High if data directly answers the question, Medium if partial, Low if inferred",
+  "sources": [
+    {
+      "event_id": "uuid or null",
+      "customer_name": "string",
+      "event_type": "string — table name or event type",
+      "severity": "critical|high|medium|low|info",
+      "date": "ISO date string",
+      "agent": "string — source agent or table name"
+    }
+  ]
+}`;
+
+    const answerModel = DEMO_MODE ? "claude-haiku-4-5" : "claude-sonnet-4-20250514";
+    const answerMaxTokens = DEMO_MODE ? 800 : 1200;
 
     const anthropic = new Anthropic({ apiKey: Deno.env.get("ANTHROPIC_API_KEY")! });
 
+    // ── Call 1: answer (plain markdown text) ─────────────────────────────────
+    let answerText: string;
     try {
-      // ── Call 1: plain-text answer — never embedded in JSON ──────────────────
       const answerMessage = await anthropic.messages.create({
-        model,
-        max_tokens: maxTokens,
-        system: `You are the Credit Intelligence Agent (CIA) for CreditPilot — a credit analyst answering questions about a B2B trade credit portfolio. Answer ONLY from the data provided. Cite every fact with its source in parentheses e.g. (customers table), (credit_events: NEGATIVE_NEWS_HIGH). Be specific with exact amounts, dates, and percentages. If data does not contain the answer say exactly: I don't have that information in the current data. Keep response under 120 words. Use markdown with **bold key terms**. Plain text output only — no JSON.`,
+        model: answerModel,
+        max_tokens: answerMaxTokens,
+        system: answerSystemPrompt,
         messages: [{
           role: "user",
-          content: `Question: ${question}\n\nData:\n${context || "No relevant data found."}`,
+          content: `Question: ${question}\n\nRetrieved data from database:\n${context || "No relevant data found."}`,
         }],
       });
-      const answerText = extractText(answerMessage);
-
-      // ── Call 2: structured metadata only — small JSON, no embedded answer ───
-      let meta: { confidence: string; confidence_reason: string; sources: unknown[] } = {
-        confidence: "Medium",
-        confidence_reason: "See answer for details",
-        sources: [],
-      };
-      try {
-        const metaMessage = await anthropic.messages.create({
-          model: "claude-haiku-4-5",
-          max_tokens: 400,
-          system: `Return ONLY valid JSON, no other text. Schema: {"confidence":"High|Medium|Low","confidence_reason":"one sentence — High if data directly answers, Medium if partial, Low if inferred","sources":[{"customer_name":"string","event_type":"string","severity":"critical|high|medium|low|info","date":"ISO date or null","agent":"string"}]}`,
-          messages: [{
-            role: "user",
-            content: `Based on this answer and data, provide confidence and sources.\n\nAnswer: ${answerText.slice(0, 300)}\n\nData:\n${context.slice(0, 500)}`,
-          }],
-        });
-        const metaText = extractText(metaMessage);
-        const metaCleaned = metaText.replace(/^```json\s*/i, "").replace(/```$/, "").trim();
-        meta = JSON.parse(metaCleaned);
-      } catch {
-        // keep meta defaults
-      }
-
-      // ── Call 3: related questions ────────────────────────────────────────────
-      let relatedQuestions = DEMO_SUGGESTIONS.slice(0, 3); // fallback
-      try {
-        const followUpMessage = await anthropic.messages.create({
-          model: "claude-haiku-4-5",
-          max_tokens: 150,
-          system: "Generate exactly 3 short follow-up questions a credit manager would ask after reading this answer. Return ONLY a JSON array of 3 strings. Questions must be specific to the companies and issues mentioned.",
-          messages: [{
-            role: "user",
-            content: `Answer just given: ${answerText.slice(0, 500)}\n\nGenerate 3 follow-up questions.`,
-          }],
-        });
-        const followUpText = extractText(followUpMessage);
-        const followUpCleaned = followUpText.replace(/```json|```/g, "").trim();
-        const parsed = JSON.parse(followUpCleaned);
-        if (Array.isArray(parsed)) relatedQuestions = parsed;
-      } catch {
-        // keep fallback suggestions
-      }
-
-      return jsonRes({
-        answer: answerText,
-        sources: meta.sources ?? [],
-        confidence: meta.confidence,
-        confidence_reason: meta.confidence_reason,
-        relatedQuestions,
-      });
+      answerText = extractText(answerMessage);
     } catch (err) {
-      console.error("Question mode inner error (Anthropic):", err);
+      console.error("Answer call error:", err);
       return jsonRes({ error: "Failed to generate answer" }, 500);
     }
 
-    } catch (outerErr) {
-      console.error("Question mode outer error:", outerErr instanceof Error ? outerErr.message : String(outerErr));
-      return jsonRes({ error: "Question mode failed", detail: outerErr instanceof Error ? outerErr.message : String(outerErr) }, 500);
+    // ── Call 2: metadata (small JSON: confidence + sources) ──────────────────
+    // Always Haiku — small structured output, no need to burn Sonnet tokens.
+    // Failure here must NOT block the answer; fall back to safe defaults.
+    let meta: {
+      confidence: "High" | "Medium" | "Low";
+      confidence_reason: string;
+      sources: any[];
+    } = {
+      confidence: "Medium",
+      confidence_reason: "Metadata generation unavailable; see answer for details.",
+      sources: [],
+    };
+
+    try {
+      const metaMessage = await anthropic.messages.create({
+        model: "claude-haiku-4-5",
+        max_tokens: 500,
+        system: metadataSystemPrompt,
+        messages: [{
+          role: "user",
+          content: `Question: ${question}\n\nAnswer given:\n${answerText}\n\nRetrieved data:\n${context || "No relevant data found."}`,
+        }],
+      });
+      const metaText = extractText(metaMessage);
+      const metaCleaned = metaText
+        .replace(/^```json\s*/i, "")
+        .replace(/^```\s*/i, "")
+        .replace(/\s*```$/i, "")
+        .trim();
+      const parsed = JSON.parse(metaCleaned);
+      meta = {
+        confidence: parsed.confidence ?? meta.confidence,
+        confidence_reason: parsed.confidence_reason ?? meta.confidence_reason,
+        sources: Array.isArray(parsed.sources) ? parsed.sources : [],
+      };
+    } catch (err) {
+      console.error("Metadata call error (using defaults):", err);
     }
+
+    return jsonRes({
+      answer: answerText,
+      sources: meta.sources,
+      confidence: meta.confidence,
+      confidence_reason: meta.confidence_reason,
+    });
   }
 
   // ── BRIEFING mode (default) ────────────────────────────────────────────────
@@ -774,21 +800,8 @@ serve(async (req: Request) => {
   const customerIds = [...new Set(events.map((e: any) => e.customer_id).filter(Boolean))] as string[];
   const { data: customers } = await supabaseClient
     .from("customers")
-    .select("id, name, ticker, company_type, credit_limit, current_exposure, credit_rating_score, credit_rating_previous_score, payment_on_time_rate, payment_trend, payment_health")
+    .select("id, name, ticker, company_type, credit_limit, current_balance")
     .in("id", customerIds);
-
-  // Detect rating changes and inject as synthetic events
-  const syntheticEvents: Record<string, string[]> = {};
-  for (const customer of (customers ?? [])) {
-    const c = customer as any;
-    if (c.credit_rating_score != null && c.credit_rating_previous_score != null) {
-      const change = detectRatingChange(c.credit_rating_previous_score, c.credit_rating_score);
-      if (change.type === "CREDIT_RATING_DOWNGRADE" && change.action_required) {
-        syntheticEvents[c.id] = syntheticEvents[c.id] ?? [];
-        syntheticEvents[c.id].push("CREDIT_RATING_DOWNGRADE");
-      }
-    }
-  }
 
   // 4. Call Claude
   const anthropic = new Anthropic({ apiKey: Deno.env.get("ANTHROPIC_API_KEY")! });
@@ -889,20 +902,6 @@ serve(async (req: Request) => {
 
   // 6b. Credit limit decisioning — run assessCompositeRisk + calculateCreditLimitProposal
   //     for each customer with signals, write pending_actions for human approval.
-  //     Also composes and delivers a credit action alert to the credit team.
-
-  const creditTeamEmail = Deno.env.get("CREDIT_TEAM_EMAIL") ?? "credit-team@company.com";
-  const sendgridKey = Deno.env.get("SENDGRID_API_KEY") ?? "";
-  const teamsWebhook = Deno.env.get("TEAMS_WEBHOOK_URL") ?? "";
-  const slackWebhook = Deno.env.get("SLACK_WEBHOOK_URL") ?? "";
-
-  const deliveryProviders = [
-    ...(sendgridKey ? [new EmailProvider(sendgridKey)] : []),
-    ...(teamsWebhook ? [new TeamsProvider(teamsWebhook)] : []),
-    ...(slackWebhook ? [new SlackProvider(slackWebhook)] : []),
-    new LogProvider(),
-  ];
-
   const pendingActions = [];
 
   for (const [custId, custEvents] of Object.entries(groupedEvents)) {
@@ -913,28 +912,16 @@ serve(async (req: Request) => {
 
     const agentsSeen = [...new Set(custEvents.map((e: any) => e.source_agent as string))];
     const activeEventTypes = [...new Set(custEvents.map((e: any) => e.event_type as string))];
-    const activeSignalSeverities = custEvents.map((e: any) => e.severity as string);
-
-    // Merge synthetic events detected from DB column deltas (e.g. CREDIT_RATING_DOWNGRADE)
-    for (const syntheticType of (syntheticEvents[custId] ?? [])) {
-      if (!activeEventTypes.includes(syntheticType)) activeEventTypes.push(syntheticType);
-      activeSignalSeverities.push("high");
-    }
     const creditScore: number | null = (custEvents[0] as any)?.credit_rating_score ?? null;
-    const arEvent = custEvents.find((e: any) => e.payload?.utilization_pct != null) as any;
-    const utilizationPct: number = arEvent?.payload?.utilization_pct ?? 0;
+    const utilizationPct: number = (custEvents.find((e: any) => e.payload?.utilization_pct != null) as any)?.payload?.utilization_pct ?? 0;
     const daysOver90: number = (custEvents.find((e: any) => e.payload?.buckets?.bucket_over_90 != null) as any)?.payload?.buckets?.bucket_over_90 ?? 0;
-    const currentExposure: number = customer.current_exposure ?? 0;
-
-    const onTimeRate: number | undefined = (customer as any)?.payment_on_time_rate ?? undefined;
+    const currentExposure: number = customer.current_balance ?? 0;
 
     const riskAssessment = assessCompositeRisk({
       utilization_pct: utilizationPct,
       credit_score: creditScore,
       active_event_types: activeEventTypes,
-      active_signal_severities: activeSignalSeverities,
       agents_flagging: agentsSeen,
-      on_time_rate: onTimeRate,
     });
 
     if (!riskAssessment.recommend_action) continue;
@@ -945,7 +932,6 @@ serve(async (req: Request) => {
       days_over_90: daysOver90,
       utilization_pct: utilizationPct,
       credit_score: creditScore,
-      on_time_rate: onTimeRate,
     });
 
     if (proposal.action !== "reduce") continue;
@@ -963,42 +949,6 @@ serve(async (req: Request) => {
       source_event_ids: custEvents.map((e: any) => e.id),
       run_id: runId,
       is_demo: DEMO_MODE,
-    });
-
-    // Compose and deliver credit action alert to credit team
-    const alert = composeTeamsAlert({
-      alert_type: "credit_limit_action",
-      company_name: customer.name ?? custId,
-      ticker: customer.ticker ?? undefined,
-      severity: riskAssessment.severity === "critical" ? "critical" : "high",
-      headline: `Credit limit reduction proposed: $${customer.credit_limit.toLocaleString()} → $${proposal.proposed_limit.toLocaleString()}`,
-      details: riskAssessment.rationale,
-      metric_label: "Proposed reduction",
-      metric_value: `${proposal.reduction_pct}%`,
-      recommended_action: "Review and approve or reject in the Actions page.",
-    });
-
-    await deliverMessage({
-      channel: "email",
-      recipient: creditTeamEmail,
-      subject: alert.subject,
-      body: alert.body,
-    }, deliveryProviders);
-
-    // Insert to agent_messages for audit trail
-    await supabaseClient.from("agent_messages").insert({
-      agent_name: "cia-agent",
-      customer_id: custId,
-      channel: "email",
-      template_type: "credit_limit_action",
-      recipient_type: "credit_committee",
-      recipient_name: "Credit Risk Team",
-      recipient_email: creditTeamEmail,
-      subject: alert.subject,
-      body: alert.body,
-      status: "draft",
-      is_demo: DEMO_MODE,
-      run_id: runId,
     });
   }
 
