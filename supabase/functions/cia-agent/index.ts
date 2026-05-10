@@ -611,89 +611,48 @@ serve(async (req: Request) => {
 
     const context = contextParts.join("\n\n");
 
-    const questionSystemPrompt = `You are the Credit Intelligence Agent (CIA) for CreditPilot — a Perplexity-style credit analyst that answers questions about a B2B trade credit portfolio.
-
-CRITICAL RULES:
-1. Answer ONLY from the data provided below. Never use training knowledge to fill gaps.
-2. If the data does not contain the answer, say exactly: "I don't have that information in the current data."
-3. Cite every specific fact with its source in parentheses — e.g. (customers table), (invoices table), (credit_events: NEGATIVE_NEWS_HIGH, news_monitor_agent). Never include raw UUIDs in the answer text. Cite events by their event_type and source_agent only.
-4. Be specific: use exact amounts, dates, percentages from the data.
-5. If multiple data sources confirm the same fact, mention both.
-6. For sources from the customers table, set date to null.
-7. Keep your answer concise — maximum 2 paragraphs, under 150 words. Never use backticks, never use single quotes inside JSON strings, use double quotes only.
-
-CRITICAL JSON RULES:
-- Your entire response must be valid JSON parseable by JSON.parse()
-- Never use em dashes (—), only regular hyphens (-)
-- Never use curly quotes (\u201C \u201D \u2018 \u2019), only straight quotes
-- Never use ellipsis (…), only three dots (...)
-- Escape any apostrophes in company names: O\'Brien not O'Brien
-- Keep answer under 150 words — brevity prevents parse errors
-
-Return ONLY valid JSON in this exact shape, no other text:
-{
-  "answer": "maximum 2 paragraphs of analysis, markdown formatted with **bold key terms** and inline source citations",
-  "sources": [
-    {
-      "event_id": "uuid or null",
-      "customer_name": "string",
-      "event_type": "string — table name or event type",
-      "severity": "critical|high|medium|low|info",
-      "date": "ISO date string or null",
-      "agent": "string — source agent or table name"
-    }
-  ],
-  "confidence": "High|Medium|Low",
-  "confidence_reason": "one sentence — High if data directly answers the question, Medium if partial, Low if inferred"
-}`;
-
     const model = DEMO_MODE ? "claude-haiku-4-5" : "claude-sonnet-4-20250514";
     const maxTokens = DEMO_MODE ? 600 : 900;
 
     const anthropic = new Anthropic({ apiKey: Deno.env.get("ANTHROPIC_API_KEY")! });
 
     try {
-      const message = await anthropic.messages.create({
+      // ── Call 1: plain-text answer — never embedded in JSON ──────────────────
+      const answerMessage = await anthropic.messages.create({
         model,
         max_tokens: maxTokens,
-        system: questionSystemPrompt,
+        system: `You are the Credit Intelligence Agent (CIA) for CreditPilot — a credit analyst answering questions about a B2B trade credit portfolio. Answer ONLY from the data provided. Cite every fact with its source in parentheses e.g. (customers table), (credit_events: NEGATIVE_NEWS_HIGH). Be specific with exact amounts, dates, and percentages. If data does not contain the answer say exactly: I don't have that information in the current data. Keep response under 120 words. Use markdown with **bold key terms**. Plain text output only — no JSON.`,
         messages: [{
           role: "user",
-          content: `Question: ${question}\n\nRetrieved data from database:\n${context || "No relevant data found."}`,
+          content: `Question: ${question}\n\nData:\n${context || "No relevant data found."}`,
         }],
       });
+      const answerText = extractText(answerMessage);
 
-      const text = extractText(message);
-      let result;
+      // ── Call 2: structured metadata only — small JSON, no embedded answer ───
+      let meta: { confidence: string; confidence_reason: string; sources: unknown[] } = {
+        confidence: "Medium",
+        confidence_reason: "See answer for details",
+        sources: [],
+      };
       try {
-        const cleaned = text
-          .replace(/^```json\s*/i, "")
-          .replace(/^```\s*/i, "")
-          .replace(/\s*```$/i, "")
-          .replace(/[\u2018\u2019]/g, "'")   // curly single quotes
-          .replace(/[\u201C\u201D]/g, '"')   // curly double quotes
-          .replace(/[\u2013\u2014]/g, "-")   // en/em dashes
-          .replace(/[\u2026]/g, "...")        // ellipsis
-          .replace(/[\x00-\x1F\x7F]/g, " ") // control characters
-          .trim();
-        result = JSON.parse(cleaned);
-      } catch (parseErr) {
-        // Regex fallback: extract answer field directly from malformed JSON
-        const answerMatch = text.match(/"answer"\s*:\s*"((?:[^"\\]|\\.)*)"/s);
-        if (answerMatch) {
-          return jsonRes({
-            answer: answerMatch[1].replace(/\\n/g, "\n"),
-            sources: [],
-            confidence: "Low",
-            confidence_reason: "Answer extracted from malformed response",
-            relatedQuestions: DEMO_SUGGESTIONS.slice(0, 3),
-          });
-        }
-        console.error("JSON parse error:", parseErr, "Raw text:", text.slice(0, 200));
-        return jsonRes({ error: "Failed to parse answer" }, 500);
+        const metaMessage = await anthropic.messages.create({
+          model: "claude-haiku-4-5",
+          max_tokens: 400,
+          system: `Return ONLY valid JSON, no other text. Schema: {"confidence":"High|Medium|Low","confidence_reason":"one sentence — High if data directly answers, Medium if partial, Low if inferred","sources":[{"customer_name":"string","event_type":"string","severity":"critical|high|medium|low|info","date":"ISO date or null","agent":"string"}]}`,
+          messages: [{
+            role: "user",
+            content: `Based on this answer and data, provide confidence and sources.\n\nAnswer: ${answerText.slice(0, 300)}\n\nData:\n${context.slice(0, 500)}`,
+          }],
+        });
+        const metaText = extractText(metaMessage);
+        const metaCleaned = metaText.replace(/^```json\s*/i, "").replace(/```$/, "").trim();
+        meta = JSON.parse(metaCleaned);
+      } catch {
+        // keep meta defaults
       }
 
-      // Generate contextual follow-up questions based on the answer
+      // ── Call 3: related questions ────────────────────────────────────────────
       let relatedQuestions = DEMO_SUGGESTIONS.slice(0, 3); // fallback
       try {
         const followUpMessage = await anthropic.messages.create({
@@ -702,20 +661,24 @@ Return ONLY valid JSON in this exact shape, no other text:
           system: "Generate exactly 3 short follow-up questions a credit manager would ask after reading this answer. Return ONLY a JSON array of 3 strings. Questions must be specific to the companies and issues mentioned.",
           messages: [{
             role: "user",
-            content: `Answer just given: ${result.answer.slice(0, 500)}\n\nGenerate 3 follow-up questions.`,
+            content: `Answer just given: ${answerText.slice(0, 500)}\n\nGenerate 3 follow-up questions.`,
           }],
         });
         const followUpText = extractText(followUpMessage);
         const followUpCleaned = followUpText.replace(/```json|```/g, "").trim();
         const parsed = JSON.parse(followUpCleaned);
-        if (Array.isArray(parsed)) {
-          relatedQuestions = parsed;
-        }
+        if (Array.isArray(parsed)) relatedQuestions = parsed;
       } catch {
         // keep fallback suggestions
       }
 
-      return jsonRes({ ...result, relatedQuestions });
+      return jsonRes({
+        answer: answerText,
+        sources: meta.sources ?? [],
+        confidence: meta.confidence,
+        confidence_reason: meta.confidence_reason,
+        relatedQuestions,
+      });
     } catch (err) {
       console.error("Question mode inner error (Anthropic):", err);
       return jsonRes({ error: "Failed to generate answer" }, 500);
