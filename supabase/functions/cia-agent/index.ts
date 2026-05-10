@@ -638,7 +638,7 @@ serve(async (req: Request) => {
       try {
         const metaMessage = await anthropic.messages.create({
           model: "claude-haiku-4-5",
-          max_tokens: 400,
+          max_tokens: 1500,
           system: `Return ONLY valid JSON, no other text. Schema: {"confidence":"High|Medium|Low","confidence_reason":"one sentence — High if data directly answers, Medium if partial, Low if inferred","sources":[{"customer_name":"string","event_type":"string","severity":"critical|high|medium|low|info","date":"ISO date or null","agent":"string"}]}`,
           messages: [{
             role: "user",
@@ -646,7 +646,7 @@ serve(async (req: Request) => {
           }],
         });
         const metaText = extractText(metaMessage);
-        const metaCleaned = metaText.replace(/^```json\s*/i, "").replace(/```$/, "").trim();
+        const metaCleaned = metaText.replace(/```json/gi, "").replace(/```/g, "").trim();
         meta = JSON.parse(metaCleaned);
       } catch {
         // keep meta defaults
