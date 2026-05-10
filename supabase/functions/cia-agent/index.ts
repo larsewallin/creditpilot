@@ -642,7 +642,7 @@ serve(async (req: Request) => {
           system: `Return ONLY valid JSON, no other text. Schema: {"confidence":"High|Medium|Low","confidence_reason":"one sentence — High if data directly answers, Medium if partial, Low if inferred","sources":[{"customer_name":"string","event_type":"string","severity":"critical|high|medium|low|info","date":"ISO date or null","agent":"string"}]}`,
           messages: [{
             role: "user",
-            content: `Based on this answer and data, provide confidence and sources.\n\nAnswer: ${answerText.slice(0, 300)}\n\nData:\n${context.slice(0, 500)}`,
+            content: `Based on this answer and data, provide confidence and sources.\n\nAnswer: ${answerText}\n\nData:\n${context}`,
           }],
         });
         const metaText = extractText(metaMessage);
