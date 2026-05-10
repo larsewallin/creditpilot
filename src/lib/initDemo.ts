@@ -87,57 +87,6 @@ const SEED_CREDIT_LIMITS = [
   { id: "c0000001-0000-0000-0000-000000000005", limit: 5000000 },
 ];
 
-const SEED_NEGATIVE_NEWS = [
-  {
-    id: "n0000001-0000-0000-0000-000000000001",
-    customer_id: "c0000001-0000-0000-0000-000000000049", // Heliogen Inc
-    headline: "Heliogen liquidity concerns mount as runway shrinks",
-    summary: "Analyst report cites deteriorating cash position and risk of covenant breach in Q3.",
-    source: "Reuters",
-    news_date: "2026-04-19",
-    category: "liquidity",
-    severity: "high",
-    sentiment_score: -0.78,
-    reviewed: false,
-    reviewed_by: null,
-    reviewed_at: null,
-    agent_name: "news_monitor_agent",
-    is_demo: true,
-  },
-  {
-    id: "n0000001-0000-0000-0000-000000000002",
-    customer_id: "c0000001-0000-0000-0000-000000000029", // Arconic Corporation
-    headline: "Arconic placed on negative watch by Moody's",
-    summary: "Rating agency places Arconic on negative watch citing high leverage and slowing demand.",
-    source: "Bloomberg",
-    news_date: "2026-04-19",
-    category: "credit_rating",
-    severity: "high",
-    sentiment_score: -0.65,
-    reviewed: false,
-    reviewed_by: null,
-    reviewed_at: null,
-    agent_name: "news_monitor_agent",
-    is_demo: true,
-  },
-];
-
-const SEED_SEC_MONITORING = [
-  {
-    id: "s0000001-0000-0000-0000-000000000001",
-    customer_id: "c0000001-0000-0000-0000-000000000021", // Triumph Group
-    cik: "1021162",
-    alert_triggered: true,
-    is_demo: true,
-  },
-  {
-    id: "s0000001-0000-0000-0000-000000000002",
-    customer_id: "c0000001-0000-0000-0000-000000000049", // Heliogen Inc
-    cik: "1840292",
-    alert_triggered: true,
-    is_demo: true,
-  },
-];
 
 /**
  * Full demo reset + agent invocation.
@@ -162,20 +111,13 @@ export async function initDemo() {
     await supabase.from("customers").update({ credit_limit: limit }).eq("id", id);
   }
 
-  // Upsert sec_monitoring seed rows — onConflict: 'id' avoids ambiguity.
-  // ignoreDuplicates: true preserves any agent-written fields (ai_risk_score etc).
-  await supabase.from("sec_monitoring").upsert(SEED_SEC_MONITORING, { onConflict: "id", ignoreDuplicates: true });
+  // sec_monitoring — reset alert state (rows always exist from migrations, RLS blocks delete)
   await supabase
     .from("sec_monitoring")
     .update({ alert_triggered: true })
-    .in("customer_id", [
-      "c0000001-0000-0000-0000-000000000021",
-      "c0000001-0000-0000-0000-000000000049",
-    ]);
+    .eq("is_demo", true);
 
-  // Upsert negative_news seed rows — onConflict: 'id' avoids conflict with
-  // content_fingerprint unique index. INSERT policy added in migration 20260509000000.
-  await supabase.from("negative_news").upsert(SEED_NEGATIVE_NEWS, { onConflict: "id" });
+  // negative_news — reset reviewed state (rows always exist from migrations, RLS blocks delete)
   await supabase
     .from("negative_news")
     .update({ reviewed: false, reviewed_by: null, reviewed_at: null })
