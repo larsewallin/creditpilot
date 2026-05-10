@@ -620,7 +620,15 @@ CRITICAL RULES:
 4. Be specific: use exact amounts, dates, percentages from the data.
 5. If multiple data sources confirm the same fact, mention both.
 6. For sources from the customers table, set date to null.
-7. Keep your answer concise — maximum 2 paragraphs. Never use backticks, never use single quotes inside JSON strings, use double quotes only.
+7. Keep your answer concise — maximum 2 paragraphs, under 150 words. Never use backticks, never use single quotes inside JSON strings, use double quotes only.
+
+CRITICAL JSON RULES:
+- Your entire response must be valid JSON parseable by JSON.parse()
+- Never use em dashes (—), only regular hyphens (-)
+- Never use curly quotes (\u201C \u201D \u2018 \u2019), only straight quotes
+- Never use ellipsis (…), only three dots (...)
+- Escape any apostrophes in company names: O\'Brien not O'Brien
+- Keep answer under 150 words — brevity prevents parse errors
 
 Return ONLY valid JSON in this exact shape, no other text:
 {
@@ -662,7 +670,11 @@ Return ONLY valid JSON in this exact shape, no other text:
           .replace(/^```json\s*/i, "")
           .replace(/^```\s*/i, "")
           .replace(/\s*```$/i, "")
-          .replace(/[\x00-\x1F\x7F]/g, " ") // strip control characters
+          .replace(/[\u2018\u2019]/g, "'")   // curly single quotes
+          .replace(/[\u201C\u201D]/g, '"')   // curly double quotes
+          .replace(/[\u2013\u2014]/g, "-")   // en/em dashes
+          .replace(/[\u2026]/g, "...")        // ellipsis
+          .replace(/[\x00-\x1F\x7F]/g, " ") // control characters
           .trim();
         result = JSON.parse(cleaned);
       } catch (parseErr) {
