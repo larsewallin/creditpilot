@@ -639,7 +639,14 @@ serve(async (req: Request) => {
         const metaMessage = await anthropic.messages.create({
           model: "claude-haiku-4-5",
           max_tokens: 1500,
-          system: `Return ONLY valid JSON, no other text. Schema: {"confidence":"High|Medium|Low","confidence_reason":"one sentence — High if data directly answers, Medium if partial, Low if inferred","sources":[{"customer_name":"string","event_type":"string","severity":"critical|high|medium|low|info","date":"ISO date or null","agent":"string"}]}`,
+          system: `Return ONLY valid JSON, no other text. You are grading an answer about a B2B trade credit portfolio.
+
+Confidence rubric for trade credit context:
+- High: the answer's claims are directly supported by the data provided (customers table fields like credit_rating_score, current_exposure, scenario, risk_tags are sufficient evidence on their own). Absence of credit_events does NOT lower confidence — no negative events on file is a normal/positive state, not missing data.
+- Medium: the answer makes specific claims (event types, alert flags, severities, dates) that are not backed by any row in the data provided. Reduce to Medium only when the answer asserts specifics beyond what the data shows.
+- Low: the answer relies on inference, external knowledge, or speculation rather than the provided data.
+
+Schema: {"confidence":"High|Medium|Low","confidence_reason":"one sentence explaining the grade per the rubric above","sources":[{"customer_name":"string","event_type":"string","severity":"critical|high|medium|low|info","date":"ISO date or null","agent":"string"}]}`,
           messages: [{
             role: "user",
             content: `Based on this answer and data, provide confidence and sources.\n\nAnswer: ${answerText}\n\nData:\n${context}`,
