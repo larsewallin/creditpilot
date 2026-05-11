@@ -637,7 +637,7 @@ serve(async (req: Request) => {
       };
       try {
         const metaMessage = await anthropic.messages.create({
-          model: "claude-haiku-4-5",
+          model: DEMO_MODE ? "claude-haiku-4-5" : "claude-sonnet-4-20250514",
           max_tokens: 1500,
           system: `Return ONLY valid JSON, no other text. You are grading an answer about a B2B trade credit portfolio.
 
