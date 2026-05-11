@@ -641,12 +641,15 @@ serve(async (req: Request) => {
           max_tokens: 1500,
           system: `Return ONLY valid JSON, no other text. You are grading an answer about a B2B trade credit portfolio.
 
-Confidence rubric for trade credit context:
-- High: the answer's claims are directly supported by the data provided (customers table fields like credit_rating_score, current_exposure, scenario, risk_tags are sufficient evidence on their own). Absence of credit_events does NOT lower confidence — no negative events on file is a normal/positive state, not missing data.
-- Medium: the answer makes specific claims (event types, alert flags, severities, dates) that are not backed by any row in the data provided. Reduce to Medium only when the answer asserts specifics beyond what the data shows.
-- Low: the answer relies on inference, external knowledge, or speculation rather than the provided data.
+The grade reflects whether the answer's claims are supported by the data provided, nothing else.
 
-Schema: {"confidence":"High|Medium|Low","confidence_reason":"one sentence explaining the grade per the rubric above","sources":[{"customer_name":"string","event_type":"string","severity":"critical|high|medium|low|info","date":"ISO date or null","agent":"string"}]}`,
+- High: every specific claim in the answer (companies, scores, percentages, scenarios, risk tags, event types, dates) maps to a row in one of the provided tables. Drawing facts from multiple tables (customers + credit_events) is normal and does NOT reduce the grade. Absence of credit_events for some companies does NOT reduce the grade — no negative events on file is a positive state, not missing data.
+- Medium: the answer makes at least one specific claim (an event type, an alert, a severity, a date, a name) that does not appear in any provided table.
+- Low: the answer relies primarily on inference, external knowledge, or speculation rather than the data.
+
+Do not penalize for: using multiple tables, citing credit_events when available, mentioning companies that have ratings but no credit_events, or any form of cross-table synthesis. These are all good behaviors.
+
+Schema: {"confidence":"High|Medium|Low","confidence_reason":"one sentence stating which rubric tier applies and why","sources":[{"customer_name":"string","event_type":"string","severity":"critical|high|medium|low|info","date":"ISO date or null","agent":"string"}]}`,
           messages: [{
             role: "user",
             content: `Based on this answer and data, provide confidence and sources.\n\nAnswer: ${answerText}\n\nData:\n${context}`,
