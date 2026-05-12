@@ -271,6 +271,18 @@ function routeQuestion(question: string): Set<string> {
   if (/credit.?limit|exposure|utiliz|balance|customer|portfolio|company|counterpart/i.test(q))
     tables.add("customers");
 
+  // Also add customers if the question mentions a capitalized proper noun
+  // that isn't a question word or generic term (likely a company name).
+  // This catches questions like 'Should I be worried about American Airlines?'
+  // where no keyword matches but a specific company is named.
+  const PROPER_NOUN_STOPWORDS = new Set(["What", "Which", "Who", "How", "When", "Where", "Why", "The", "Their", "And", "For", "Has", "Have", "Does", "Should", "Could", "Would", "Tell", "Show", "Give", "Get", "I"]);
+  const properNouns = (question.match(/[A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*/g) ?? [])
+    .flatMap(p => p.split(/\s+/))
+    .filter(w => !PROPER_NOUN_STOPWORDS.has(w) && w.length > 2);
+  if (properNouns.length > 0) {
+    tables.add("customers");
+  }
+
   // AR/invoice questions
   if (/invoice|overdue|aging|ar |receivable|outstanding|bucket|days.?past|dso/i.test(q))
     tables.add("invoices");
