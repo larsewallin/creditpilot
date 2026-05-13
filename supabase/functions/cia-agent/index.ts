@@ -659,6 +659,8 @@ The grade reflects whether the answer's claims are supported by the data provide
 - Medium: the answer makes at least one specific claim (an event type, an alert, a severity, a date, a name) that does not appear in any provided table.
 - Low: the answer relies primarily on inference, external knowledge, or speculation rather than the data.
 
+RELATIONSHIP-QUALIFIER CHECK: If the answer characterizes a customer's relationship status using words like 'outside', 'not in', 'outside the portfolio', 'outside our portfolio', 'former customer', 'prospect', 'inactive', or implies they are not a current customer — verify against the data. Every company appearing in the customers table IS a current customer. If the answer uses one of these qualifiers about a company that appears in the customers data provided, set confidence to Medium and explain this specifically in confidence_reason. This rule takes priority over the other rubric tiers.
+
 Do not penalize for: using multiple tables, citing credit_events when available, mentioning companies that have ratings but no credit_events, or any form of cross-table synthesis. These are all good behaviors.
 
 Schema: {"confidence":"High|Medium|Low","confidence_reason":"one sentence stating which rubric tier applies and why","sources":[{"customer_name":"string","event_type":"string","severity":"critical|high|medium|low|info","date":"ISO date or null","agent":"string"}]}`,
