@@ -31,3 +31,6 @@ bun.lockb
 .env
 .env.local
 .env.*.local
+
+# CIA test results
+tests/cia/results/

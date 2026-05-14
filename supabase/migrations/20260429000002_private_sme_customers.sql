@@ -38,7 +38,7 @@ VALUES
   ('c0000002-0000-0000-0000-000000000002',
    'Meridian Aerospace Components', NULL, 'Aerospace & Defense', 'normal_operations',
    2000000, 850000, 30, 'James Park',
-   'Private tier-2 aerospace supplier. Consistent on-time payer.', '{}'),
+   'Private aerospace components manufacturer. Consistent on-time payer.', '{}'),
 
   ('c0000002-0000-0000-0000-000000000003',
    'Cascade Industrial Systems', NULL, 'Industrial Equipment', 'payment_issues',

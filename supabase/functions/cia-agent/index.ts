@@ -390,14 +390,43 @@ async function fetchRelevantData(
         results.customers = named ?? [];
         return;
       }
-      // No names mentioned — portfolio-level question: return top 20 by credit_limit desc
-      const { data, error: allErr } = await supabase
-        .from("customers")
-        .select(selectFields)
-        .order("credit_limit", { ascending: false })
-        .limit(20);
-      if (allErr) console.error("customers all error:", allErr.message);
-      results.customers = data ?? [];
+      // Detect sector keywords in the question and filter customers by canonical sector.
+      // Without this, sector-level questions return top-20-by-credit-limit and the model
+      // must mentally classify each customer's industry — leading to inconsistent results.
+      const SECTOR_KEYWORDS: Record<string, string[]> = {
+        'Aerospace & Defense': ['aerospace', 'aviation', 'defense', 'naval', 'airline', 'aircraft', 'space'],
+        'Energy': ['energy', 'power', 'oil', 'gas', 'petroleum', 'solar', 'fuel cell'],
+        'Industrial Manufacturing': ['industrial', 'manufacturing', 'precision', 'engineering', 'machinery'],
+        'Materials': ['materials', 'metal', 'aluminum', 'alloy', 'coating', 'fabrication'],
+        'Transportation': ['transportation', 'freight', 'trucking', 'transit'],
+        'Mining': ['mining'],
+      };
+      const qLower = question.toLowerCase();
+      const detectedSector = Object.entries(SECTOR_KEYWORDS).find(([_, kws]) =>
+        kws.some(kw => qLower.includes(kw))
+      );
+
+      if (detectedSector) {
+        const [sectorName] = detectedSector;
+        const { data, error } = await supabase
+          .from('customers')
+          .select(selectFields)
+          .eq('sector', sectorName)
+          .order('credit_limit', { ascending: false })
+          .limit(30);
+        if (error) console.error('sector filter error:', error.message);
+        results.customers = data ?? [];
+      } else {
+        // No names mentioned and no sector detected — portfolio-level question.
+        // Return top 20 by credit_limit desc.
+        const { data, error } = await supabase
+          .from('customers')
+          .select(selectFields)
+          .order('credit_limit', { ascending: false })
+          .limit(20);
+        if (error) console.error('customers fallback error:', error.message);
+        results.customers = data ?? [];
+      }
     })(),
 
     // invoices — filter by customer name mention or return at-risk
