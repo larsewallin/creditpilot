@@ -1,8 +1,8 @@
 # CreditPilot Event Taxonomy
 
-**Version:** v1 (locked for implementation)
+**Version:** v1 (locked for implementation, revised 2026-05-14)
 **Status:** Design complete — ready to implement
-**Last updated:** 2026-05-14
+**Last updated:** 2026-05-14 (post-implementation discovery: news + SEC restructured to handle open-ended sources)
 
 This document defines the contract that every CreditPilot agent must follow when emitting or consuming events. It is the single source of truth for what events exist, what they carry, who produces them, and who consumes them.
 
@@ -108,64 +108,34 @@ When two producers detect the same fact (e.g. Bloomberg and Reuters both report 
 
 ### Customer-specific events
 
-#### `NEGATIVE_NEWS`
-News article reporting something negative about a customer.
+#### `NEWS_EVENT`
+News article about a customer. Single event type covers all news regardless of sentiment or topic — the article's nature lives in the payload via `sentiment` and `subcategory`. This shape handles the open-ended nature of news (no fixed taxonomy of news categories) and lets new subcategories be added without changing the event taxonomy.
 
 - **Producer:** News Monitor
 - **Consumers:** Risk Agent, CIA
 - **Scope:** customer
-- **Severity:** low to critical
+- **Severity:** info to critical (driven by sentiment + subcategory + impact)
 - **Payload:**
   - `severity_score`: 0–100
+  - `sentiment`: 'negative' | 'positive' | 'neutral'
+  - `sentiment_score`: -1.0 to 1.0
+  - `subcategory`: string — a free-form descriptor of the news topic (e.g. `earnings_miss`, `earnings_beat`, `leadership_change`, `layoffs`, `product_recall`, `lawsuit`, `regulatory_probe`, `acquisition`, `partnership`, `factory_incident`). New subcategories may be added over time without changing the taxonomy.
   - `article_title`: string
   - `article_url`: string
   - `published_at`: ISO timestamp
   - `source`: enum (`bloomberg` | `reuters` | `newsapi` | `gdelt` | `ft` | other)
-  - `sentiment_score`: -1.0 to 0.0
   - `key_phrases`: string[]
   - `summary`: string (AI-generated, 2–3 sentences)
   - **No full article body** — URL is preserved for original-source access
 
-#### `POSITIVE_NEWS`
-News article reporting something positive about a customer.
+#### SEC events — design
 
-- **Producer:** News Monitor
-- **Consumers:** Risk Agent, CIA
-- **Scope:** customer
-- **Severity:** info to low
-- **Payload:** same shape as NEGATIVE_NEWS but with `sentiment_score` 0.0 to 1.0
+The SEC Monitor reads 10-K, 10-Q, and 8-K filings and emits events based on *what it finds in them*, not the filing type itself. The filing type goes in the payload (`filing_source_type`) as context for the audit trail. The events themselves are typed on the concern found:
 
-#### `SEC_FILING_10K`
-A 10-K annual report was filed by a customer.
+- `COVENANT_WAIVER`, `CEO_DEPARTURE`, `REVENUE_MISS`, `GOING_CONCERN` — typed events for the common, well-defined concerns
+- `SEC_OTHER` — catch-all for noteworthy items that don't fit the above (e.g. material litigation, restatements, auditor changes, debt issuances, subsidiary sales, regulatory probes). Each `SEC_OTHER` event carries a `concern_category` in the payload so consumers can disambiguate; common categories may be promoted to their own event types as patterns emerge.
 
-- **Producer:** SEC Monitor
-- **Consumers:** Risk Agent, CIA
-- **Scope:** customer
-- **Severity:** info (routine filing; specific concerns become separate event types)
-- **Payload:**
-  - `severity_score`: 0–100
-  - `filing_date`: ISO date
-  - `period_of_report`: ISO date
-  - `accession_number`: string
-  - `summary`: string
-
-#### `SEC_FILING_10Q`
-A 10-Q quarterly report was filed by a customer.
-
-- **Producer:** SEC Monitor
-- **Consumers:** Risk Agent, CIA
-- **Scope:** customer
-- **Severity:** info
-- **Payload:** same shape as SEC_FILING_10K
-
-#### `SEC_FILING_8K`
-An 8-K material event filing.
-
-- **Producer:** SEC Monitor
-- **Consumers:** Risk Agent, CIA
-- **Scope:** customer
-- **Severity:** low to high (depends on filing content)
-- **Payload:** same shape as SEC_FILING_10K, plus a `material_event_type` field
+This hybrid (typed for common cases, generic catch-all for the long tail) keeps the taxonomy clean while remaining open to the variety of things filings contain.
 
 #### `COVENANT_WAIVER`
 SEC filing or news reports a covenant waiver was granted.
@@ -176,6 +146,7 @@ SEC filing or news reports a covenant waiver was granted.
 - **Severity:** typically high
 - **Payload:**
   - `severity_score`: 0–100
+  - `filing_source_type`: '10-K' | '10-Q' | '8-K' | 'other' (context — which filing surfaced this; null if from News Monitor)
   - `waiver_date`: ISO date
   - `waived_covenant`: string description
   - `evidence_url`: string
@@ -190,6 +161,7 @@ Customer CEO has departed.
 - **Severity:** medium to high
 - **Payload:**
   - `severity_score`: 0–100
+  - `filing_source_type`: '10-K' | '10-Q' | '8-K' | 'other' (null if from News Monitor)
   - `executive_name`: string
   - `departure_type`: 'resigned' | 'terminated' | 'retired' | 'other'
   - `departure_date`: ISO date
@@ -205,6 +177,7 @@ Customer reported revenue materially below guidance.
 - **Severity:** medium to high
 - **Payload:**
   - `severity_score`: 0–100
+  - `filing_source_type`: '10-K' | '10-Q' | '8-K' | 'other' (null if from News Monitor)
   - `reported_revenue_usd`: number
   - `expected_revenue_usd`: number
   - `miss_percent`: number
@@ -220,6 +193,21 @@ Auditor or SEC filing flagged going-concern doubt.
 - **Severity:** typically critical
 - **Payload:**
   - `severity_score`: 0–100
+  - `filing_source_type`: '10-K' | '10-Q' | '8-K' | 'other'
+  - `evidence_url`: string
+  - `summary`: string
+
+#### `SEC_OTHER`
+Catch-all for noteworthy SEC filing content that doesn't fit the typed event categories above. Each event carries a `concern_category` in the payload so consumers can disambiguate. As patterns emerge (e.g. frequent restatements), common categories may be promoted to their own typed event types in a later taxonomy version.
+
+- **Producer:** SEC Monitor
+- **Consumers:** Risk Agent, CIA
+- **Scope:** customer
+- **Severity:** low to critical (driven by concern_category)
+- **Payload:**
+  - `severity_score`: 0–100
+  - `filing_source_type`: '10-K' | '10-Q' | '8-K' | 'other'
+  - `concern_category`: string — free-form descriptor (e.g. `material_litigation`, `restatement_of_earnings`, `auditor_change`, `debt_issuance`, `subsidiary_sale`, `material_contract`, `regulatory_probe`, `risk_factor_change`). New categories may be added without changing the taxonomy.
   - `evidence_url`: string
   - `summary`: string
 
@@ -573,7 +561,7 @@ When the producer agent is built, the event type's full payload schema is added 
 
 ### Database constraints
 
-- `event_type` column has a CHECK constraint limiting it to the documented V1 event types (`NEGATIVE_NEWS`, `POSITIVE_NEWS`, `SEC_FILING_10K`, `SEC_FILING_10Q`, `SEC_FILING_8K`, `COVENANT_WAIVER`, `CEO_DEPARTURE`, `REVENUE_MISS`, `GOING_CONCERN`, `OVERDUE_INVOICE`, `UTILIZATION_THRESHOLD_BREACH`, `PAYMENT_DETERIORATION`, `PAYMENT_IMPROVEMENT`, `PAYMENT_VOLATILITY`, `COUNTRY_RATING_CHANGE`, `COUNTRY_POLITICAL_RISK`, `COUNTRY_ECONOMIC_SHOCK`, `INTEREST_RATE_CHANGE`, `INDUSTRY_DOWNTURN`, `INDUSTRY_DISRUPTION`, `REGULATORY_CHANGE`, `TARIFF_CHANGE`, `RISK_CHANGE`, `CONCENTRATION_THRESHOLD_BREACH`, `PORTFOLIO_INSIGHT`, `CONCENTRATION_WARNING`, `EXPANSION_OPPORTUNITY`, `EMERGING_RISK_SIGNAL`, `MACRO_TREND_WARNING`, `FX_EXPOSURE_FLAG`, `FX_HEDGING_NEEDED`, `CURRENCY_VOLATILITY`).
+- `event_type` column has a CHECK constraint limiting it to the documented V1 event types (`NEWS_EVENT`, `COVENANT_WAIVER`, `CEO_DEPARTURE`, `REVENUE_MISS`, `GOING_CONCERN`, `SEC_OTHER`, `OVERDUE_INVOICE`, `UTILIZATION_THRESHOLD_BREACH`, `PAYMENT_DETERIORATION`, `PAYMENT_IMPROVEMENT`, `PAYMENT_VOLATILITY`, `COUNTRY_RATING_CHANGE`, `COUNTRY_POLITICAL_RISK`, `COUNTRY_ECONOMIC_SHOCK`, `INTEREST_RATE_CHANGE`, `INDUSTRY_DOWNTURN`, `INDUSTRY_DISRUPTION`, `REGULATORY_CHANGE`, `TARIFF_CHANGE`, `RISK_CHANGE`, `CONCENTRATION_THRESHOLD_BREACH`, `PORTFOLIO_INSIGHT`, `CONCENTRATION_WARNING`, `EXPANSION_OPPORTUNITY`, `EMERGING_RISK_SIGNAL`, `MACRO_TREND_WARNING`, `FX_EXPOSURE_FLAG`, `FX_HEDGING_NEEDED`, `CURRENCY_VOLATILITY`).
 - `severity` column has a CHECK constraint limiting it to `critical | high | medium | low | info`.
 - `scope` column has a CHECK constraint limiting it to `customer | country | industry | currency | portfolio`.
 - `customer_id` is NOT NULL when scope = 'customer', else NULL (enforced by trigger or CHECK constraint with conditional logic).
@@ -599,15 +587,18 @@ A new table `agent_processed_events` with `agent_name` (text) and `event_id` (uu
 
 ### Migration of existing events
 
-Existing event_type values in the database (`NEGATIVE_NEWS_HIGH`, `CRITICAL_UTILIZATION`, `HIGH_UTILIZATION`, `LIMIT_BREACH`, etc.) that don't match the new convention require a one-time migration:
+Existing event_type values in the database that don't match the V1 taxonomy require a one-time migration:
 
-- `NEGATIVE_NEWS_HIGH` → `event_type: NEGATIVE_NEWS`, `severity: high`
+- `NEGATIVE_NEWS_HIGH`, `NEGATIVE_NEWS_MEDIUM`, etc. → `event_type: NEWS_EVENT`, payload gains `sentiment: 'negative'` and `severity` derived from the suffix
+- `POSITIVE_NEWS` (if any) → `event_type: NEWS_EVENT`, payload gains `sentiment: 'positive'`
 - `CRITICAL_UTILIZATION` → `event_type: UTILIZATION_THRESHOLD_BREACH`, `severity: critical`
 - `HIGH_UTILIZATION` → `event_type: UTILIZATION_THRESHOLD_BREACH`, `severity: high`
-- `LIMIT_BREACH` → `event_type: UTILIZATION_THRESHOLD_BREACH`, `severity: critical`
-- Other existing event types: mapped explicitly per row in the migration
+- `LIMIT_BREACH` (if any) → `event_type: UTILIZATION_THRESHOLD_BREACH`, `severity: critical`
+- `GOING_CONCERN_WARNING` → `event_type: GOING_CONCERN`
+- `SEC_ALERT` → `event_type: SEC_OTHER`, payload gains `concern_category: 'legacy'` (or reclassified into a typed SEC event if the row clearly fits one)
+- `MULTI_SIGNAL_RISK` (if used as event_type) → `event_type: RISK_CHANGE`, payload includes `change_type: 'escalation'`
 
-This migration runs as part of the implementation rollout.
+Other existing event types are mapped explicitly per row in the migration. This migration runs as part of the implementation rollout, after publishEvent is in place but before the CHECK constraint is added.
 
 ### Archival policy
 
@@ -647,9 +638,12 @@ If an agent needs to record something for itself or for users that isn't a credi
 - ✅ INTEREST_RATE_CHANGE is a country-scoped event produced by Country Risk Monitor
 - ✅ RISK_CHANGE single event type with change_type discriminator (escalation/downgrade/upgrade/cleared)
 - ✅ UTILIZATION_THRESHOLD_BREACH single event type covering both approaching and exceeding limit
-- ✅ Article body NOT stored in NEGATIVE_NEWS payload; URL + AI summary only
+- ✅ Article body NOT stored in NEWS_EVENT payload; URL + AI summary only
 - ✅ Old events archived (not deleted) after 24 months; policy deferred to a later session
 - ✅ RISK_STABLE_REVIEW removed from V1
+- ✅ NEGATIVE_NEWS + POSITIVE_NEWS collapsed into single NEWS_EVENT with sentiment + subcategory in payload — news is open-ended and resists fixed enumeration; subcategory grows over time without taxonomy changes
+- ✅ SEC_FILING_10K / 10Q / 8K dropped from V1 — these are filing types, not events. Filing type lives in the payload (`filing_source_type`) of typed SEC events
+- ✅ SEC events stay typed for common concerns (COVENANT_WAIVER, CEO_DEPARTURE, REVENUE_MISS, GOING_CONCERN) + SEC_OTHER catch-all for the long tail with `concern_category` discriminator
 
 ## Open questions (deferred to V2)
 

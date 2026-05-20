@@ -44,44 +44,26 @@ export const SeverityScore = z.number().int().min(0).max(100);
 // Customer-specific event payloads
 // ============================================================================
 
-export const NegativeNewsPayload = z.object({
+export const SentimentEnum = z.enum(["negative", "positive", "neutral"]);
+
+export const NewsEventPayload = z.object({
   severity_score: SeverityScore,
+  sentiment: SentimentEnum,
+  sentiment_score: z.number().min(-1).max(1),
+  subcategory: z.string(),  // free-form (earnings_miss, layoffs, lawsuit, etc.)
   article_title: z.string(),
   article_url: z.string().url(),
   published_at: z.string().datetime(),
   source: NewsSourceEnum,
-  sentiment_score: z.number().min(-1).max(0),
   key_phrases: z.array(z.string()),
   summary: z.string(),
 });
 
-export const PositiveNewsPayload = z.object({
-  severity_score: SeverityScore,
-  article_title: z.string(),
-  article_url: z.string().url(),
-  published_at: z.string().datetime(),
-  source: NewsSourceEnum,
-  sentiment_score: z.number().min(0).max(1),
-  key_phrases: z.array(z.string()),
-  summary: z.string(),
-});
-
-const SecFilingBase = z.object({
-  severity_score: SeverityScore,
-  filing_date: z.string().date(),
-  period_of_report: z.string().date(),
-  accession_number: z.string(),
-  summary: z.string(),
-});
-
-export const SecFiling10KPayload = SecFilingBase;
-export const SecFiling10QPayload = SecFilingBase;
-export const SecFiling8KPayload = SecFilingBase.extend({
-  material_event_type: z.string(),
-});
+export const FilingSourceTypeEnum = z.enum(["10-K", "10-Q", "8-K", "other"]);
 
 export const CovenantWaiverPayload = z.object({
   severity_score: SeverityScore,
+  filing_source_type: FilingSourceTypeEnum.nullable(),
   waiver_date: z.string().date(),
   waived_covenant: z.string(),
   evidence_url: z.string().url(),
@@ -90,6 +72,7 @@ export const CovenantWaiverPayload = z.object({
 
 export const CeoDeparturePayload = z.object({
   severity_score: SeverityScore,
+  filing_source_type: FilingSourceTypeEnum.nullable(),
   executive_name: z.string(),
   departure_type: z.enum(["resigned", "terminated", "retired", "other"]),
   departure_date: z.string().date(),
@@ -99,6 +82,7 @@ export const CeoDeparturePayload = z.object({
 
 export const RevenueMissPayload = z.object({
   severity_score: SeverityScore,
+  filing_source_type: FilingSourceTypeEnum.nullable(),
   reported_revenue_usd: z.number(),
   expected_revenue_usd: z.number(),
   miss_percent: z.number(),
@@ -108,6 +92,15 @@ export const RevenueMissPayload = z.object({
 
 export const GoingConcernPayload = z.object({
   severity_score: SeverityScore,
+  filing_source_type: FilingSourceTypeEnum.nullable(),
+  evidence_url: z.string().url(),
+  summary: z.string(),
+});
+
+export const SecOtherPayload = z.object({
+  severity_score: SeverityScore,
+  filing_source_type: FilingSourceTypeEnum,
+  concern_category: z.string(),
   evidence_url: z.string().url(),
   summary: z.string(),
 });
@@ -317,15 +310,12 @@ export const CurrencyVolatilityPayload = z.object({
 // ============================================================================
 
 export const EVENT_TYPES = [
-  "NEGATIVE_NEWS",
-  "POSITIVE_NEWS",
-  "SEC_FILING_10K",
-  "SEC_FILING_10Q",
-  "SEC_FILING_8K",
+  "NEWS_EVENT",
   "COVENANT_WAIVER",
   "CEO_DEPARTURE",
   "REVENUE_MISS",
   "GOING_CONCERN",
+  "SEC_OTHER",
   "OVERDUE_INVOICE",
   "UTILIZATION_THRESHOLD_BREACH",
   "PAYMENT_DETERIORATION",
@@ -356,15 +346,12 @@ export type EventType = typeof EVENT_TYPES[number];
 export const EventTypeEnum = z.enum(EVENT_TYPES);
 
 const payloadSchemas: Record<EventType, z.ZodTypeAny> = {
-  NEGATIVE_NEWS: NegativeNewsPayload,
-  POSITIVE_NEWS: PositiveNewsPayload,
-  SEC_FILING_10K: SecFiling10KPayload,
-  SEC_FILING_10Q: SecFiling10QPayload,
-  SEC_FILING_8K: SecFiling8KPayload,
+  NEWS_EVENT: NewsEventPayload,
   COVENANT_WAIVER: CovenantWaiverPayload,
   CEO_DEPARTURE: CeoDeparturePayload,
   REVENUE_MISS: RevenueMissPayload,
   GOING_CONCERN: GoingConcernPayload,
+  SEC_OTHER: SecOtherPayload,
   OVERDUE_INVOICE: OverdueInvoicePayload,
   UTILIZATION_THRESHOLD_BREACH: UtilizationThresholdBreachPayload,
   PAYMENT_DETERIORATION: PaymentDeteriorationPayload,
