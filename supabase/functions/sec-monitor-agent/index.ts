@@ -14,8 +14,8 @@
  *
  * Skills used: fetch-sec-filing.ts (EdgarProvider — EDGAR API, free, no key)
  *
- * Event types emitted:
- *   GOING_CONCERN_WARNING | COVENANT_WAIVER | CEO_DEPARTURE | SEC_ALERT
+ * Event types emitted (V1 taxonomy via publishEvent):
+ *   GOING_CONCERN | COVENANT_WAIVER | CEO_DEPARTURE | SEC_OTHER
  *
  * Severity mapping:
  *   going_concern_warning / cash_runway_<3_quarters → critical
@@ -33,6 +33,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.98.0";
 import { fetchSecFilings } from "../_shared/skills/integration/fetch-sec-filing.ts";
 import { deliverMessage, LogProvider } from "../_shared/skills/integration/deliver-message.ts";
+import { publishEvent } from "../_shared/publishEvent.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -177,49 +178,91 @@ Deno.serve(async (req) => {
           conditionsFound++;
           newRiskSignals.push(...filing.risk_signals);
 
-          // Map risk signals to event type + severity
-          const eventType = filing.risk_signals.includes("going_concern_warning") ? "GOING_CONCERN_WARNING"
-            : filing.risk_signals.includes("covenant_waiver") ? "COVENANT_WAIVER"
-            : filing.risk_signals.includes("CEO_departure") ? "CEO_DEPARTURE"
-            : filing.risk_signals.includes("cash_runway_<3_quarters") ? "GOING_CONCERN_WARNING"
-            : "SEC_ALERT";
+          // Map risk signals to V1 event type + severity
+          const v1EventType = (
+            filing.risk_signals.includes("going_concern_warning") ||
+            filing.risk_signals.includes("cash_runway_<3_quarters")
+          ) ? "GOING_CONCERN" as const
+            : filing.risk_signals.includes("covenant_waiver") ? "COVENANT_WAIVER" as const
+            : filing.risk_signals.includes("CEO_departure") ? "CEO_DEPARTURE" as const
+            : "SEC_OTHER" as const;
 
           const severity = (
             filing.risk_signals.includes("going_concern_warning") ||
             filing.risk_signals.includes("cash_runway_<3_quarters")
-          ) ? "critical"
+          ) ? "critical" as const
             : (
               filing.risk_signals.includes("covenant_waiver") ||
               filing.risk_signals.includes("CEO_departure")
-            ) ? "high"
-            : "medium";
+            ) ? "high" as const
+            : "medium" as const;
 
-          // Write credit_event (pure signal — CIA agent owns pending_actions)
-          await supabase.from("credit_events").insert({
-            scope:        "customer",
-            customer_id:  customerId,
-            event_type:   eventType,
-            source_agent: agent_name,
-            severity,
-            signal_type:  "SEC_FILING",
-            title:        `${companyName}: ${eventType.replace(/_/g, " ")}`,
-            description:  `Risk signals in ${filing.filing_type} (${filing.filing_date}): ${filing.risk_signals.join(", ")}`,
-            payload: {
-              filing_type:      filing.filing_type,
-              filing_date:      filing.filing_date,
-              accession_number: filing.accession_number,
-              document_url:     filing.document_url,
-              cik,
-              risk_signals:     filing.risk_signals,
-              key_findings:     filing.key_findings,
-              provider:         filing.provider,
-            },
-            action_required: severity === "critical" || severity === "high",
-            action_type:     null,
-            action_status:   "none",
-            is_demo:         DEMO_MODE,
-            run_id,
-          });
+          const severityScore = severity === "critical" ? 92 : severity === "high" ? 75 : 52;
+
+          // Normalise filing type to V1 FilingSourceTypeEnum
+          const filingSourceType = (["10-K", "10-Q", "8-K"] as const).includes(
+            filing.filing_type as "10-K" | "10-Q" | "8-K"
+          ) ? filing.filing_type as "10-K" | "10-Q" | "8-K" : "other" as const;
+
+          const summaryText = `${companyName}: ${v1EventType.replace(/_/g, " ")} detected in ${filing.filing_type} filed ${filing.filing_date}. Risk signals: ${filing.risk_signals.join(", ")}.`;
+
+          // Evidence URL is required for all SEC event payloads — skip if missing
+          if (!filing.document_url) {
+            console.warn(`No document_url for ${companyName} ${filing.accession_number} — skipping credit event`);
+          } else {
+            // Build V1 payload by event type
+            let eventPayload: Record<string, unknown>;
+            if (v1EventType === "GOING_CONCERN") {
+              eventPayload = {
+                severity_score:     severityScore,
+                filing_source_type: filingSourceType,
+                evidence_url:       filing.document_url,
+                summary:            summaryText,
+              };
+            } else if (v1EventType === "COVENANT_WAIVER") {
+              eventPayload = {
+                severity_score:     severityScore,
+                filing_source_type: filingSourceType,
+                waiver_date:        filing.filing_date,
+                waived_covenant:    "covenant (see filing for details)",
+                evidence_url:       filing.document_url,
+                summary:            summaryText,
+              };
+            } else if (v1EventType === "CEO_DEPARTURE") {
+              eventPayload = {
+                severity_score:     severityScore,
+                filing_source_type: filingSourceType,
+                executive_name:     "Executive (see filing for details)",
+                departure_type:     "other",
+                departure_date:     filing.filing_date,
+                evidence_url:       filing.document_url,
+                summary:            summaryText,
+              };
+            } else {
+              // SEC_OTHER
+              eventPayload = {
+                severity_score:     severityScore,
+                filing_source_type: filingSourceType,
+                concern_category:   filing.risk_signals.join(", "),
+                evidence_url:       filing.document_url,
+                summary:            summaryText,
+              };
+            }
+
+            // Write credit_event via publishEvent (pure signal — CIA owns pending_actions)
+            await publishEvent({
+              event_type:   v1EventType,
+              severity,
+              scope:        "customer",
+              customer_id:  customerId,
+              source_agent: agent_name,
+              title:        `${companyName}: ${v1EventType.replace(/_/g, " ")}`,
+              description:  `Risk signals in ${filing.filing_type} (${filing.filing_date}): ${filing.risk_signals.join(", ")}`,
+              summary:      summaryText,
+              payload:      eventPayload,
+              is_demo:      DEMO_MODE,
+            });
+          }
 
           // Compose email alert
           const alertSubject = `SEC Alert: ${companyName} (${customer.ticker ?? cik}) — ${filing.risk_signals.length} risk signal(s) in ${filing.filing_type}`;
