@@ -20,7 +20,7 @@ CreditPilot's agents communicate by writing to the `credit_events` table. Withou
 
 Format: `SUBJECT_NOUN` in screaming snake case. Severity is **never** part of the event type name — it lives in the dedicated `severity` column.
 
-Good: `COVENANT_WAIVER`, `NEGATIVE_NEWS`, `UTILIZATION_THRESHOLD_BREACH`, `COUNTRY_RATING_CHANGE`
+Good: `COVENANT_WAIVER`, `UTILIZATION_THRESHOLD_BREACH`, `COUNTRY_RATING_CHANGE`, `RISK_CHANGE`
 Bad: `NEGATIVE_NEWS_HIGH` (severity in name), `BAD_NEWS` (not specific), `negative_news` (wrong case)
 
 ### Severity scale
@@ -70,7 +70,7 @@ Every event in `credit_events` has:
 | `customer_id` | uuid | conditional | required if scope=customer; null otherwise |
 | `source_agent` | string | yes | which agent produced this |
 | `correlation_id` | uuid | yes | groups events in a cascade |
-| `triggered_by` | uuid | nullable | event id that triggered this one (null for root events) |
+| `parent_event_id` | uuid | nullable | immediate parent event id — the event that triggered this one (null for root events) |
 | `title` | string | yes | one-line human-readable summary |
 | `description` | text | yes | longer prose description |
 | `summary` | text | conditional | AI-generated summary; required for severity ≥ medium, optional otherwise |
@@ -82,13 +82,13 @@ Every event in `credit_events` has:
 
 For events with severity `medium`, `high`, or `critical`, the producer generates an AI summary at emit time (small Haiku call) and stores it on the event. For severity `low` and `info`, the summary is templated from payload fields without an LLM call. This balances cost against the value of having pre-generated summaries available for fast briefing and audit reads.
 
-### Cascade tracking: correlation_id and triggered_by
+### Cascade tracking: correlation_id and parent_event_id
 
 Cascade integrity is built on two fields:
 - `correlation_id` — the *root* event's id, copied to every downstream event in the cascade. Lets you query "show me everything that resulted from the Brazil downgrade."
-- `triggered_by` — the *immediate* parent event id. Lets you reconstruct the causal tree.
+- `parent_event_id` — the *immediate* parent event id. Lets you reconstruct the causal tree. (This column predates the V1 taxonomy and serves as the "triggered_by" concept; we kept the existing name rather than adding a redundant column.)
 
-The root event (the one that started the cascade) has `correlation_id = its own id` and `triggered_by = null`. The `publishEvent()` helper handles this automatically.
+The root event (the one that started the cascade) has `correlation_id = its own id` and `parent_event_id = null`. The `publishEvent()` helper handles this automatically.
 
 ### Idempotency
 
@@ -576,7 +576,7 @@ A shared helper `publishEvent(event: NewCreditEvent)` at `supabase/functions/_sh
 
 1. Validates the payload against the appropriate Zod schema for the event_type
 2. Computes `severity_score` from `severity` if not provided, or vice versa; throws if both are provided and inconsistent
-3. Sets `correlation_id = id` if neither correlation_id nor triggered_by are provided (root event); otherwise validates that correlation_id is provided
+3. Sets `correlation_id = id` if neither correlation_id nor parent_event_id are provided (root event); otherwise validates that correlation_id is provided
 4. For severity ≥ medium, requires the `summary` field
 5. Fills in `created_at` if not provided
 6. Inserts into `credit_events`
