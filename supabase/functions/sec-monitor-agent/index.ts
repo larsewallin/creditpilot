@@ -10,7 +10,7 @@
  *
  * Tables read:  sec_monitoring (with customers join), sec_filings (dedup check)
  * Tables written: sec_filings, credit_events, agent_messages, agent_runs,
- *                 sec_monitoring (last_checked_at, alert_triggered, alert_date, risk_signals)
+ *                 sec_monitoring (last_checked_at, alert_triggered, alert_date, risk_signals_detected)
  *
  * Skills used: fetch-sec-filing.ts (EdgarProvider — EDGAR API, free, no key)
  *
@@ -32,7 +32,7 @@
  * Max customers per run: 10.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.98.0";
-import { fetchSecFilings } from "../_shared/skills/integration/fetch-sec-filing.ts";
+import { fetchSecFilings, fetchSeedSecFilings } from "../_shared/skills/integration/fetch-sec-filing.ts";
 import { deliverMessage, LogProvider } from "../_shared/skills/integration/deliver-message.ts";
 import { publishEvent } from "../_shared/publishEvent.ts";
 
@@ -57,29 +57,6 @@ Deno.serve(async (req) => {
   const { triggered_by } = await req.json().catch(() => ({ triggered_by: "manual" }));
   const agent_name = "sec_monitor_agent";
   const DEMO_MODE = Deno.env.get("DEMO_MODE") === "true";
-
-  // DEMO MODE: create a log entry, no EDGAR calls
-  if (DEMO_MODE) {
-    const SEED_RUN_ID = "04238087-3999-4aac-a368-5a820a603194";
-
-    await supabase.from("agent_runs").insert({
-      id: crypto.randomUUID(),
-      agent_name,
-      status: "completed",
-      started_at: new Date().toISOString(),
-      completed_at: new Date().toISOString(),
-      customers_scanned: 3,
-      conditions_found: 2,
-      messages_composed: 2,
-      actions_taken: 0,
-      triggered_by: "demo",
-      summary: "Monitored 3 SEC filings. Found 2 alerts. Composed 2 notifications.",
-    });
-
-    return new Response(JSON.stringify({ run_id: SEED_RUN_ID, status: "completed", demo: true }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
 
   // --- Rate limit check ---
   const cutoff = new Date(Date.now() - RATE_LIMIT_MINUTES * 60 * 1000).toISOString();
@@ -114,11 +91,14 @@ Deno.serve(async (req) => {
 
   try {
     // 1. Load monitored customers (with customer join, is_demo filter, max 10)
-    const { data: monitoring } = await supabase
+    const { data: monitoring, error: monitoringError } = await supabase
       .from("sec_monitoring")
-      .select("id, customer_id, cik, risk_signals, customers!inner(company_name, ticker)")
+      .select("id, customer_id, cik, risk_signals_detected, customers!inner(company_name, ticker)")
       .eq("is_demo", DEMO_MODE)
       .limit(MAX_CUSTOMERS_PER_RUN);
+    if (monitoringError) {
+      console.error("sec_monitoring query failed:", JSON.stringify(monitoringError));
+    }
 
     const scanned = monitoring?.length ?? 0;
     let conditionsFound = 0;
@@ -142,7 +122,9 @@ Deno.serve(async (req) => {
       }
 
       try {
-        const filings = await fetchSecFilings({ cik, company_name: companyName, days_back: 90 });
+        const filings = DEMO_MODE
+          ? await fetchSeedSecFilings({ cik, company_name: companyName, days_back: 90 })
+          : await fetchSecFilings({ cik, company_name: companyName, days_back: 90 });
 
         const newRiskSignals: string[] = [];
         let hasNewAlerts = false;
@@ -299,7 +281,7 @@ Deno.serve(async (req) => {
         if (hasNewAlerts) {
           updatePayload.alert_triggered = true;
           updatePayload.alert_date      = now.slice(0, 10);
-          updatePayload.risk_signals    = [...new Set(newRiskSignals)];
+          updatePayload.risk_signals_detected = [...new Set(newRiskSignals)];
         }
         await supabase.from("sec_monitoring")
           .update(updatePayload)

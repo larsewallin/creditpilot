@@ -8,6 +8,8 @@
  * @usedBy sec-monitor-agent
  */
 
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface SecFiling {
@@ -177,4 +179,46 @@ export async function fetchSecFilings(input: {
   return results
     .filter((r) => r.status === "fulfilled")
     .flatMap((r) => (r as PromiseFulfilledResult<SecFiling[]>).value);
+}
+
+// ─── Seed fetch function (demo mode) ─────────────────────────────────────────
+//
+// Reads from seed_sec_filings instead of hitting live EDGAR, so demo runs the
+// real SEC agent pipeline deterministically. days_back is intentionally ignored:
+// seed rows are curated demo fixtures and should always be returned regardless
+// of their filing_date age.
+
+export async function fetchSeedSecFilings(input: {
+  cik: string;
+  company_name?: string;
+  days_back?: number;
+}): Promise<SecFiling[]> {
+  try {
+    const url = Deno.env.get("SUPABASE_URL");
+    const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!url || !key) return [];
+
+    const supabase = createClient(url, key, { auth: { persistSession: false } });
+
+    const { data, error } = await supabase
+      .from("seed_sec_filings")
+      .select("cik, company_name, filing_type, filing_date, accession_number, document_url, risk_signals, key_findings, provider")
+      .eq("cik", input.cik);
+
+    if (error || !data) return [];
+
+    return data.map((row) => ({
+      cik:              row.cik,
+      company_name:     row.company_name,
+      filing_type:      mapFilingType(row.filing_type) as SecFiling["filing_type"],
+      filing_date:      row.filing_date,
+      accession_number: row.accession_number,
+      document_url:     row.document_url,
+      risk_signals:     row.risk_signals ?? [],
+      key_findings:     row.key_findings ?? "",
+      provider:         "edgar",
+    }));
+  } catch {
+    return [];
+  }
 }
