@@ -32,9 +32,6 @@ export const SectorEnum = z.enum([
 ]);
 export type Sector = z.infer<typeof SectorEnum>;
 
-export const NewsSourceEnum = z.enum([
-  "bloomberg", "reuters", "newsapi", "gdelt", "ft", "other",
-]);
 
 export const RatingAgencyEnum = z.enum(["sp", "moodys", "fitch"]);
 
@@ -52,9 +49,10 @@ export const NewsEventPayload = z.object({
   sentiment_score: z.number().min(-1).max(1),
   subcategory: z.string(),  // free-form (earnings_miss, layoffs, lawsuit, etc.)
   article_title: z.string(),
-  article_url: z.string().url(),
+  article_url: z.string().url().nullable(),
   published_at: z.string().datetime(),
-  source: NewsSourceEnum,
+  source: z.string(),  // free-form publication name (e.g. "Reuters", "Seeking Alpha")
+  provider: z.enum(["tavily", "google_news", "manual"]),  // fetch mechanism, not publication
   key_phrases: z.array(z.string()),
   summary: z.string(),
 });
