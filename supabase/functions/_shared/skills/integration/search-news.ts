@@ -15,13 +15,15 @@
  * @usedBy news-monitor-agent
  */
 
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 /** Provider-agnostic raw article shape */
 export interface RawArticle {
   headline: string;
   summary: string;
-  url: string;
+  url: string | null;
   source: string;
   published_date?: string; // stored as news_date in negative_news table
   relevance_score: number; // 0–1, normalised from provider; stored in negative_news.relevance_score
@@ -170,5 +172,44 @@ function extractDomain(url: string): string {
     return new URL(url).hostname.replace(/^www\./, "");
   } catch {
     return url;
+  }
+}
+
+// ─── Seed fetch function (demo mode) ─────────────────────────────────────────
+//
+// Reads from seed_news instead of hitting Tavily, so demo runs the real news
+// agent pipeline deterministically (searchSeedNews -> classifyNews ->
+// publishEvent). Mirrors fetchSeedSecFilings in fetch-sec-filing.ts. url is
+// passed through as-is (may be null); a null URL is honest and flows to the
+// nullable article_url in the NEWS_EVENT payload.
+
+export async function searchSeedNews(input: {
+  customer_id: string;
+}): Promise<RawArticle[]> {
+  try {
+    const url = Deno.env.get("SUPABASE_URL");
+    const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!url || !key) return [];
+
+    const supabase = createClient(url, key, { auth: { persistSession: false } });
+
+    const { data, error } = await supabase
+      .from("seed_news")
+      .select("headline, summary, url, source, published_date, relevance_score, provider")
+      .eq("customer_id", input.customer_id);
+
+    if (error || !data) return [];
+
+    return data.map((row) => ({
+      headline:        row.headline,
+      summary:         row.summary,
+      url:             row.url ?? null,
+      source:          row.source,
+      published_date:  row.published_date ?? undefined,
+      relevance_score: Number(row.relevance_score),
+      provider:        row.provider,
+    }));
+  } catch {
+    return [];
   }
 }

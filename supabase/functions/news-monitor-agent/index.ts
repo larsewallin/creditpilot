@@ -17,11 +17,12 @@
  * Tables written: negative_news, credit_events, agent_messages, agent_runs
  *
  * Event types emitted:
- *   NEGATIVE_NEWS_CRITICAL | NEGATIVE_NEWS_HIGH | NEGATIVE_NEWS_MEDIUM
+ *   NEWS_EVENT (sentiment + subcategory in payload)
  *
  * Rate limit: 60 minutes between runs (HTTP 429 if exceeded).
- * Demo mode:  Returns a pre-baked run log. No rows written.
- *             Controlled by DEMO_MODE=true Supabase secret.
+ * Demo mode:  Reads seed articles from seed_news via searchSeedNews and runs
+ *             the full pipeline (classify -> publishEvent), identical to
+ *             production. Controlled by DEMO_MODE=true Supabase secret.
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.98.0";
@@ -30,8 +31,11 @@ import { classifyNews } from "../_shared/skills/generative/classify-news.ts";
 import {
   generateFingerprint,
   searchNews,
+  searchSeedNews,
   TavilyProvider,
 } from "../_shared/skills/integration/search-news.ts";
+import { publishEvent } from "../_shared/publishEvent.ts";
+import { severityToScore } from "../_shared/event_schemas.ts";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -58,31 +62,6 @@ Deno.serve(async (req) => {
   const { triggered_by } = await req.json().catch(() => ({ triggered_by: "manual" }));
   const agent_name = "news_monitor_agent";
   const DEMO_MODE = Deno.env.get("DEMO_MODE") === "true";
-
-  // ── Demo mode (runs before rate limit check) ────────────────────────────────
-
-  if (DEMO_MODE) {
-    const SEED_RUN_ID = "cfab84c3-2a44-4c60-97a1-c0dbe50d1015";
-
-    await supabase.from("agent_runs").insert({
-      id: crypto.randomUUID(),
-      agent_name: "news_monitor_agent",
-      status: "completed",
-      started_at: new Date().toISOString(),
-      completed_at: new Date().toISOString(),
-      customers_scanned: 28,
-      conditions_found: 25,
-      messages_composed: 5,
-      actions_taken: 0,
-      triggered_by: "demo",
-      summary: "Scanned 28 unreviewed news items. Found 25 critical/high alerts. Composed 5 notifications.",
-    });
-
-    return new Response(
-      JSON.stringify({ run_id: SEED_RUN_ID, status: "completed", demo: true }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
 
   // ── Rate limit check ────────────────────────────────────────────────────────
 
@@ -124,17 +103,32 @@ Deno.serve(async (req) => {
 
     // ── Backward-compat: no Tavily key → process existing unreviewed rows ─────
 
-    if (!tavilyKey) {
+    if (!tavilyKey && !DEMO_MODE) {
       console.log("[news-monitor-agent] No TAVILY_API_KEY — falling back to existing unreviewed rows");
       return await legacyPath(supabase, run_id, agent_name, corsHeaders);
     }
 
     // ── Live pipeline ─────────────────────────────────────────────────────────
 
-    const { data: customers, error: custError } = await supabase
+    // In demo, process exactly the customers that have seed_news rows (mirrors
+    // the SEC agent driving off its demo monitoring rows). Production keeps the
+    // existing behaviour: the first MAX_CUSTOMERS customers.
+    let customerQuery = supabase
       .from("customers")
-      .select("id, company_name, ticker")
-      .limit(MAX_CUSTOMERS);
+      .select("id, company_name, ticker");
+
+    if (DEMO_MODE) {
+      const { data: seedCustomers, error: seedCustError } = await supabase
+        .from("seed_news")
+        .select("customer_id");
+      if (seedCustError) throw seedCustError;
+      const seedIds = [...new Set((seedCustomers ?? []).map((r) => r.customer_id))];
+      customerQuery = customerQuery.in("id", seedIds);
+    } else {
+      customerQuery = customerQuery.limit(MAX_CUSTOMERS);
+    }
+
+    const { data: customers, error: custError } = await customerQuery;
 
     if (custError) throw custError;
 
@@ -146,13 +140,15 @@ Deno.serve(async (req) => {
       customersScanned++;
       console.log(`[news-monitor-agent] Customer: ${customer.company_name} (${customer.id})`);
 
-      const articles = await searchNews({
-        company_name: customer.company_name,
-        ticker: customer.ticker ?? undefined,
-        days_back: 7,
-        max_results: 10,
-        providers: [new TavilyProvider(tavilyKey)],
-      });
+      const articles = DEMO_MODE
+        ? await searchSeedNews({ customer_id: customer.id })
+        : await searchNews({
+            company_name: customer.company_name,
+            ticker: customer.ticker ?? undefined,
+            days_back: 7,
+            max_results: 10,
+            providers: [new TavilyProvider(tavilyKey!)],
+          });
 
       console.log(`[news-monitor-agent]   ${articles.length} articles found`);
 
@@ -196,28 +192,28 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // Insert to negative_news (ON CONFLICT DO NOTHING via ignoreDuplicates)
-        const { error: newsError } = await supabase.from("negative_news").upsert(
-          {
-            customer_id: customer.id,
-            headline: article.headline,
-            summary: article.summary,
-            source: article.source,
-            url: article.url,
-            news_date: articleDate,
-            relevance_score: article.relevance_score,
-            severity: classification.severity,
-            category: classification.category,
-            sentiment_score: classification.sentiment_score,
-            reviewed: false,
-            is_demo: false,
-            content_fingerprint: fingerprint,
-            classification_source: classification.classified_by,
-            confidence: classification.confidence,
-            provider: article.provider,
-          },
-          { onConflict: "content_fingerprint", ignoreDuplicates: true }
-        );
+        // Insert to negative_news. Duplicates are already filtered by the
+        // explicit content_fingerprint dedup check earlier in this loop, so a
+        // plain insert is correct here. (An upsert with ON CONFLICT cannot match
+        // the partial unique index on content_fingerprint anyway.)
+        const { error: newsError } = await supabase.from("negative_news").insert({
+          customer_id: customer.id,
+          headline: article.headline,
+          summary: article.summary,
+          source: article.source,
+          url: article.url,
+          news_date: articleDate,
+          relevance_score: article.relevance_score,
+          severity: classification.severity,
+          category: classification.category,
+          sentiment_score: classification.sentiment_score,
+          reviewed: false,
+          is_demo: DEMO_MODE,
+          content_fingerprint: fingerprint,
+          classification_source: classification.classified_by,
+          confidence: classification.confidence,
+          provider: article.provider,
+        });
 
         if (newsError) {
           console.log(`[news-monitor-agent]   negative_news insert error: ${newsError.message}`);
@@ -231,43 +227,34 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // Medium / high / critical: credit event
-        const eventType =
-          classification.severity === "critical" ? "NEGATIVE_NEWS_CRITICAL"
-          : classification.severity === "high" ? "NEGATIVE_NEWS_HIGH"
-          : "NEGATIVE_NEWS_MEDIUM";
-
-        const { error: eventError } = await supabase.from("credit_events").insert({
-          scope: "customer",
-          customer_id: customer.id,
-          event_type: eventType,
-          source_agent: agent_name,
-          severity: classification.severity,
-          signal_type: "NEGATIVE_NEWS",
-          title: `${customer.company_name}: ${article.headline}`,
-          description: article.summary,
-          payload: {
-            headline: article.headline,
-            source: article.source,
-            url: article.url,
-            news_date: articleDate,
-            category: classification.category,
-            sentiment_score: classification.sentiment_score,
-            provider: article.provider,
-            classified_by: classification.classified_by,
-            triggers: [classification.category, `severity_${classification.severity}`],
-          },
-          is_demo: false,
-          run_id,
-        });
-
-        // 23505 = unique_violation on any credit_events constraint — skip alert
-        if (eventError) {
-          if ((eventError as any).code === "23505") {
-            console.log(`[news-monitor-agent]   Credit event conflict — skipping alert`);
-          } else {
-            console.log(`[news-monitor-agent]   credit_events insert error: ${eventError.message}`);
-          }
+        // Medium / high / critical: emit NEWS_EVENT via publishEvent
+        try {
+          await publishEvent({
+            event_type:   "NEWS_EVENT",
+            severity:     classification.severity,
+            scope:        "customer",
+            customer_id:  customer.id,
+            source_agent: agent_name,
+            title:        `${customer.company_name}: ${article.headline}`,
+            description:  article.summary,
+            summary:      article.summary,
+            payload: {
+              severity_score:  severityToScore(classification.severity),
+              sentiment:       "negative",
+              sentiment_score: classification.sentiment_score,
+              subcategory:     classification.category,
+              article_title:   article.headline,
+              article_url:     article.url,
+              published_at:    `${articleDate}T00:00:00Z`,
+              source:          article.source,
+              provider:        article.provider,
+              key_phrases:     [],
+              summary:         article.summary,
+            },
+            is_demo: DEMO_MODE,
+          });
+        } catch (err) {
+          console.log(`[news-monitor-agent]   publishEvent failed for ${customer.company_name}: ${(err as Error).message}`);
           continue;
         }
 
@@ -297,7 +284,7 @@ Deno.serve(async (req) => {
           subject: alert.subject,
           body: alert.body,
           status: "draft",
-          is_demo: false,
+          is_demo: DEMO_MODE,
         });
 
         if (!msgError) messagesComposed++;
@@ -392,29 +379,36 @@ async function legacyPath(
     });
     if (!msgError) messagesComposed++;
 
-    await supabase.from("credit_events").insert({
-      scope: "customer",
-      customer_id: item.customer_id,
-      event_type:
-        item.severity === "critical" ? "NEGATIVE_NEWS_CRITICAL"
-        : item.severity === "high" ? "NEGATIVE_NEWS_HIGH"
-        : "NEGATIVE_NEWS_MEDIUM",
-      source_agent: agent_name,
-      severity: item.severity as "critical" | "high" | "medium" | "low" | "info",
-      signal_type: "NEGATIVE_NEWS",
-      title: `${cust?.company_name ?? "Unknown"}: ${item.headline}`,
-      description: item.summary,
-      payload: {
-        headline: item.headline,
-        source: item.source,
-        news_date: item.news_date,
-        category: item.category,
-        sentiment_score: item.sentiment_score,
-        triggers: [item.category ?? "negative_news", `severity_${item.severity}`],
-      },
-      is_demo: false,
-      run_id,
-    });
+    try {
+      await publishEvent({
+        event_type:   "NEWS_EVENT",
+        severity:     item.severity as "critical" | "high" | "medium" | "low" | "info",
+        scope:        "customer",
+        customer_id:  item.customer_id,
+        source_agent: agent_name,
+        title:        `${cust?.company_name ?? "Unknown"}: ${item.headline}`,
+        description:  item.summary ?? "",
+        summary:      item.summary ?? `${cust?.company_name ?? "Unknown"}: ${item.headline}`,
+        payload: {
+          severity_score:  severityToScore(item.severity as "critical" | "high" | "medium" | "low" | "info"),
+          sentiment:       "negative",
+          // -0.5 fallback for the rare legacy row lacking a stored sentiment_score
+          // (legacyPath only processes critical/high negative items, so a moderate-negative default is reasonable)
+          sentiment_score: item.sentiment_score != null ? Number(item.sentiment_score) : -0.5,
+          subcategory:     item.category ?? "other",
+          article_title:   item.headline,
+          article_url:     item.url ?? null,
+          published_at:    item.news_date ? `${String(item.news_date).slice(0, 10)}T00:00:00Z` : new Date().toISOString(),
+          source:          item.source ?? "unknown",
+          provider:        item.provider ?? "manual",
+          key_phrases:     [],
+          summary:         item.summary ?? `${cust?.company_name ?? "Unknown"}: ${item.headline}`,
+        },
+        is_demo: false,
+      });
+    } catch (err) {
+      console.log(`[news-monitor-agent]   legacyPath publishEvent failed for ${cust?.company_name ?? "Unknown"}: ${(err as Error).message}`);
+    }
   }
 
   await supabase
