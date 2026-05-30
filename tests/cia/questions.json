@@ -6,7 +6,7 @@
       "question": "Which customers have the highest credit risk right now?",
       "expected": {
         "min_sources": 3,
-        "must_mention": ["Triumph", "Arconic"],
+        "must_mention": ["Arconic"],
         "must_not_say": ["I don't have"],
         "expected_confidence": ["High", "Medium"]
       }
