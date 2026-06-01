@@ -143,6 +143,7 @@ export const PaymentVolatilityPayload = z.object({
   severity_score: SeverityScore,
   standard_deviation_days: z.number(),
   observation_window_days: z.number().int(),
+  summary: z.string(),
 });
 
 // ============================================================================
@@ -301,6 +302,7 @@ export const CurrencyVolatilityPayload = z.object({
   currency_code: z.string().length(3),
   volatility_percent: z.number(),
   period_days: z.number().int(),
+  summary: z.string(),
 });
 
 // ============================================================================
