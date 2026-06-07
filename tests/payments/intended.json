@@ -1,0 +1,356 @@
+[
+ {
+  "id": "c0000002-0000-0000-0000-000000000002",
+  "name": "Meridian Aerospace Components",
+  "persona": "healthy",
+  "intendedHealth": "healthy"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000004",
+  "name": "Parker Hannifin Corporation",
+  "persona": "healthy",
+  "intendedHealth": "healthy"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000003",
+  "name": "Lockheed Martin Corporation",
+  "persona": "healthy",
+  "intendedHealth": "healthy"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000014",
+  "name": "HEICO Corporation",
+  "persona": "healthy",
+  "intendedHealth": "healthy"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000005",
+  "name": "Precision Castparts Corp",
+  "persona": "healthy",
+  "intendedHealth": "healthy"
+ },
+ {
+  "id": "c0000002-0000-0000-0000-000000000005",
+  "name": "Summit Defense Technologies",
+  "persona": "healthy",
+  "intendedHealth": "healthy"
+ },
+ {
+  "id": "c0000002-0000-0000-0000-000000000007",
+  "name": "Clearwater Coatings Inc",
+  "persona": "healthy",
+  "intendedHealth": "healthy"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000006",
+  "name": "Baker Hughes Company",
+  "persona": "healthy",
+  "intendedHealth": "healthy"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000002",
+  "name": "Raytheon Technologies (RTX)",
+  "persona": "healthy",
+  "intendedHealth": "healthy"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000011",
+  "name": "Curtiss-Wright Corporation",
+  "persona": "healthy",
+  "intendedHealth": "healthy"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000018",
+  "name": "Watts Water Technologies Inc",
+  "persona": "healthy",
+  "intendedHealth": "healthy"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000007",
+  "name": "Huntington Ingalls Industries Inc",
+  "persona": "healthy",
+  "intendedHealth": "healthy"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000012",
+  "name": "Woodward Inc",
+  "persona": "healthy",
+  "intendedHealth": "healthy"
+ },
+ {
+  "id": "c0000002-0000-0000-0000-000000000010",
+  "name": "Pacific Rim Tooling",
+  "persona": "healthy",
+  "intendedHealth": "healthy"
+ },
+ {
+  "id": "c0000002-0000-0000-0000-000000000008",
+  "name": "Delta Precision Parts",
+  "persona": "healthy",
+  "intendedHealth": "healthy"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000013",
+  "name": "Moog Inc",
+  "persona": "healthy",
+  "intendedHealth": "healthy"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000008",
+  "name": "Howmet Aerospace Inc",
+  "persona": "healthy",
+  "intendedHealth": "healthy"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000015",
+  "name": "Ducommun Incorporated",
+  "persona": "healthy",
+  "intendedHealth": "healthy"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000016",
+  "name": "Chart Industries Inc",
+  "persona": "healthy",
+  "intendedHealth": "healthy"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000001",
+  "name": "The Boeing Company",
+  "persona": "healthy",
+  "intendedHealth": "healthy"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000019",
+  "name": "CIRCOR International Inc",
+  "persona": "healthy",
+  "intendedHealth": "healthy"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000020",
+  "name": "The Nordam Group LLC",
+  "persona": "healthy",
+  "intendedHealth": "healthy"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000017",
+  "name": "Haynes International Inc",
+  "persona": "healthy",
+  "intendedHealth": "healthy"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000010",
+  "name": "Spirit AeroSystems Holdings Inc",
+  "persona": "watch",
+  "intendedHealth": "watch"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000009",
+  "name": "TransDigm Group Incorporated",
+  "persona": "watch",
+  "intendedHealth": "watch"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000022",
+  "name": "Kaman Corporation",
+  "persona": "watch",
+  "intendedHealth": "watch"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000026",
+  "name": "ProPetro Holding Corp",
+  "persona": "watch",
+  "intendedHealth": "watch"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000028",
+  "name": "Nordam Group - Legacy Division",
+  "persona": "watch",
+  "intendedHealth": "watch"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000027",
+  "name": "Ranger Energy Services Inc",
+  "persona": "watch",
+  "intendedHealth": "watch"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000024",
+  "name": "Global Power Equipment Group",
+  "persona": "watch",
+  "intendedHealth": "watch"
+ },
+ {
+  "id": "c0000002-0000-0000-0000-000000000003",
+  "name": "Cascade Industrial Systems",
+  "persona": "atrisk",
+  "intendedHealth": "at_risk"
+ },
+ {
+  "id": "c0000002-0000-0000-0000-000000000009",
+  "name": "Ironwood Machine Works",
+  "persona": "atrisk",
+  "intendedHealth": "at_risk"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000023",
+  "name": "Orbital Energy Group Inc",
+  "persona": "atrisk",
+  "intendedHealth": "at_risk"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000025",
+  "name": "Vertex Energy Inc",
+  "persona": "atrisk",
+  "intendedHealth": "at_risk"
+ },
+ {
+  "id": "c0000002-0000-0000-0000-000000000006",
+  "name": "Brixton Fasteners Ltd",
+  "persona": "distressed",
+  "intendedHealth": "at_risk"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000034",
+  "name": "General Electric Company (Power segment)",
+  "persona": "atrisk",
+  "intendedHealth": "at_risk"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000029",
+  "name": "Arconic Corporation",
+  "persona": "atrisk",
+  "intendedHealth": "at_risk"
+ },
+ {
+  "id": "c0000002-0000-0000-0000-000000000004",
+  "name": "Northgate Fabrication",
+  "persona": "atrisk",
+  "intendedHealth": "at_risk"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000033",
+  "name": "Mistras Group Inc",
+  "persona": "atrisk",
+  "intendedHealth": "at_risk"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000032",
+  "name": "Coeur Mining Inc",
+  "persona": "atrisk",
+  "intendedHealth": "at_risk"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000031",
+  "name": "Superior Industries International Inc",
+  "persona": "atrisk",
+  "intendedHealth": "at_risk"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000021",
+  "name": "Triumph Group Inc",
+  "persona": "atrisk",
+  "intendedHealth": "at_risk"
+ },
+ {
+  "id": "c0000002-0000-0000-0000-000000000001",
+  "name": "Atlas Precision Manufacturing",
+  "persona": "atrisk",
+  "intendedHealth": "at_risk"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000030",
+  "name": "McDermott International Ltd",
+  "persona": "distressed",
+  "intendedHealth": "at_risk"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000036",
+  "name": "AECOM Technology Corporation",
+  "persona": "healthy",
+  "intendedHealth": "healthy"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000039",
+  "name": "Maxar Technologies Inc",
+  "persona": "atrisk",
+  "intendedHealth": "at_risk"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000038",
+  "name": "American Airlines Group Inc",
+  "persona": "atrisk",
+  "intendedHealth": "at_risk"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000037",
+  "name": "Liqtech International AS",
+  "persona": "atrisk",
+  "intendedHealth": "at_risk"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000035",
+  "name": "Spirit Airlines Inc",
+  "persona": "distressed",
+  "intendedHealth": "at_risk"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000042",
+  "name": "Proterra Inc",
+  "persona": "distressed",
+  "intendedHealth": "at_risk"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000040",
+  "name": "Rite Aid Corporation",
+  "persona": "distressed",
+  "intendedHealth": "at_risk"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000041",
+  "name": "Yellow Corporation",
+  "persona": "distressed",
+  "intendedHealth": "at_risk"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000046",
+  "name": "Leonardo DRS Inc",
+  "persona": "healthy",
+  "intendedHealth": "healthy"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000045",
+  "name": "GE Vernova Inc",
+  "persona": "healthy",
+  "intendedHealth": "healthy"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000047",
+  "name": "Bloom Energy Corporation",
+  "persona": "watch",
+  "intendedHealth": "watch"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000044",
+  "name": "Archer Aviation Inc",
+  "persona": "watch",
+  "intendedHealth": "watch"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000043",
+  "name": "Joby Aviation Inc",
+  "persona": "watch",
+  "intendedHealth": "watch"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000048",
+  "name": "Textron Inc",
+  "persona": "healthy",
+  "intendedHealth": "healthy"
+ },
+ {
+  "id": "c0000001-0000-0000-0000-000000000049",
+  "name": "Heliogen Inc",
+  "persona": "distressed",
+  "intendedHealth": "at_risk"
+ }
+]
