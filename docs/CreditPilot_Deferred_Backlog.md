@@ -272,3 +272,23 @@ Line ~141 selects `amount`, dropped in Phase 3 (only `amount_paid` remains). The
 
 **F4. `total_outstanding` on ar_aging_snapshots excludes pre_petition.**
 `fn_refresh_ar_aging` computes total_outstanding as current+buckets, omitting pre_petition_amount — so `v_ar_aging_portfolio.total_outstanding` reads 77,897,000 while true exposure (incl. pre-petition) is 80,140,000. Pre-petition AR is arguably still outstanding (still owed, impaired collectability). Decide whether total_outstanding should include it; if so, fix in `fn_refresh_ar_aging` alongside F1. Function change — out of B0 scope.
+
+**F5. `sec_monitoring` live schema has drifted ahead of (and away from) migrations.**
+A fresh `supabase db reset` from the committed migrations would produce a different table than production. Verified 2026-06-06 by diffing `information_schema.columns` against all migrations.
+
+Columns in the **live DB but absent from all migrations** (added outside migration control):
+- `monitoring_active` boolean DEFAULT true
+- `filing_types_monitored` text[] DEFAULT ARRAY['10-K','10-Q','8-K']
+- `last_8k_date` date
+- `risk_signals_detected` text[] DEFAULT '{}'  ← the agent reads/writes this column
+- `next_scheduled_review` date
+- `updated_at` timestamptz
+
+Columns in **migrations but absent from the live DB** (either dropped or never applied):
+- `risk_signals` text[] DEFAULT '{}'  ← base migration `20260228040341`; appears renamed to `risk_signals_detected` outside migrations
+- `ai_risk_score` integer  ← migration `20260310125929`
+- `ai_summary` text  ← migration `20260310125929`
+
+**Impact:** `sec-monitor-agent` references `risk_signals_detected` (reads at line 96, writes at line 284). A fresh rebuild from migrations would produce `risk_signals` instead, breaking the agent. The `ai_risk_score`/`ai_summary` migrations applied but the columns don't exist in live — suggesting they were dropped manually.
+
+**Fix:** write a catch-up migration that (a) renames `risk_signals` → `risk_signals_detected` if it exists, (b) adds the six live-only columns with their defaults, (c) drops `ai_risk_score` and `ai_summary` if they exist (matching the live state). Apply before the next `supabase db reset` or new environment setup. Out of B0 scope.
