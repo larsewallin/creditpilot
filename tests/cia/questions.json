@@ -6,7 +6,7 @@
       "question": "Which customers have the highest credit risk right now?",
       "expected": {
         "min_sources": 3,
-        "must_mention": ["Arconic"],
+        "must_mention": ["McDermott", "Rite Aid", "Proterra", "Yellow"],
         "must_not_say": ["I don't have"],
         "expected_confidence": ["High", "Medium"]
       }
@@ -26,7 +26,7 @@
       "question": "Are any customers approaching their credit limits?",
       "expected": {
         "min_sources": 3,
-        "must_mention": ["utilization"],
+        "must_mention": ["Ironwood", "Kaman"],
         "must_not_say": ["I don't have"],
         "expected_confidence": ["High"]
       }

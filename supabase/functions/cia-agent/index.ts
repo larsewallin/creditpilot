@@ -417,14 +417,10 @@ async function fetchRelevantData(
         if (error) console.error('sector filter error:', error.message);
         results.customers = data ?? [];
       } else {
-        // No names mentioned and no sector detected — portfolio-level question.
-        // Return top 20 by credit_limit desc.
-        const { data, error } = await supabase
-          .from('customers')
-          .select(selectFields)
-          .order('credit_limit', { ascending: false })
-          .limit(20);
-        if (error) console.error('customers fallback error:', error.message);
+        // Portfolio-level question — return risk-ranked customers (V1 rule, B5).
+        // fn_rank_portfolio_risk: high-risk set first, then remaining by exposure.
+        const { data, error } = await supabase.rpc('fn_rank_portfolio_risk');
+        if (error) console.error('portfolio risk ranking error:', error.message);
         results.customers = data ?? [];
       }
     })(),
@@ -616,7 +612,7 @@ serve(async (req: Request) => {
 
     if (data.customers.length > 0) {
       contextParts.push("## CUSTOMERS TABLE\n" + data.customers.map((c: any) =>
-        `- ${sanitize(c.company_name)} (type:${sanitize(c.company_type)}, credit_limit=$${c.credit_limit?.toLocaleString()}, balance=$${c.current_exposure?.toLocaleString()}, utilization=${c.credit_limit ? Math.round(c.current_exposure / c.credit_limit * 100) : "N/A"}%, ${c.credit_rating_score != null ? `credit_score=${c.credit_rating_score}/100 (${sanitize(c.credit_rating_raw) || "N/A"} from ${sanitize(c.credit_rating_source) || "N/A"})` : "credit_score=NR (No Rating, provider=N/A)"}, scenario=${sanitize(c.scenario) || "N/A"}, payment_health=${sanitize(c.payment_health) || "unknown"}, risk_tags=[${(c.risk_tags ?? []).map(sanitize).join(", ")}])`
+        `- ${sanitize(c.company_name)} (type:${sanitize(c.company_type)}, credit_limit=$${c.credit_limit?.toLocaleString()}, balance=$${c.current_exposure?.toLocaleString()}, utilization=${c.credit_limit ? Math.round(c.current_exposure / c.credit_limit * 100) : "N/A"}%, ${c.credit_rating_score != null ? `credit_score=${c.credit_rating_score}/100 (${sanitize(c.credit_rating_raw) || "N/A"} from ${sanitize(c.credit_rating_source) || "N/A"})` : "credit_score=NR (No Rating, provider=N/A)"}, scenario=${sanitize(c.scenario) || "N/A"}, payment_health=${sanitize(c.payment_health) || "unknown"}, risk_tags=[${(c.risk_tags ?? []).map(sanitize).join(", ")}]${c.is_high_risk ? ', RISK_FLAG=HIGH' : ''})`
       ).join("\n"));
     }
 
