@@ -34,7 +34,7 @@ All monetary fields are interpreted as US dollars. No currency conversion. The `
 Country on customers = the country of the customer's company address. ISO 3166-1 alpha-2 codes. NOT NULL (default 'US' if truly unknown). This is the verifiable anchor — backed by postal/registry records. Risk-country, operating-country, and other interpretations are derived if needed, not stored.
 
 ### Computed metrics belong at the database layer
-Metrics derived from other fields (utilization_pct, dso_days, etc.) should be computed at read time (in views or query expressions), NOT stored as static columns. Stored derived values inevitably drift. Examples of correct pattern: `v_ar_aging_current` computes utilization fresh each time. Examples of past mistakes: `dso_days` stored on snapshots (dropped in B0), `flags` stored on customers (B5-deferred drop).
+Metrics derived from other fields (utilization_pct, dso_days, etc.) should be computed at read time (in views or query expressions), NOT stored as static columns. Stored derived values inevitably drift. Examples of correct pattern: `v_ar_aging_current` computes utilization fresh each time. Examples of past mistakes: `dso_days` stored on snapshots (dropped in B0), `flags` stored on customers (dropped in B5).
 
 ### Single source of truth for identifiers
 Each external identifier (DUNS, ticker, CIK, LEI) lives in `customer_identifiers`, not denormalized onto the customers table. See Customer Identifier Strategy doc for details. The one exception: `sec_filings.cik` is denormalized for query efficiency (it's stored per-filing alongside the customer relationship). Note: `customers.sec_cik` and `customers.ticker` still exist as convenience fields and are still read by `sec-monitor-agent`; migration to `customer_identifiers` as the sole source is deferred to Phase 4 data migration (B0 backlog).
@@ -70,7 +70,7 @@ The master customer record. Slow-changing. One row per company we monitor. 59 ro
 | `headquarters`              | Free-form HQ location (e.g. "Chicago, IL") | Manual entry | Display only; structured country lives in `country_code` |
 | `ticker`                    | Stock ticker (convenience denorm) | Manual | Still read by sec-monitor-agent. Canonical location: `customer_identifiers`. Drop deferred to B0 Phase 4 migration completion. |
 | `sec_cik`                   | SEC CIK (convenience denorm) | Manual | Still read by sec-monitor-agent. Canonical location: `customer_identifiers`. Drop deferred to B0 Phase 4 migration completion. |
-| `flags`                     | **B5-deferred drop** | (no readers) | Pre-V1-taxonomy cruft; 38 distinct values across 28 customers, no agent reads it. Drop blocked by `v_customers_at_risk` + `v_portfolio_overview` which reference it — needs a paired view-rewrite migration. Deferred to B5. |
+| `flags`                     | **DROPPED in B5** (migration 20260607230000) | (no readers) | Pre-V1-taxonomy cruft; 38 distinct values, no agent read it. Was blocked by v_customers_at_risk + v_portfolio_overview, which were rewritten to the V1 ranking rule in the same migration. |
 | `account_manager`           | Name/email of account owner | Manual | Free-form |
 | `customer_since`            | When the relationship started | Manual | date |
 | `payment_terms_days`        | Standard payment terms (e.g. 30, 45, 60) | Manual | integer, default 45 |
@@ -154,7 +154,7 @@ Per-payment records. 472 rows in demo (8 per customer, 59 customers). Source for
 | `on_time`         | Whether payment was on or before due date | Computed `(days_early_late <= 0)` | boolean. Fully populated as of B0 Phase 4g (was null for 91% of rows prior). |
 | `payment_method`  | How payment was made | — | Enum |
 | `is_partial_payment` | Whether this is partial | — | boolean |
-| `paid_on_time`    | **B5-deferred drop** | (no readers since B0 Phase 3) | Boolean duplicate of `on_time`. Drop blocked by `v_customers_at_risk` + `v_payment_behaviour` which reference it — needs paired view-rewrite migration. Deferred to B5. |
+| `paid_on_time`    | **DROPPED in B5** (migration 20260607230000) | (no readers) | Was a boolean duplicate of `on_time`. v_customers_at_risk + v_payment_behaviour were rewritten to use `on_time` in the same migration. |
 
 **On-time definition (V1):** strict. `on_time = (days_early_late <= 0)`. Paid on or before due date = on time. No grace period.
 

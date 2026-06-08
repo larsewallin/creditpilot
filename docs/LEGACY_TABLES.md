@@ -13,14 +13,14 @@ Preserved for potential future use — do not reference in new code without a pl
 
 ---
 
-## B5-deferred column drops
+## Columns dropped in B5
 
-These columns exist in the live database but have no readers. Drops are blocked by view dependencies that require paired view-rewrite migrations — deferred to the B5 ranking-rule encoding pass.
+These columns were dropped in B5 (migration 20260607230000), along with the paired view rewrites that had blocked them. Listed here as historical record.
 
 | Column | Table | Blocked by | Notes |
 |--------|-------|-----------|-------|
-| `flags` | `customers` | `v_customers_at_risk`, `v_portfolio_overview` | Pre-V1-taxonomy cruft. 38 distinct values across 28 customers, none read by any agent. Event-like values (EARNINGS_MISS, COVENANT_WAIVER, etc.) are represented in the V1 taxonomy as proper credit_events types. |
-| `paid_on_time` | `payment_transactions` | `v_customers_at_risk`, `v_payment_behaviour` | Legacy boolean duplicate of `on_time`. `on_time` is the canonical field (fully populated as of B0 Phase 4g). |
+| `flags` | `customers` | `v_customers_at_risk`, `v_portfolio_overview` (rewritten in B5) | Pre-V1-taxonomy cruft. 38 distinct values across 28 customers, none read by any agent. Event-like values (EARNINGS_MISS, COVENANT_WAIVER, etc.) are represented in the V1 taxonomy as proper credit_events types. |
+| `paid_on_time` | `payment_transactions` | `v_customers_at_risk`, `v_payment_behaviour` (rewritten in B5) | Legacy boolean duplicate of `on_time`. `on_time` is the canonical field (fully populated as of B0 Phase 4g). |
 
 ---
 
