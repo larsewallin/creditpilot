@@ -374,7 +374,7 @@ async function fetchRelevantData(
 
     // customers — search by name or return top 20 by credit_limit (highest exposure first)
     tables.has("customers") && (async () => {
-      const selectFields = "id, company_name, ticker, company_type, credit_limit, current_exposure, credit_rating_score, credit_rating_raw, credit_rating_source, scenario, risk_tags, flags, payment_on_time_rate, payment_trend, payment_health";
+      const selectFields = "id, company_name, ticker, company_type, credit_limit, current_exposure, credit_rating_score, credit_rating_raw, credit_rating_source, scenario, risk_tags, payment_on_time_rate, payment_trend, payment_health";
 
       if (words.length > 0) {
         // Specific company names mentioned — targeted name search
