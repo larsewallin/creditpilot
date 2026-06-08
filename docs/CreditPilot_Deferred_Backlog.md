@@ -292,3 +292,16 @@ Columns in **migrations but absent from the live DB** (either dropped or never a
 **Impact:** `sec-monitor-agent` references `risk_signals_detected` (reads at line 96, writes at line 284). A fresh rebuild from migrations would produce `risk_signals` instead, breaking the agent. The `ai_risk_score`/`ai_summary` migrations applied but the columns don't exist in live — suggesting they were dropped manually.
 
 **Fix:** write a catch-up migration that (a) renames `risk_signals` → `risk_signals_detected` if it exists, (b) adds the six live-only columns with their defaults, (c) drops `ai_risk_score` and `ai_summary` if they exist (matching the live state). Apply before the next `supabase db reset` or new environment setup. Out of B0 scope.
+
+---
+
+## G. Process notes (lessons captured during B5)
+
+**G1. Column drops must grep for runtime string-literal readers, not just pg_depend.**
+B5 dropped `customers.flags` after the pg_depend view-dependency check came back clean for the rewrites — but the cia-agent's `selectFields` is a runtime query built from a **string literal** (`"id, company_name, ..., flags, ..."`), which pg_depend cannot see. The drop succeeded, then q2/q5/q6/q7 broke (PostgREST errored "column flags does not exist" → CIA returned "I don't have", 0 sources). Fix was a one-line selectFields edit + redeploy.
+**Rule for future column drops:** before dropping any column, run BOTH checks:
+  1. `pg_depend` query for views/constraints (catches parsed dependencies).
+  2. `grep -rn "<column_name>" supabase/functions src` for runtime readers — string-literal selects, `.select()` field lists, `c.<column>` property reads, RPC return mappings. These are invisible to pg_depend.
+Applies to any future drops (e.g. the still-deferred `ticker`/`sec_cik` → customer_identifiers migration, which selectFields also references as `ticker`).
+
+**Related note (not a bug, surfaced during G1):** `customers.ticker` and `customers.sec_cik` still exist live — the Identifier Strategy doc said B0 Phase 3 would drop them (migrate into customer_identifiers), but that step never ran. selectFields still reads `ticker`. When that migration finally happens, apply the G1 two-check rule and update selectFields in the same change.
