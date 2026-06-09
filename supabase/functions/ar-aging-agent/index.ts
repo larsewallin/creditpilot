@@ -138,7 +138,7 @@ Deno.serve(async (req) => {
       // --- Payment-behaviour refresh (CIA depends on these fields; AR is sole writer) ---
       const { data: transactions } = await supabase
         .from("payment_transactions")
-        .select("payment_date, days_to_pay, days_early_late, on_time, amount")
+        .select("payment_date, days_to_pay, days_early_late, on_time, amount:amount_paid")
         .eq("customer_id", customerId)
         .order("payment_date", { ascending: false })
         .limit(24);
