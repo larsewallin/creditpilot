@@ -305,3 +305,14 @@ B5 dropped `customers.flags` after the pg_depend view-dependency check came back
 Applies to any future drops (e.g. the still-deferred `ticker`/`sec_cik` → customer_identifiers migration, which selectFields also references as `ticker`).
 
 **Related note (not a bug, surfaced during G1):** `customers.ticker` and `customers.sec_cik` still exist live — the Identifier Strategy doc said B0 Phase 3 would drop them (migrate into customer_identifiers), but that step never ran. selectFields still reads `ticker`. When that migration finally happens, apply the G1 two-check rule and update selectFields in the same change.
+
+---
+
+## F-series resolutions (closed)
+
+- **F1 — RESOLVED** (migration 20260607235000). Added `status != 'pre_petition'` guard to the three mid-range bucket filters (amount + count) in `fn_refresh_ar_aging`. Verified no-op on current data; per-customer reconciliation held (0 mismatches).
+- **F3 — RESOLVED** (commit, ar-aging-agent). Changed the payment_transactions select to `amount:amount_paid` so the skill amount-weights correctly. Output identical on current data (weighted == equal-weighted verified); future-proofs high-variance amounts.
+- **F4 — CLOSED AS BY-DESIGN** (doc: DEMO_DATA_CONTRACT.md). `total_outstanding` deliberately excludes pre_petition; `current_exposure` is the all-in figure. No code change.
+- **F5 — RESOLVED** (migration 20260607234500). Catch-up migration adds the 6 unmigrated sec_monitoring columns + drops the stale ai_risk_score/ai_summary/risk_signals so a fresh rebuild matches live. No-op against current live.
+
+F2 remains open (frozen demo aging time — tied to a future time-anchoring pass).
