@@ -356,8 +356,9 @@ async function fetchRelevantData(
         .from("credit_events")
         .select("id, event_type, severity, source_agent, title, description, payload, created_at, customers!left(company_name, ticker, credit_limit, current_exposure)")
         .eq("is_demo", demoMode)
+        .order("severity_score", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false })
-        .limit(15);
+        .limit(30);
 
       if (keywords.length > 0) {
         const { data: filtered, error: filteredErr } = await q.or(orFilter);

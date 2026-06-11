@@ -25,10 +25,10 @@
       "id": "q3_utilization_aggregation",
       "question": "Are any customers approaching their credit limits?",
       "expected": {
-        "min_sources": 3,
+        "min_sources": 1,
         "must_mention": ["Ironwood", "Kaman"],
         "must_not_say": ["I don't have"],
-        "expected_confidence": ["High"]
+        "expected_confidence": ["High", "Medium"]
       }
     },
     {

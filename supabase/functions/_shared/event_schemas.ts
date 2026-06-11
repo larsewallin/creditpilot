@@ -103,13 +103,17 @@ export const SecOtherPayload = z.object({
   summary: z.string(),
 });
 
-export const OverdueInvoicePayload = z.object({
+export const OverdueArPayload = z.object({
   severity_score: SeverityScore,
-  invoice_id: z.string().uuid(),
-  invoice_amount_usd: z.number(),
-  due_date: z.string().date(),
-  days_past_due: z.number().int(),
-  is_disputed: z.boolean(),
+  total_overdue_usd: z.number(),
+  bucket_1_30_usd: z.number(),
+  bucket_31_60_usd: z.number(),
+  bucket_61_90_usd: z.number(),
+  bucket_over_90_usd: z.number(),
+  invoice_count: z.number().int(),
+  oldest_invoice_days_overdue: z.number().int(),
+  disputed_invoice_count: z.number().int().optional(),
+  pre_petition_amount_usd: z.number().optional(),
 });
 
 export const UtilizationThresholdBreachPayload = z.object({
@@ -316,7 +320,7 @@ export const EVENT_TYPES = [
   "REVENUE_MISS",
   "GOING_CONCERN",
   "SEC_OTHER",
-  "OVERDUE_INVOICE",
+  "OVERDUE_AR",
   "UTILIZATION_THRESHOLD_BREACH",
   "PAYMENT_DETERIORATION",
   "PAYMENT_IMPROVEMENT",
@@ -352,7 +356,7 @@ const payloadSchemas: Record<EventType, z.ZodTypeAny> = {
   REVENUE_MISS: RevenueMissPayload,
   GOING_CONCERN: GoingConcernPayload,
   SEC_OTHER: SecOtherPayload,
-  OVERDUE_INVOICE: OverdueInvoicePayload,
+  OVERDUE_AR: OverdueArPayload,
   UTILIZATION_THRESHOLD_BREACH: UtilizationThresholdBreachPayload,
   PAYMENT_DETERIORATION: PaymentDeteriorationPayload,
   PAYMENT_IMPROVEMENT: PaymentImprovementPayload,

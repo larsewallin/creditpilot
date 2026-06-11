@@ -8,10 +8,10 @@
  * fields on the customers table (the CIA reads these; AR is currently their
  * sole writer).
  *
- * DEFERRED (see backlog): the overdue-AR side (OVERDUE_INVOICE) and its dunning
- * letters / over-90 Teams alerts are NOT in this build — pending the B4
- * taxonomy pass deciding OVERDUE_INVOICE grain. Concentration was removed
- * entirely (belongs to a future portfolio agent).
+ * Also emits OVERDUE_AR (A3): one event per customer with active overdue
+ * invoices (status NOT IN paid/written_off/pre_petition, days_overdue > 0).
+ * Severity by worst non-empty bucket: over_90→critical, 61_90→high,
+ * 31_60→medium, 1_30→low. Concentration removed entirely (future agent).
  *
  * Utilization is current_exposure / credit_limit (the authoritative figures on
  * the customers table). The agent reads current_exposure from customers so the
@@ -23,7 +23,7 @@
  * Tables read:  v_ar_aging_current, customers, payment_transactions
  * Tables written: credit_events (via publishEvent), customers (payment fields),
  *                 agent_runs
- * Event types emitted: UTILIZATION_THRESHOLD_BREACH
+ * Event types emitted: UTILIZATION_THRESHOLD_BREACH, OVERDUE_AR
  *
  * Rate limit: 60 minutes between runs (HTTP 429 if exceeded).
  * Demo mode:  reads the same view as production (the view reflects is_demo
@@ -83,6 +83,20 @@ Deno.serve(async (req) => {
     started_at: new Date().toISOString(),
     triggered_by,
   });
+
+  // Demo repeatability: clear this agent's prior demo events so each demo run
+  // reproduces the same output. Gated on DEMO_MODE — production never self-deletes
+  // (real findings accumulate over time). Scoped to this agent's own events only.
+  if (DEMO_MODE) {
+    const { error: resetError } = await supabase
+      .from("credit_events")
+      .delete()
+      .eq("source_agent", agent_name)
+      .eq("is_demo", true);
+    if (resetError) {
+      console.error("[ar-aging-agent] demo reset failed:", JSON.stringify(resetError));
+    }
+  }
 
   try {
     // Read breaching customers. Join the aging view to customers for the
@@ -206,13 +220,103 @@ Deno.serve(async (req) => {
       }
     }
 
+    // --- OVERDUE_AR: one event per customer with active overdue invoices ---
+    const { data: overdueInvoices, error: overdueError } = await supabase
+      .from("invoices")
+      .select("customer_id, amount_outstanding, days_overdue")
+      .not("status", "in", "(paid,written_off,pre_petition)")
+      .gt("days_overdue", 0);
+
+    if (overdueError) {
+      console.error("[ar-aging-agent] overdue invoices query failed:", JSON.stringify(overdueError));
+    }
+
+    // Group by customer, compute buckets
+    const overdueByCustomer = new Map<string, {
+      bucket_1_30: number;
+      bucket_31_60: number;
+      bucket_61_90: number;
+      bucket_over_90: number;
+      invoice_count: number;
+      oldest_days: number;
+    }>();
+
+    for (const inv of (overdueInvoices ?? [])) {
+      const amount = Number(inv.amount_outstanding) || 0;
+      const days = Number(inv.days_overdue) || 0;
+      const custId: string = inv.customer_id;
+      if (!overdueByCustomer.has(custId)) {
+        overdueByCustomer.set(custId, { bucket_1_30: 0, bucket_31_60: 0, bucket_61_90: 0, bucket_over_90: 0, invoice_count: 0, oldest_days: 0 });
+      }
+      const c = overdueByCustomer.get(custId)!;
+      c.invoice_count++;
+      if (days > c.oldest_days) c.oldest_days = days;
+      if (days > 90)      c.bucket_over_90 += amount;
+      else if (days > 60) c.bucket_61_90   += amount;
+      else if (days > 30) c.bucket_31_60   += amount;
+      else                c.bucket_1_30    += amount;
+    }
+
+    let overdueFound = 0;
+    if (overdueByCustomer.size > 0) {
+      const overdueIds = [...overdueByCustomer.keys()];
+      const { data: overdueCusts } = await supabase
+        .from("customers")
+        .select("id, company_name")
+        .in("id", overdueIds);
+      const nameById = new Map((overdueCusts ?? []).map((c: any) => [c.id as string, c.company_name as string]));
+
+      for (const [custId, buckets] of overdueByCustomer) {
+        const companyName: string = nameById.get(custId) ?? custId;
+        const total = buckets.bucket_1_30 + buckets.bucket_31_60 + buckets.bucket_61_90 + buckets.bucket_over_90;
+
+        // Severity by worst non-empty bucket
+        let severity: "critical" | "high" | "medium" | "low";
+        let severityScore: number;
+        let worstBucket: string;
+        if (buckets.bucket_over_90 > 0)      { severity = "critical"; severityScore = 92; worstBucket = "90+"; }
+        else if (buckets.bucket_61_90 > 0)   { severity = "high";     severityScore = 75; worstBucket = "61–90"; }
+        else if (buckets.bucket_31_60 > 0)   { severity = "medium";   severityScore = 55; worstBucket = "31–60"; }
+        else                                  { severity = "low";      severityScore = 30; worstBucket = "1–30"; }
+
+        const summary = `${companyName}: $${total.toLocaleString()} overdue across ${buckets.invoice_count} invoice${buckets.invoice_count !== 1 ? "s" : ""} (worst bucket: ${worstBucket} days, oldest ${buckets.oldest_days} days past due).`;
+
+        try {
+          await publishEvent({
+            event_type:   "OVERDUE_AR",
+            severity,
+            scope:        "customer",
+            customer_id:  custId,
+            source_agent: agent_name,
+            title:        `${companyName}: $${total.toLocaleString()} overdue AR`,
+            description:  summary,
+            summary,
+            payload: {
+              severity_score:              severityScore,
+              total_overdue_usd:           total,
+              bucket_1_30_usd:             buckets.bucket_1_30,
+              bucket_31_60_usd:            buckets.bucket_31_60,
+              bucket_61_90_usd:            buckets.bucket_61_90,
+              bucket_over_90_usd:          buckets.bucket_over_90,
+              invoice_count:               buckets.invoice_count,
+              oldest_invoice_days_overdue: buckets.oldest_days,
+            },
+            is_demo: DEMO_MODE,
+          });
+          overdueFound++;
+        } catch (err) {
+          console.error(`[ar-aging-agent] OVERDUE_AR publishEvent failed for ${companyName}:`, (err as Error).message);
+        }
+      }
+    }
+
     await supabase.from("agent_runs").update({
       status: "completed",
       completed_at: new Date().toISOString(),
       customers_scanned: scanned,
-      conditions_found: conditionsFound,
+      conditions_found: conditionsFound + overdueFound,
       messages_composed: 0,
-      summary: `Scanned ${scanned} customers over ${UTILIZATION_HIGH}% utilization. Emitted ${conditionsFound} utilization breach events.`,
+      summary: `Scanned ${scanned} customers over ${UTILIZATION_HIGH}% utilization. Emitted ${conditionsFound} utilization breach events and ${overdueFound} overdue AR events.`,
     }).eq("id", run_id);
 
     return new Response(JSON.stringify({ run_id, status: "completed" }), {
