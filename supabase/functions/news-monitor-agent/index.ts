@@ -97,6 +97,23 @@ Deno.serve(async (req) => {
     triggered_by,
   });
 
+  // Demo repeatability: clear this agent's prior demo output so each demo run
+  // regenerates from seed. Gated on DEMO_MODE — production never self-deletes.
+  // Clears both emitted events AND the pipeline-generated negative_news rows
+  // (emission is gated on a successful negative_news insert, which dedups on
+  // content_fingerprint — without clearing, re-runs skip and emit nothing).
+  if (DEMO_MODE) {
+    const { error: evReset } = await supabase
+      .from("credit_events").delete()
+      .eq("source_agent", agent_name).eq("is_demo", true);
+    if (evReset) console.error("[news-monitor-agent] credit_events reset failed:", JSON.stringify(evReset));
+
+    const { error: nnReset } = await supabase
+      .from("negative_news").delete()
+      .eq("is_demo", true);
+    if (nnReset) console.error("[news-monitor-agent] negative_news reset failed:", JSON.stringify(nnReset));
+  }
+
   try {
     const tavilyKey = Deno.env.get("TAVILY_API_KEY");
     const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");

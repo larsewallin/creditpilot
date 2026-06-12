@@ -89,6 +89,25 @@ Deno.serve(async (req) => {
     triggered_by,
   });
 
+  // Demo repeatability: clear this agent's prior demo output so each demo run
+  // regenerates from seed. Gated on DEMO_MODE — production never self-deletes.
+  // Clears emitted events AND the pipeline-generated sec_filings rows (those with
+  // an accession_number — emission is gated on a new accession insert, so without
+  // clearing, re-runs dedup-skip and emit nothing). The accession-null rows are
+  // preserved: they are not pipeline output (seed_sec_filings produces only 2
+  // accession-bearing filings) and would not regenerate.
+  if (DEMO_MODE) {
+    const { error: evReset } = await supabase
+      .from("credit_events").delete()
+      .eq("source_agent", agent_name).eq("is_demo", true);
+    if (evReset) console.error("[sec-monitor-agent] credit_events reset failed:", JSON.stringify(evReset));
+
+    const { error: sfReset } = await supabase
+      .from("sec_filings").delete()
+      .eq("is_demo", true).not("accession_number", "is", null);
+    if (sfReset) console.error("[sec-monitor-agent] sec_filings reset failed:", JSON.stringify(sfReset));
+  }
+
   try {
     // 1. Load monitored customers (with customer join, is_demo filter, max 10)
     const { data: monitoring, error: monitoringError } = await supabase
