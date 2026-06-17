@@ -34,3 +34,4 @@ bun.lockb
 
 # CIA test results
 tests/cia/results/
+supabase/.temp/
