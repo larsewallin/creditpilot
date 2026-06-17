@@ -406,33 +406,3 @@ Replaced the LLM-generated sources panel with deterministic sources built from f
 
 **Optional future polish (NOT cleanup, low priority):** if accession-number consistency is ever wanted, backfill plausible accessions OR move these into `seed_sec_filings` so they regenerate like the 2 pipeline rows. Demo-data enrichment, not a fix. Do NOT delete.
 
----
-
-## B3 — publishEvent run_id passthrough (DEFERRED, but COMMITTED to do — not optional)
-
-**Decision (2026-06-17):** add `run_id` to credit_events so every event traces back to the agent run that produced it. This IS wanted (traceability for debugging + audit) — deferred only on timing, not on whether to do it.
-
-**Why deferred, not done now:** cross-cutting change (schema + publishEvent interface + all three agents pass run_id) with no immediate consumer yet. Best done right before/during the engineer audit, when the trace is actually used.
-
-**Scope when done:**
-1. Migration: add nullable `run_id uuid` to credit_events (nullable so historical rows are fine).
-2. publishEvent: add optional `run_id` param, write it to the row.
-3. Each agent (AR, News, SEC): pass run_id (already created at run start) into every publishEvent call.
-4. Verify EVERY publishEvent call site passes run_id (grep all calls — a missed one = silent null, the drift class we keep catching). After wiring, confirm 0 nulls among freshly-emitted demo events.
-5. Confirm credit_events.run_id matches the agent_runs row.
-
-**Not blocking anything.** Pick up when the audit is near.
-
----
-
-## sec_filings 6 null-accession rows — RECLASSIFIED: load-bearing, NOT cruft (won't delete)
-
-**Earlier note (D0) was wrong.** Logged the 6 null-accession demo sec_filings rows as "stale cruft, candidate for cleanup." Investigation (2026-06-17) reversed this:
-- The 6 null rows are filing history for **Heliogen, Textron, Triumph**.
-- **Textron has ONLY null-accession rows** — deleting them removes Textron from sec_filings entirely.
-- Heliogen/Triumph have a pipeline (accession) row PLUS null rows of different filing_types/dates — the nulls are additional history, not duplicates.
-- **q7 (CIA harness) reads these** — its correct answer names "Heliogen, Textron, Triumph" as having filings. Deleting would make q7 wrong and likely break the harness.
-
-**Decision: leave them.** They are functional demo content. The only cosmetic issue is the null accession_number, which breaks nothing (D0's accession-not-null reset guard already preserves them correctly).
-
-**Optional future polish (NOT cleanup, low priority):** if accession-number consistency is ever wanted, backfill plausible accessions OR move these into `seed_sec_filings` so they regenerate like the 2 pipeline rows. Demo-data enrichment, not a fix. Do NOT delete.
