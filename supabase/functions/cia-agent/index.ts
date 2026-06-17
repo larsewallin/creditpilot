@@ -306,6 +306,7 @@ function routeQuestion(question: string): Set<string> {
 
 interface RetrievedData {
   credit_events: any[];
+  credit_events_matched: any[];
   customers: any[];
   invoices: any[];
   payment_transactions: any[];
@@ -336,6 +337,7 @@ async function fetchRelevantData(
 
   const results: RetrievedData = {
     credit_events: [],
+    credit_events_matched: [],
     customers: [],
     invoices: [],
     payment_transactions: [],
@@ -352,7 +354,7 @@ async function fetchRelevantData(
         `description.ilike.%${kw}%`,
       ]).join(",");
 
-      let q = supabase
+      const baseQuery = () => supabase
         .from("credit_events")
         .select("id, event_type, severity, source_agent, title, description, payload, created_at, customers!left(company_name, ticker, credit_limit, current_exposure)")
         .eq("is_demo", demoMode)
@@ -361,14 +363,18 @@ async function fetchRelevantData(
         .limit(30);
 
       if (keywords.length > 0) {
-        const { data: filtered, error: filteredErr } = await q.or(orFilter);
+        const { data: filtered, error: filteredErr } = await baseQuery().or(orFilter);
         if (filteredErr) console.error("credit_events filter error:", filteredErr.message);
+        if (filtered && filtered.length > 0) {
+          // Genuinely keyword-matched events — these are the attributable sources.
+          results.credit_events_matched = filtered;
+        }
         if (filtered && filtered.length >= 2) {
           results.credit_events = filtered;
           return;
         }
       }
-      const { data: fallback, error: fallbackErr } = await q;
+      const { data: fallback, error: fallbackErr } = await baseQuery();
       if (fallbackErr) console.error("credit_events fallback error:", fallbackErr.message);
       results.credit_events = fallback ?? [];
     })(),
@@ -491,7 +497,7 @@ async function fetchRelevantData(
 
     // negative_news — keyword search
     tables.has("negative_news") && (async () => {
-      let q = supabase
+      const baseQuery = () => supabase
         .from("negative_news")
         .select("id, customer_id, headline, summary, source, news_date, severity, sentiment_score, category, customers!left(company_name)")
         .eq("is_demo", demoMode)
@@ -500,13 +506,13 @@ async function fetchRelevantData(
 
       if (keywords.length > 0) {
         const orFilter = keywords.map(kw => `headline.ilike.%${kw}%`).join(",");
-        const { data: filtered } = await q.or(orFilter);
+        const { data: filtered } = await baseQuery().or(orFilter);
         if (filtered && filtered.length > 0) {
           results.negative_news = filtered;
           return;
         }
       }
-      const { data } = await q;
+      const { data } = await baseQuery();
       results.negative_news = data ?? [];
     })(),
 
@@ -668,15 +674,15 @@ serve(async (req: Request) => {
       const answerText = extractText(answerMessage);
 
       // ── Call 2: structured metadata only — small JSON, no embedded answer ───
-      let meta: { confidence: string; confidence_reason: string; sources: unknown[] } = {
+      let meta: { confidence: string; confidence_reason: string } = {
         confidence: "Medium",
         confidence_reason: "See answer for details",
-        sources: [],
       };
+      let metaMessage: Anthropic.Message | undefined;
       try {
-        const metaMessage = await anthropic.messages.create({
+        metaMessage = await anthropic.messages.create({
           model: DEMO_MODE ? "claude-haiku-4-5" : "claude-sonnet-4-20250514",
-          max_tokens: 1500,
+          max_tokens: 4000,
           system: `Return ONLY valid JSON, no other text. You are grading an answer about a B2B trade credit portfolio.
 
 The grade reflects whether the answer's claims are supported by the data provided, nothing else.
@@ -689,17 +695,23 @@ RELATIONSHIP-QUALIFIER CHECK: If the answer characterizes a customer's relations
 
 Do not penalize for: using multiple tables, citing credit_events when available, mentioning companies that have ratings but no credit_events, or any form of cross-table synthesis. These are all good behaviors.
 
-Schema: {"confidence":"High|Medium|Low","confidence_reason":"one sentence stating which rubric tier applies and why","sources":[{"customer_name":"string","event_type":"string","severity":"critical|high|medium|low|info","date":"ISO date or null","agent":"string"}]}`,
+Schema: {"confidence":"High|Medium|Low","confidence_reason":"one sentence stating which rubric tier applies and why"}`,
           messages: [{
             role: "user",
             content: `Based on this answer and data, provide confidence and sources.\n\nAnswer: ${answerText}\n\nData:\n${context}`,
           }],
         });
         const metaText = extractText(metaMessage);
-        const metaCleaned = metaText.replace(/```json/gi, "").replace(/```/g, "").trim();
+        let metaCleaned = metaText.replace(/```json/gi, "").replace(/```/g, "").trim();
+        // Isolate the JSON object in case the model added preamble/trailing text
+        const firstBrace = metaCleaned.indexOf("{");
+        const lastBrace = metaCleaned.lastIndexOf("}");
+        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+          metaCleaned = metaCleaned.slice(firstBrace, lastBrace + 1);
+        }
         meta = JSON.parse(metaCleaned);
-      } catch {
-        // keep meta defaults
+      } catch (err) {
+        console.error("[cia-agent] meta JSON parse failed, using defaults. Raw output:", metaMessage ? extractText(metaMessage)?.slice(0, 500) : "(no response)", "Error:", (err as Error).message);
       }
 
       // ── Call 3: related questions ────────────────────────────────────────────
@@ -722,9 +734,25 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one sentence statin
         // keep fallback suggestions
       }
 
+      // Build sources deterministically from the rows that fed the answer — never from
+      // the LLM (which intermittently returned empty arrays or fabricated events).
+      // Build sources deterministically from fetched credit_events only.
+      const sources: Array<{customer_name: string; event_type: string | null; severity: string | null; date: string | null; agent: string | null}> = [];
+      for (const ev of (data.credit_events_matched ?? [])) {
+        const custName = (ev as any).customers?.company_name ?? null;
+        if (!custName) continue;
+        sources.push({
+          customer_name: custName,
+          event_type: (ev as any).event_type ?? null,
+          severity: (ev as any).severity ?? null,
+          date: (ev as any).created_at ? String((ev as any).created_at).slice(0, 10) : null,
+          agent: (ev as any).source_agent ?? null,
+        });
+      }
+
       return jsonRes({
         answer: answerText,
-        sources: meta.sources ?? [],
+        sources,
         confidence: meta.confidence,
         confidence_reason: meta.confidence_reason,
         relatedQuestions,

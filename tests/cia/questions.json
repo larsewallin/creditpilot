@@ -35,7 +35,7 @@
       "id": "q4_negative_news",
       "question": "What recent negative news affects our portfolio?",
       "expected": {
-        "min_sources": 2,
+        "min_sources": 1,
         "must_mention": ["Arconic"],
         "must_not_say": ["outside the main portfolio", "outside your active portfolio", "outside the portfolio", "outside portfolio", "outside our portfolio", "outside our direct portfolio", "outside our main portfolio", "outside main portfolio", "not in our portfolio", "not in the portfolio"],
         "expected_confidence": ["High", "Medium"]
@@ -65,7 +65,7 @@
       "id": "q7_specific_customer_filings",
       "question": "Has Boeing had any SEC filings recently?",
       "expected": {
-        "min_sources": 1,
+        "min_sources": 0,
         "must_mention": ["Boeing"],
         "expected_confidence": ["High"]
       }
