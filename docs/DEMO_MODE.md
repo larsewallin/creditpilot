@@ -1,6 +1,6 @@
 # Demo Mode
 
-CreditPilot ships with a full demo dataset: a fictional $500M specialty alloys distributor with 49 customers across seven credit scenarios. Demo mode lets you explore the full UI without an Anthropic API key and without touching real customer data.
+CreditPilot ships with a full demo dataset: a fictional $500M specialty alloys distributor with 59 customers across seven credit scenarios. Demo mode lets you explore the full UI without an Anthropic API key and without touching real customer data.
 
 A live demo is available at [creditpilot.vercel.app](https://creditpilot.vercel.app) — no signup required.
 
@@ -60,7 +60,7 @@ The AR Aging Agent's demo path also resets any approved or rejected `pending_act
 
 | Table | Rows | Description |
 |-------|------|-------------|
-| `customers` | 49 | Fictional specialty alloys customers across 7 credit scenarios |
+| `customers` | 59 | Fictional specialty alloys customers across 7 credit scenarios |
 | `credit_events` | ~80 | Pre-seeded signals from all three monitoring agents |
 | `agent_messages` | ~15 | Dunning letters, Teams alerts, SEC email alerts |
 | `pending_actions` | 3 | Credit limit reductions awaiting approval |

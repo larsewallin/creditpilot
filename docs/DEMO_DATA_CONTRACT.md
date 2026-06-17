@@ -39,6 +39,13 @@ Metrics derived from other fields (utilization_pct, dso_days, etc.) should be co
 ### Single source of truth for identifiers
 Each external identifier (DUNS, ticker, CIK, LEI) lives in `customer_identifiers`, not denormalized onto the customers table. See Customer Identifier Strategy doc for details. The one exception: `sec_filings.cik` is denormalized for query efficiency (it's stored per-filing alongside the customer relationship). Note: `customers.sec_cik` and `customers.ticker` still exist as convenience fields and are still read by `sec-monitor-agent`; migration to `customer_identifiers` as the sole source is deferred to Phase 4 data migration (B0 backlog).
 
+### Two 0–100 scores, opposite directions (by design)
+The system has two distinct 0–100 scores that look alike but mean opposite things — important to keep straight:
+- `credit_rating_score` (on customers): **lower = worse.** Measures customer creditworthiness; 0 is worst credit, 100 is best. User-facing.
+- `severity_score` (on credit_events): **higher = worse.** Measures event severity; 0 is least severe, 100 is most. Internal ranking input (summed in `fn_rank_portfolio_risk`), never shown to users as a raw number — users see the `severity` label (critical/high/medium/low).
+
+These are not inconsistent — they measure different things (how *good* a customer's credit is vs. how *bad* an event is). severity_score is deliberately NOT flipped to match credit_rating_score: doing so would make it inconsistent with its own severity label and require rework across publishEvent, the B5 ranking, and every agent. Current event convention: critical=92, high=75 (medium=55, low=30 introduced by OVERDUE_AR).
+
 ---
 
 ## Table: customers
