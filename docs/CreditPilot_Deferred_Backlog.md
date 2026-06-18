@@ -406,3 +406,32 @@ Replaced the LLM-generated sources panel with deterministic sources built from f
 
 **Optional future polish (NOT cleanup, low priority):** if accession-number consistency is ever wanted, backfill plausible accessions OR move these into `seed_sec_filings` so they regenerate like the 2 pipeline rows. Demo-data enrichment, not a fix. Do NOT delete.
 
+
+---
+
+## ticker → customer_identifiers migration (IN PROGRESS — sec_cik done, ticker remains)
+
+**sec_cik: DONE** (migration 20260617224949, commit 356faac). Dropped customers.sec_cik — data already in customer_identifiers (47 cik rows), zero code readers (all .cik reads are sec_filings.cik/sec_monitoring.cik, kept by design), zero view readers.
+
+**ticker: SPEC READY, execution pending.** Full diagnosis done 2026-06-17 so next session is execution-only.
+
+Verified facts:
+- Data already in customer_identifiers: 47 ticker rows, all is_primary=true, 0 customers with multiple tickers (clean 1:1 join, no row multiplication; is_primary filter optional but include for correctness).
+- ticker REAL readers (everything else is dead selection):
+  - CIA: line ~1050 ONLY (briefing-path Teams alert label), fed by the ~855 customers fetch. Lines 359/384/523 select ticker but NEVER read it (context builder ~614-648 doesn't use ticker) — dead selects, remove ticker from those select strings.
+  - news-monitor-agent: 5 uses (search-news input + alert labels), fed by line ~134 customers fetch.
+  - sec-monitor-agent: 2 uses (~258/261 alert label), fed by its customers fetch.
+- 7 views output c.ticker: v_ar_aging_current, v_bankruptcy_claims, v_customers_at_risk, v_growth_opportunities, v_overdue_invoices, v_payment_behaviour, v_sec_monitoring_dashboard. None reference sec_cik.
+
+Design: v_customers_enriched = customers LEFT JOIN customer_identifiers (id_type='ticker' AND is_primary) exposing ticker. Real code readers select from it; views join customer_identifiers for ticker.
+
+Execution steps (dry-run BEGIN/ROLLBACK each):
+1. Create v_customers_enriched. Verify 59 rows, 47 with ticker matching old customers.ticker, 12 null.
+2. CIA: remove ticker from dead selects (359, 384, 523); repoint the 855 briefing fetch to v_customers_enriched so 1050 still works.
+3. news-monitor: repoint line 134 fetch to v_customers_enriched (or add CI join).
+4. sec-monitor: repoint its customers fetch likewise.
+5. Rewrite the 7 views: c.ticker -> LEFT JOIN customer_identifiers (primary ticker). Paired view-update migration (B5 pattern). Snapshot each view output BEFORE, diff AFTER — prove no behavioral change.
+6. Drop customers.ticker.
+7. VERIFY (API — once, at end): run all 3 agents in demo (ticker alert labels still populate), CIA harness 8/8.
+
+Risk: G1 two-check. A missed reader = silent NULL ticker in an alert label (cosmetic, not a crash — easy to miss). After the drop, grep .ticker to confirm only v_customers_enriched-backed reads remain. The 12 customers with no ticker (private/invented demo cos) correctly show null — expected, not a bug.
