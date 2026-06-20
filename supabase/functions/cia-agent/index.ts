@@ -327,11 +327,21 @@ async function fetchRelevantData(
     .flatMap(phrase => phrase.split(" "))
     .filter(w => !STOPWORDS.has(w) && w.length > 2);
 
+  // Generic question-scaffolding words that match event text noisily without
+  // discriminating — exclude from keyword search (domain terms like "negative",
+  // "overdue", "utilization", "bankruptcy" are deliberately NOT here).
+  const KEYWORD_STOPLIST = new Set([
+    "customer", "customers", "company", "companies", "account", "accounts",
+    "portfolio", "recent", "recently", "current", "currently", "about",
+    "their", "there", "would", "should", "could", "right", "have", "having",
+    "which", "where", "these", "those", "still", "being", "across",
+  ]);
+
   // Build keyword filter for text search
   const keywords = question
     .split(/\s+/)
     .map(w => w.toLowerCase().replace(/[?!.,'"]/g, ""))
-    .filter(w => w.length > 4)
+    .filter(w => w.length > 4 && !KEYWORD_STOPLIST.has(w))
     .slice(0, 5);
 
   const results: RetrievedData = {
