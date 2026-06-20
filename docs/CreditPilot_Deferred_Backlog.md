@@ -435,3 +435,14 @@ Execution steps (dry-run BEGIN/ROLLBACK each):
 7. VERIFY (API — once, at end): run all 3 agents in demo (ticker alert labels still populate), CIA harness 8/8.
 
 Risk: G1 two-check. A missed reader = silent NULL ticker in an alert label (cosmetic, not a crash — easy to miss). After the drop, grep .ticker to confirm only v_customers_enriched-backed reads remain. The 12 customers with no ticker (private/invented demo cos) correctly show null — expected, not a bug.
+
+---
+
+## ticker migration — DONE (2026-06-19). G1 lesson upgraded to THREE-check.
+
+customers.ticker + sec_cik both dropped; single source of truth in customer_identifiers. 4 agents cleaned, 7 views repointed, fn_rank_portfolio_risk fixed. Harness 8/8.
+
+**Lesson:** dropping a column needs THREE reader checks, not two:
+1. Code: grep .ts for the column / embedded joins.
+2. Views: pg_views definitions referencing the column.
+3. Functions: pg_proc.prosrc bodies - SELECT proname FROM pg_proc WHERE prosrc ILIKE '%col%'. SQL function bodies do NOT appear in pg_depend as column deps, and ALTER TABLE DROP COLUMN does NOT validate them - so the drop "succeeds" but the function errors at call time. fn_rank_portfolio_risk dead-selected ticker and silently broke q1 until caught. Always run the pg_proc sweep before dropping a column.
