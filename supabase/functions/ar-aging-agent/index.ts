@@ -105,7 +105,7 @@ Deno.serve(async (req) => {
     // payload's exposure/limit/percent internally consistent).
     const { data: rows, error: rowsError } = await supabase
       .from("v_ar_aging_current")
-      .select("customer_id, company_name, ticker, credit_limit, utilization_pct")
+      .select("customer_id, company_name, credit_limit, utilization_pct")
       .gt("utilization_pct", UTILIZATION_HIGH)
       .order("utilization_pct", { ascending: false })
       .limit(MAX_CUSTOMERS);

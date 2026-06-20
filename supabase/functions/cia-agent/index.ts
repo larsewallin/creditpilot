@@ -81,7 +81,6 @@ interface CreditEvent {
 interface Customer {
   id: string;
   name: string;
-  ticker: string | null;
   company_type: "public" | "private" | "sme";
   credit_limit: number | null;
   current_exposure: number | null;
@@ -356,7 +355,7 @@ async function fetchRelevantData(
 
       const baseQuery = () => supabase
         .from("credit_events")
-        .select("id, event_type, severity, source_agent, title, description, payload, created_at, customers!left(company_name, ticker, credit_limit, current_exposure)")
+        .select("id, event_type, severity, source_agent, title, description, payload, created_at, customers!left(company_name, credit_limit, current_exposure)")
         .eq("is_demo", demoMode)
         .order("severity_score", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false })
@@ -381,7 +380,7 @@ async function fetchRelevantData(
 
     // customers — search by name or return top 20 by credit_limit (highest exposure first)
     tables.has("customers") && (async () => {
-      const selectFields = "id, company_name, ticker, company_type, credit_limit, current_exposure, credit_rating_score, credit_rating_raw, credit_rating_source, scenario, risk_tags, payment_on_time_rate, payment_trend, payment_health";
+      const selectFields = "id, company_name, company_type, credit_limit, current_exposure, credit_rating_score, credit_rating_raw, credit_rating_source, scenario, risk_tags, payment_on_time_rate, payment_trend, payment_health";
 
       if (words.length > 0) {
         // Specific company names mentioned — targeted name search
@@ -520,7 +519,7 @@ async function fetchRelevantData(
     tables.has("sec_filings") && (async () => {
       const { data } = await supabase
         .from("sec_filings")
-        .select("id, customer_id, filing_type, filing_date, risk_signals, key_findings, accession_number, customers!left(company_name, ticker)")
+        .select("id, customer_id, filing_type, filing_date, risk_signals, key_findings, accession_number, customers!left(company_name)")
         .eq("is_demo", demoMode)
         .order("filing_date", { ascending: false })
         .limit(10);
@@ -852,7 +851,7 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one sentence statin
   const customerIds = [...new Set(events.map((e: any) => e.customer_id).filter(Boolean))] as string[];
   const { data: customers } = await supabaseClient
     .from("customers")
-    .select("id, name, ticker, company_type, credit_limit, current_exposure, credit_rating_score, credit_rating_previous_score, payment_on_time_rate, payment_trend, payment_health")
+    .select("id, name, company_type, credit_limit, current_exposure, credit_rating_score, credit_rating_previous_score, payment_on_time_rate, payment_trend, payment_health")
     .in("id", customerIds);
 
   // Detect rating changes and inject as synthetic events
@@ -1047,7 +1046,6 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one sentence statin
     const alert = composeTeamsAlert({
       alert_type: "credit_limit_action",
       company_name: customer.name ?? custId,
-      ticker: customer.ticker ?? undefined,
       severity: riskAssessment.severity === "critical" ? "critical" : "high",
       headline: `Credit limit reduction proposed: $${customer.credit_limit.toLocaleString()} → $${proposal.proposed_limit.toLocaleString()}`,
       details: riskAssessment.rationale,

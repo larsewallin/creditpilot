@@ -132,7 +132,7 @@ Deno.serve(async (req) => {
     // existing behaviour: the first MAX_CUSTOMERS customers.
     let customerQuery = supabase
       .from("customers")
-      .select("id, company_name, ticker");
+      .select("id, company_name");
 
     if (DEMO_MODE) {
       const { data: seedCustomers, error: seedCustError } = await supabase
@@ -161,7 +161,6 @@ Deno.serve(async (req) => {
         ? await searchSeedNews({ customer_id: customer.id })
         : await searchNews({
             company_name: customer.company_name,
-            ticker: customer.ticker ?? undefined,
             days_back: 7,
             max_results: 10,
             providers: [new TavilyProvider(tavilyKey!)],
@@ -279,7 +278,6 @@ Deno.serve(async (req) => {
         const alert = composeTeamsAlert({
           alert_type: "news_alert",
           company_name: customer.company_name,
-          ticker: customer.ticker ?? undefined,
           severity: classification.severity,
           headline: article.headline,
           details: [
@@ -287,7 +285,7 @@ Deno.serve(async (req) => {
             `Sentiment score: ${classification.sentiment_score}`,
             article.summary ? `\n${article.summary}` : "",
           ].join("\n"),
-          recommended_action: `Review and assess credit impact for ${customer.company_name}${customer.ticker ? ` (${customer.ticker})` : ""}.`,
+          recommended_action: `Review and assess credit impact for ${customer.company_name}.`,
         });
 
         const { error: msgError } = await supabase.from("agent_messages").insert({
@@ -358,7 +356,7 @@ async function legacyPath(
 ): Promise<Response> {
   const { data: news } = await supabase
     .from("negative_news")
-    .select("*, customers(company_name, ticker)")
+    .select("*, customers(company_name)")
     .eq("reviewed", false)
     .order("news_date", { ascending: false });
 
@@ -374,11 +372,10 @@ async function legacyPath(
     const alert = composeTeamsAlert({
       alert_type: "news_alert",
       company_name: cust?.company_name ?? "Unknown",
-      ticker: cust?.ticker,
       severity: item.severity as "critical" | "high" | "medium" | "low",
       headline: item.headline,
       details: `Source: ${item.source} | Date: ${item.news_date} | Category: ${item.category}\nSentiment score: ${item.sentiment_score}\n\n${item.summary ?? ""}`,
-      recommended_action: `Review and assess credit impact for ${cust?.company_name} (${cust?.ticker}).`,
+      recommended_action: `Review and assess credit impact for ${cust?.company_name}.`,
     });
 
     const { error: msgError } = await supabase.from("agent_messages").insert({

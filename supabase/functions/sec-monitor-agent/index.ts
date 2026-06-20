@@ -112,7 +112,7 @@ Deno.serve(async (req) => {
     // 1. Load monitored customers (with customer join, is_demo filter, max 10)
     const { data: monitoring, error: monitoringError } = await supabase
       .from("sec_monitoring")
-      .select("id, customer_id, cik, risk_signals_detected, customers!inner(company_name, ticker)")
+      .select("id, customer_id, cik, risk_signals_detected, customers!inner(company_name)")
       .eq("is_demo", DEMO_MODE)
       .limit(MAX_CUSTOMERS_PER_RUN);
     if (monitoringError) {
@@ -129,7 +129,7 @@ Deno.serve(async (req) => {
       const monitoringId = row.id as string;
       const customerId   = row.customer_id as string;
       const cik          = row.cik as string | null;
-      const customer     = row.customers as { company_name: string; ticker: string | null };
+      const customer     = row.customers as { company_name: string };
       const companyName  = customer.company_name;
 
       if (!cik) {
@@ -255,10 +255,10 @@ Deno.serve(async (req) => {
           }
 
           // Compose email alert
-          const alertSubject = `SEC Alert: ${companyName} (${customer.ticker ?? cik}) — ${filing.risk_signals.length} risk signal(s) in ${filing.filing_type}`;
+          const alertSubject = `SEC Alert: ${companyName} (${cik}) — ${filing.risk_signals.length} risk signal(s) in ${filing.filing_type}`;
           const alertBody = [
             `SEC Filing Alert`,
-            `Company: ${companyName} (${customer.ticker ?? "N/A"})`,
+            `Company: ${companyName}`,
             `CIK: ${cik}`,
             `Filing Type: ${filing.filing_type}`,
             `Filing Date: ${filing.filing_date}`,
