@@ -447,3 +447,20 @@ customers.ticker + sec_cik both dropped; single source of truth in customer_iden
 1. Code: grep .ts for the column / embedded joins.
 2. Views: pg_views definitions referencing the column.
 3. Functions: pg_proc.prosrc bodies - SELECT proname FROM pg_proc WHERE prosrc ILIKE '%col%'. SQL function bodies do NOT appear in pg_depend as column deps, and ALTER TABLE DROP COLUMN does NOT validate them - so the drop "succeeds" but the function errors at call time. fn_rank_portfolio_risk dead-selected ticker and silently broke q1 until caught. Always run the pg_proc sweep before dropping a column.
+
+---
+
+## Legacy/Lovable cruft cleanup — DONE (2026-06-20)
+
+Full current-tree review for Lovable-era cruft. Removed (all build-verified green):
+- database/ dir — stale Lovable schema (had dropped sec_cik/ticker columns), superseded by supabase/migrations/. Only DEVELOPMENT.md referenced it (fixed). ~17K lines (mostly old seed.sql).
+- 30 unused shadcn UI components (verified zero imports; kept the ~18 used).
+- 3 orphaned pages (ActivityFeed, Demo, Index — not in router).
+- 3 orphans (useCIA hook = dead/CIA fetches inline; use-mobile hook = orphaned when sidebar removed; custom NavLink = app uses react-router's).
+Commits: 781f11f, 8f28c91. Build green throughout (frontend has no harness — npm run build is the gate).
+
+**Still OPEN (optional, low-value):**
+- Unused npm dependencies: removing 30 UI components likely orphaned backing packages (embla-carousel, vaul, cmdk, input-otp, react-resizable-panels, react-day-picker, possibly recharts — VERIFY each, recharts may be used elsewhere). Low value (tree-shaking already excludes from bundle; harmless in package.json), build-fragile, noisy package-lock diff. Do only if pristine package.json wanted. depcheck not installed; npm i -D depcheck then verify each + npm run build before removing.
+- README.md (19KB) — confirm it describes current system, not Lovable starter. Quick accuracy pass.
+
+**Repo visibility:** currently PUBLIC. No secrets in git history (verified — only a passwordless pooler-url, since gitignored). For pre-launch, consider making private; at launch, a fresh-start public repo gives clean history without Lovable commits.
