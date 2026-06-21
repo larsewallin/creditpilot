@@ -21,11 +21,7 @@ cp .env.example .env
 # Fill in: VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY
 ```
 
-### 3. Set up the database
-In Supabase SQL Editor, run in order:
-1. `database/schema.sql`
-2. `database/seed.sql`
-3. `database/migration_001.sql`
+In Supabase SQL Editor or via `supabase db push`, apply the migrations in `supabase/migrations/` (in filename order).
 
 ### 4. Deploy agents to Supabase
 ```bash
