@@ -306,6 +306,8 @@ function routeQuestion(question: string): Set<string> {
 interface RetrievedData {
   credit_events: any[];
   credit_events_matched: any[];
+  negative_news_matched: any[];
+  sec_filings_matched: any[];
   customers: any[];
   invoices: any[];
   payment_transactions: any[];
@@ -347,6 +349,8 @@ async function fetchRelevantData(
   const results: RetrievedData = {
     credit_events: [],
     credit_events_matched: [],
+    negative_news_matched: [],
+    sec_filings_matched: [],
     customers: [],
     invoices: [],
     payment_transactions: [],
@@ -518,6 +522,7 @@ async function fetchRelevantData(
         const { data: filtered } = await baseQuery().or(orFilter);
         if (filtered && filtered.length > 0) {
           results.negative_news = filtered;
+          results.negative_news_matched = filtered;
           return;
         }
       }
@@ -534,6 +539,15 @@ async function fetchRelevantData(
         .order("filing_date", { ascending: false })
         .limit(10);
       results.sec_filings = data ?? [];
+      // Filings are sources only when the question named a customer that has filings
+      // (the fetch itself is unfiltered top-10, so we intersect with named customers
+      // here to avoid over-sourcing portfolio/unknown-customer questions).
+      if (words.length > 0) {
+        results.sec_filings_matched = (data ?? []).filter((f: any) => {
+          const cn = (f.customers?.company_name ?? "").toLowerCase();
+          return cn && words.some(w => cn.includes(w.toLowerCase()));
+        });
+      }
     })(),
 
   ].filter(Boolean));
@@ -756,6 +770,28 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one sentence statin
           severity: (ev as any).severity ?? null,
           date: (ev as any).created_at ? String((ev as any).created_at).slice(0, 10) : null,
           agent: (ev as any).source_agent ?? null,
+        });
+      }
+      for (const n of (data.negative_news_matched ?? [])) {
+        const custName = (n as any).customers?.company_name ?? null;
+        if (!custName) continue;
+        sources.push({
+          customer_name: custName,
+          event_type: "NEGATIVE_NEWS",
+          severity: (n as any).severity ?? null,
+          date: (n as any).news_date ? String((n as any).news_date).slice(0, 10) : null,
+          agent: "news_monitor_agent",
+        });
+      }
+      for (const f of (data.sec_filings_matched ?? [])) {
+        const custName = (f as any).customers?.company_name ?? null;
+        if (!custName) continue;
+        sources.push({
+          customer_name: custName,
+          event_type: (f as any).filing_type ?? "SEC_FILING",
+          severity: null,
+          date: (f as any).filing_date ? String((f as any).filing_date).slice(0, 10) : null,
+          agent: "sec_monitor_agent",
         });
       }
 
