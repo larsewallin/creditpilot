@@ -464,3 +464,11 @@ Commits: 781f11f, 8f28c91. Build green throughout (frontend has no harness — n
 - README.md (19KB) — confirm it describes current system, not Lovable starter. Quick accuracy pass.
 
 **Repo visibility:** currently PUBLIC. No secrets in git history (verified — only a passwordless pooler-url, since gitignored). For pre-launch, consider making private; at launch, a fresh-start public repo gives clean history without Lovable commits.
+
+---
+
+## CIA Refinement 2 — DONE (2026-06-22, commit 2283cb7)
+
+Sources now include matched negative_news (as NEGATIVE_NEWS) and sec_filings (as filing_type, e.g. 10-Q), mapped into the existing event-shaped source so the frontend renders unchanged. Both use the matched-not-fallback discipline: negative_news_matched only on keyword hit; sec_filings_matched only for filings whose customer is named in the question (the sec_filings fetch is unfiltered top-10, so the intersection prevents over-sourcing). Verified: q4 gains news sources, q7 stays 0 (Boeing has no filings), q8 stays 0 (unknown customer), Triumph filing question shows its 3 dated 10-Qs. Harness 8/8.
+
+**Consciously NOT done:** per-customer filing cap. A customer with many filings would list all as sources. Non-issue at demo scale (max 3 filings/customer). If filing volume grows in production, cap filings-per-customer in the builder. Cross-type duplication (a customer showing both NEWS_EVENT and NEGATIVE_NEWS) kept deliberately — distinct records; dedup only if it reads noisy in the real UI.
