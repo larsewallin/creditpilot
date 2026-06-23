@@ -37,7 +37,7 @@ Country on customers = the country of the customer's company address. ISO 3166-1
 Metrics derived from other fields (utilization_pct, dso_days, etc.) should be computed at read time (in views or query expressions), NOT stored as static columns. Stored derived values inevitably drift. Examples of correct pattern: `v_ar_aging_current` computes utilization fresh each time. Examples of past mistakes: `dso_days` stored on snapshots (dropped in B0), `flags` stored on customers (dropped in B5).
 
 ### Single source of truth for identifiers
-Each external identifier (DUNS, ticker, CIK, LEI) lives in `customer_identifiers`, not denormalized onto the customers table. See Customer Identifier Strategy doc for details. The one exception: `sec_filings.cik` is denormalized for query efficiency (it's stored per-filing alongside the customer relationship). Note: `customers.sec_cik` and `customers.ticker` still exist as convenience fields and are still read by `sec-monitor-agent`; migration to `customer_identifiers` as the sole source is deferred to Phase 4 data migration (B0 backlog).
+Each external identifier (DUNS, ticker, CIK, LEI) lives in `customer_identifiers`, not denormalized onto the customers table. See Customer Identifier Strategy doc for details. The one exception: `sec_filings.cik` is denormalized for query efficiency (it's stored per-filing alongside the customer relationship). `customers.sec_cik` and `customers.ticker` have been **dropped** (migrations 20260617224949 and 20260618223218); `customer_identifiers` is now the sole source of truth, and all readers (including `sec-monitor-agent`) and the 7 dependent views were migrated to it.
 
 ### Two 0–100 scores, opposite directions (by design)
 The system has two distinct 0–100 scores that look alike but mean opposite things — important to keep straight:
@@ -75,8 +75,8 @@ The master customer record. Slow-changing. One row per company we monitor. 59 ro
 | `payment_health`            | Overall payment health classification | AR-written | CHECK: healthy, watch, at_risk, unknown. B0 Phase 4g backfilled all 59 customers: 27 healthy / 10 watch / 22 at_risk. |
 | `payment_behaviour_updated_at` | When AR last computed payment behaviour | AR-written | timestamptz |
 | `headquarters`              | Free-form HQ location (e.g. "Chicago, IL") | Manual entry | Display only; structured country lives in `country_code` |
-| `ticker`                    | Stock ticker (convenience denorm) | Manual | Still read by sec-monitor-agent. Canonical location: `customer_identifiers`. Drop deferred to B0 Phase 4 migration completion. |
-| `sec_cik`                   | SEC CIK (convenience denorm) | Manual | Still read by sec-monitor-agent. Canonical location: `customer_identifiers`. Drop deferred to B0 Phase 4 migration completion. |
+| `ticker`                    | **DROPPED** (migration 20260618223218) | (moved to customer_identifiers) | Was a denormalized convenience field; now sole source is `customer_identifiers` (id_type='ticker'). Readers + 7 views migrated. |
+| `sec_cik`                   | **DROPPED** (migration 20260617224949) | (moved to customer_identifiers) | Was a denormalized convenience field; now sole source is `customer_identifiers` (id_type='cik'). Readers migrated. |
 | `flags`                     | **DROPPED in B5** (migration 20260607230000) | (no readers) | Pre-V1-taxonomy cruft; 38 distinct values, no agent read it. Was blocked by v_customers_at_risk + v_portfolio_overview, which were rewritten to the V1 ranking rule in the same migration. |
 | `account_manager`           | Name/email of account owner | Manual | Free-form |
 | `customer_since`            | When the relationship started | Manual | date |
