@@ -16,7 +16,7 @@ Built by a trade credit practitioner to explore what's possible when you apply m
 
 The repo is designed for local deployment — your AR data, customer financials, and credit events stay on your own infrastructure. The hosted demo uses Supabase, Vercel, and the Anthropic Claude API.
 
-A live demo is available at creditpilot.vercel.app — a fictional $500M specialty alloys distributor with 49 customers across seven credit scenarios. No signup required.
+A live demo is available at creditpilot.vercel.app — a fictional $500M specialty alloys distributor with 59 customers across seven credit scenarios. No signup required.
 
 ---
 
@@ -31,16 +31,16 @@ SEC filings          → SEC EDGAR API (live, free, no key required)
 Credit scores        → D&B, Coface, Experian (stubbed, ready to wire)
 
 AGENTS READ AND SIGNAL
-AR Aging Agent  → reads invoices → writes OVERDUE_, HIGH_UTILIZATION credit_events
-News Agent      → fetches + classifies news → writes NEGATIVE_NEWS_ credit_events
-SEC Agent       → fetches EDGAR filings → writes GOING_CONCERN, COVENANT_WAIVER credit_events
+AR Aging Agent  → reads invoices → writes OVERDUE_AR, UTILIZATION_THRESHOLD_BREACH credit_events
+News Agent      → fetches + classifies news → writes NEWS_EVENT credit_events
+SEC Agent       → fetches EDGAR filings → writes GOING_CONCERN, SEC_OTHER credit_events
 (SEC agent automatically skips private companies with no CIK)
 
 CIA SYNTHESISES
 Reads all unprocessed credit_events
 Detects multi-signal convergence (same customer flagged by 2+ agents)
 Runs assessCompositeRisk → calculateCreditLimitProposal
-Writes COMPOSITE_RISK credit_events + pending_actions
+Writes COMPOSITE_RISK_CRITICAL / COMPOSITE_RISK_ELEVATED credit_events + pending_actions
 Answers natural language questions with cited sources
 
 HUMAN REVIEWS
@@ -105,7 +105,7 @@ Replace the Anthropic API with a local model (e.g. Ollama) by implementing the s
 ## Agents
 
 ### AR Aging Agent (`ar-aging-agent`)
-Pure signal agent — scans AR data for overdue buckets, utilization, and concentration risk. Writes `credit_events` only. Composes dunning letters (Claude-generated, staged 1–4 by severity) and Teams alerts.
+Pure signal agent — scans AR data for overdue buckets and credit utilization. Writes `credit_events` only (OVERDUE_AR, UTILIZATION_THRESHOLD_BREACH). Composes Teams alerts. (Dunning-letter composition is a built skill, not yet wired into the agent — planned.)
 
 ### News Monitor Agent (`news-monitor-agent`)
 Fetches live news via the Tavily API, classifies severity using Claude Haiku with strict JSON schema and confidence scoring, deduplicates by content fingerprint, and writes to negative_news and credit_events. Falls back to processing existing unreviewed rows if no Tavily API key is set.
@@ -132,8 +132,9 @@ Before agents can run, load your customer portfolio into the `customers` table. 
 | `company_name` | Yes | Used for news search and display |
 | `company_type` | Yes | `public`, `private`, or `sme` |
 | `credit_limit` | Yes | In your base currency |
-| `ticker` | No | Public companies only — improves news search precision |
-| `cik` | No | Public companies only — required for SEC EDGAR monitoring |
+| `country_code` | No | ISO 3166-1 alpha-2; defaults to `US` |
+
+External identifiers (ticker, SEC CIK, DUNS, LEI) are **not** columns on `customers` — they live in the separate `customer_identifiers` table (one row per identifier, supporting multiple identifier types per customer). Public-company tickers and CIKs are loaded there; the SEC agent reads CIKs from it and skips customers with none.
 
 Private and SME companies are fully supported. The news agent searches by company name. The SEC agent automatically skips companies with no CIK. Credit scoring works for all company types via manual entry or CSV import.
 
@@ -326,7 +327,7 @@ creditpilot/
 │   │   ├── SkeletonCard.tsx       # Loading skeleton components
 │   │   └── ui/                    # shadcn/ui component library (do not edit)
 │   ├── hooks/
-│   │   └── useCIA.ts              # Hook for CIA agent — suggestions, questions, briefings
+│   │   └── use-toast.ts           # Toast notification hook
 │   ├── lib/
 │   │   ├── constants.ts           # DEMO_MODE flag, agent config
 │   │   ├── format.ts              # Currency and date formatting
@@ -347,9 +348,9 @@ creditpilot/
 │   │   │   └── skills/            # Reusable skill functions
 │   │   │       ├── analytical/    # analyse-payment-behaviour, calculate-credit-limit-proposal,
 │   │   │       │                  #   assess-composite-risk, aggregate-credit-scores,
-│   │   │       │                  #   detect-rating-change, calculate-altman-z, parse-ar-csv
-│   │   │       ├── integration/   # fetch-sec-filing, deliver-message, fetch-credit-score
-│   │   │       └── generative/    # compose-dunning-letter, compose-teams-alert
+│   │   │       │                  #   detect-rating-change, normalise-credit-signal, parse-ar-csv
+│   │   │       ├── integration/   # fetch-sec-filing, fetch-credit-score, deliver-message, search-news
+│   │   │       └── generative/    # classify-news, compose-dunning-letter, compose-teams-alert
 │   │   ├── ar-aging-agent/        # AR Aging monitoring agent
 │   │   ├── ar-csv-upload/         # CSV ingestion endpoint for AR data
 │   │   ├── news-monitor-agent/    # Negative news monitoring agent
@@ -365,13 +366,13 @@ creditpilot/
 
 ## Testing
 
-The skill layer has **152 unit tests** across 11 test files:
+The skill layer has **148 unit tests** across 9 test files (run under vitest):
 
 ```bash
 npx vitest run supabase/functions/_shared/skills
 ```
 
-Tests cover: `normalise-credit-signal` (42), `aggregate-credit-scores` (15), `detect-rating-change` (14), `classify-news` (12), `assess-composite-risk` (9), `calculate-credit-limit-proposal` (9), `calculate-altman-z` (9), `analyse-payment-behaviour` (7), `parse-ar-csv` (8), `fetch-sec-filing` (5), `deliver-message` (5).
+Tests cover: `normalise-credit-signal` (36), `parse-ar-csv` (29), `aggregate-credit-scores` (15), `detect-rating-change` (14), `assess-composite-risk` (13), `calculate-credit-limit-proposal` (13), `classify-news` (12), `analyse-payment-behaviour` (11), `deliver-message` (5). The `fetch-sec-filing` skill's test requires the Deno runtime (it imports the Supabase client via Deno's remote-import mechanism) and is not part of the Node/vitest suite.
 
 ---
 
@@ -398,4 +399,4 @@ If you're working on trade credit, AR financing, or AI in financial services —
 
 LinkedIn
 
-The demo company and all 49 customer accounts are entirely fictional.
+The demo company and all 59 customer accounts are entirely fictional.
