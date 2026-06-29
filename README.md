@@ -140,7 +140,7 @@ Private and SME companies are fully supported. The news agent searches by compan
 
 The difference between `private` and `sme` is intentional but currently a data quality label — future agents will apply different thresholds and workflows for each. Use `private` for larger private companies and `sme` for smaller suppliers typically under $50M revenue.
 
-**V1 — Manual setup:** Insert customers via the Supabase dashboard or a seed SQL file. The demo ships with 49 public companies and 10 private/SME customers as a reference.
+**V1 — Manual setup:** Insert customers via the Supabase dashboard, the AR aging CSV upload, or by loading the demo seed (`supabase/seed.sql`). The demo dataset includes 49 public companies and 10 private/SME customers as a reference.
 
 **Planned:** CSV import for customer master data, ERP API integration for automatic sync.
 
@@ -205,7 +205,19 @@ supabase link --project-ref your-project-ref
 supabase db push
 ```
 
-This runs all migrations in `supabase/migrations/` in order, creating the full schema and seeding the demo data.
+This applies the schema baseline in `supabase/migrations/`, creating the complete database structure (tables, functions, triggers, views, and row-level security policies). It does **not** load any data — a fresh deployment starts empty, ready for your own customers and invoices.
+
+### 3a. (Optional) Load the demo dataset
+
+To explore CreditPilot with sample data — 59 fictional customers across seven credit scenarios, with invoices, payments, AR aging, and news/SEC signals — load the demo seed:
+
+```bash
+psql "$DATABASE_URL" -f supabase/seed.sql
+```
+
+Skip this step for a production deployment; your real data enters via the AR aging CSV upload. The demo seed and your production data are mutually exclusive — a clean clone has no demo rows to remove.
+
+> **Note:** A hosted demo is also available at [creditpilot.vercel.app](https://creditpilot.vercel.app) — no setup required.
 
 ### 4. Set Supabase function secrets
 
@@ -302,7 +314,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for schema details and relation
 
 ## Demo Mode
 
-All demo rows are tagged with `is_demo = true`. This column exists on `credit_events`, `agent_messages`, `pending_actions`, `negative_news`, and `sec_monitoring` — queries filter by it so demo and production data never mix. The Reset Demo button on the Actions page restores all tables to their seed state and re-runs the agents.
+Demo-generated rows are tagged with `is_demo = true`. This column exists on `credit_events`, `agent_messages`, `pending_actions`, `invoices`, `payment_transactions`, `negative_news`, `sec_filings`, and `sec_monitoring`. The Reset Demo button on the Actions page resets demo row state — pending actions back to pending, processed flags cleared, seed credit limits restored — then re-invokes the agents to regenerate their outputs. It does not recreate the underlying seed data (customers, invoices, etc.); those are loaded once via `supabase/seed.sql` and persist.
 
 See [docs/DEMO_MODE.md](docs/DEMO_MODE.md) for full details.
 
@@ -356,7 +368,9 @@ creditpilot/
 │   │   ├── news-monitor-agent/    # Negative news monitoring agent
 │   │   ├── sec-monitor-agent/     # SEC filing monitoring agent
 │   │   └── cia-agent/             # Credit Intelligence Agent (synthesis + Q&A)
-│   └── migrations/                # SQL migration files (schema + seed data)
+│   ├── migrations/                # Schema baseline (single migration)
+│   ├── migrations_archive/        # Historical migration chain (reference only)
+│   └── seed.sql                   # Demo dataset (optional, loaded separately)
 ├── .env.example                   # Frontend env var template
 ├── CONTRIBUTING.md
 └── README.md
