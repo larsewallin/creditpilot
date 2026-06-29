@@ -8,11 +8,19 @@ ALTER TABLE public.customers
   ADD COLUMN IF NOT EXISTS credit_rating_raw text,
   ADD COLUMN IF NOT EXISTS credit_rating_source text;
 
-ALTER TABLE public.customers
-  ADD CONSTRAINT IF NOT EXISTS customers_company_type_check
-    CHECK (company_type IN ('public','private','sme')),
-  ADD CONSTRAINT IF NOT EXISTS customers_credit_rating_score_check
-    CHECK (credit_rating_score BETWEEN 0 AND 100);
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'customers_company_type_check') THEN
+    ALTER TABLE public.customers
+      ADD CONSTRAINT customers_company_type_check
+      CHECK (company_type IN ('public','private','sme'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'customers_credit_rating_score_check') THEN
+    ALTER TABLE public.customers
+      ADD CONSTRAINT customers_credit_rating_score_check
+      CHECK (credit_rating_score BETWEEN 0 AND 100);
+  END IF;
+END $$;
 
 -- credit_events: unified event bus for all agents
 CREATE TABLE IF NOT EXISTS public.credit_events (

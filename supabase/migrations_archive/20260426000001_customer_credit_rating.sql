@@ -10,9 +10,13 @@ ALTER TABLE public.customers
 
 -- Scores must be in the 0-100 normalised range if provided
 ALTER TABLE public.customers
+  DROP CONSTRAINT IF EXISTS customers_credit_rating_score_check;
+ALTER TABLE public.customers
   ADD CONSTRAINT customers_credit_rating_score_check
   CHECK (credit_rating_score IS NULL OR credit_rating_score BETWEEN 0 AND 100);
 
+ALTER TABLE public.customers
+  DROP CONSTRAINT IF EXISTS customers_credit_rating_previous_score_check;
 ALTER TABLE public.customers
   ADD CONSTRAINT customers_credit_rating_previous_score_check
   CHECK (credit_rating_previous_score IS NULL OR credit_rating_previous_score BETWEEN 0 AND 100);

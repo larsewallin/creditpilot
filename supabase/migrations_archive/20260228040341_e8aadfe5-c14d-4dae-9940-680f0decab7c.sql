@@ -101,16 +101,6 @@ CREATE TABLE public.negative_news (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TABLE public.credit_events (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  customer_id uuid REFERENCES public.customers(id) NOT NULL,
-  event_type text NOT NULL,
-  description text,
-  severity text DEFAULT 'medium',
-  agent_name text,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-
 CREATE TABLE public.credit_actions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   customer_id uuid REFERENCES public.customers(id) NOT NULL,
@@ -280,7 +270,6 @@ ALTER TABLE public.payment_transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.credit_metrics ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ar_aging_snapshots ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.negative_news ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.credit_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.credit_actions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.sec_monitoring ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.sec_filings ENABLE ROW LEVEL SECURITY;
@@ -294,7 +283,6 @@ CREATE POLICY "Public read" ON public.payment_transactions FOR SELECT USING (tru
 CREATE POLICY "Public read" ON public.credit_metrics FOR SELECT USING (true);
 CREATE POLICY "Public read" ON public.ar_aging_snapshots FOR SELECT USING (true);
 CREATE POLICY "Public read" ON public.negative_news FOR SELECT USING (true);
-CREATE POLICY "Public read" ON public.credit_events FOR SELECT USING (true);
 CREATE POLICY "Public read" ON public.credit_actions FOR SELECT USING (true);
 CREATE POLICY "Public read" ON public.sec_monitoring FOR SELECT USING (true);
 CREATE POLICY "Public read" ON public.sec_filings FOR SELECT USING (true);
