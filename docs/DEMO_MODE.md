@@ -1,6 +1,6 @@
 # Demo Mode
 
-CreditPilot ships with a full demo dataset: a fictional $500M specialty alloys distributor with 59 customers across seven credit scenarios. Demo mode lets you explore the full UI without an Anthropic API key and without touching real customer data.
+CreditPilot ships with a full demo dataset: a fictional specialty alloys distributor with 59 customers across seven credit scenarios. Demo mode lets you explore the full UI against realistic data without touching real customer records.
 
 A live demo is available at [creditpilot.vercel.app](https://creditpilot.vercel.app) — no signup required.
 
@@ -8,51 +8,63 @@ A live demo is available at [creditpilot.vercel.app](https://creditpilot.vercel.
 
 ## How it works
 
-### Frontend flag
+Demo mode is controlled by a single flag in two places:
 
-The React app reads `import.meta.env.VITE_DEMO_MODE`. When `true`, `lib/initDemo.ts` is called on first page load (guarded by `sessionStorage.getItem("demo_initialized")`).
+- **Frontend:** `import.meta.env.VITE_DEMO_MODE` — when `true`, the app calls `lib/initDemo.ts` on first page load (guarded by `sessionStorage`).
+- **Edge functions:** each agent reads `Deno.env.get("DEMO_MODE") === "true"`.
 
-`initDemo` invokes all four agents in sequence:
+The demo dataset is **not** loaded by the migrations — it lives in `supabase/seed.sql` and is loaded separately (see [Loading the demo data](#loading-the-demo-data)). A production deployment simply never loads it.
 
-```
-ar-aging-agent → news-monitor-agent → sec-monitor-agent → cia-agent (briefing)
-```
+### The core principle: demo runs the real pipeline
 
-Each agent detects `DEMO_MODE=true` from its environment and returns pre-seeded data without making API calls.
+The three monitoring agents (AR Aging, News, SEC) run the **identical pipeline** in demo and production. `DEMO_MODE` switches only at the **data-fetch point** — demo reads from a seed table, production hits the live source — and everything downstream (processing, `publishEvent` emission, notification) is shared.
 
-### Edge function flag
+| Agent / mode | Demo data source | Calls Claude API? |
+|---|---|---|
+| ar-aging-agent | AR snapshots / invoices (seeded) | No |
+| news-monitor-agent | `seed_news` via `searchSeedNews()` | No |
+| sec-monitor-agent | `seed_sec_filings` via `fetchSeedSecFilings()` | No |
+| cia-agent — briefing | canned `DEMO_BRIEFING` (fast-path) | No |
+| cia-agent — suggestions | canned `DEMO_SUGGESTIONS` | No |
+| cia-agent — question | live `credit_events` (real Q&A) | **Yes** |
 
-Each agent reads `Deno.env.get("DEMO_MODE") === "true"`. When true, the agent:
+For the monitors, `DEMO_MODE` is a `seed ? live` ternary at the fetch call; the seed-fetch functions (`searchSeedNews`, `fetchSeedSecFilings`) run the same classify → `publishEvent` → notify pipeline as production, deterministically.
 
-1. Skips the rate limit check.
-2. Inserts a pre-baked `agent_runs` record with fixed statistics.
-3. Returns the seed run ID immediately.
+### CIA is a special case
 
-No `credit_events`, `agent_messages`, or `pending_actions` are created by the monitoring agents in demo mode — these rows already exist in the seed data.
+The CIA (Credit Intelligence Agent) is a Q&A agent, not a monitor, and behaves differently by mode:
 
-The exception is **CIA `question` mode**: even in demo mode, question mode calls the Anthropic API against real `credit_events` from the database. This means CIA Q&A works in demo mode but requires `ANTHROPIC_API_KEY`.
+- **Briefing** (default) and **suggestions** take a demo fast-path that returns pre-composed content — no API call, instant.
+- **Question mode** always calls the Claude API, in demo *and* production, reading real `credit_events` from the database. Demo uses a cheaper model (`claude-haiku-4-5`, 600 tokens) vs production (`claude-sonnet`, 900 tokens). This means CIA Q&A works in demo but requires `ANTHROPIC_API_KEY`.
+
+### Demo repeatability (state reset)
+
+Each monitoring agent, when `DEMO_MODE=true`, clears its own prior demo output at the start of a run (its `is_demo` `credit_events` plus its pipeline-generated working rows) so re-runs regenerate cleanly rather than dedup-skipping. This is gated on `DEMO_MODE` — production never self-deletes.
 
 ### Data isolation
 
-All demo rows carry `is_demo = true`. This column exists on:
+Demo-generated rows carry `is_demo = true`. This column exists on: `credit_events`, `agent_messages`, `pending_actions`, `invoices`, `payment_transactions`, `negative_news`, `sec_filings`, and `sec_monitoring`. (Note: `customers` and `ar_aging_snapshots` are not tagged — the seed dataset and a production dataset are kept separate by loading, not by per-row flag.)
 
-- `credit_events`
-- `agent_messages`
-- `pending_actions`
-- `negative_news` (added in migration `20260426000000_news_agent_foundation`; all pre-existing seed rows tagged `is_demo = true`)
+---
 
-Demo and production data never mix because queries can filter by `is_demo`.
+## Loading the demo data
+
+```bash
+psql "$DATABASE_URL" -f supabase/seed.sql
+```
+
+Skip this for a production deployment. Real data enters via the AR aging CSV upload; the demo seed and production data are mutually exclusive.
 
 ---
 
 ## Reset Demo
 
-The **Reset Demo** button in the Actions page calls `initDemo()` directly. It:
+The **Reset Demo** button on the Actions page calls `initDemo()` (`src/lib/initDemo.ts`). It:
 
-1. Invokes all four agents (which replay their seed run records).
-2. Calls `queryClient.invalidateQueries()` to refresh the UI.
+1. Resets demo row **state** — `pending_actions` back to `pending`, `agent_messages` to `pending`, `credit_events.cia_processed` cleared, `sec_monitoring`/`negative_news` review flags reset, and seed credit limits restored.
+2. Re-invokes all four agents, which regenerate their outputs.
 
-The AR Aging Agent's demo path also resets any approved or rejected `pending_actions` back to `pending` status, so the approval workflow can be demonstrated again.
+It does **not** recreate the underlying seed rows (customers, invoices, etc.) — those are loaded once via `supabase/seed.sql` and persist. Reset relies on them already being present.
 
 ---
 
@@ -60,22 +72,23 @@ The AR Aging Agent's demo path also resets any approved or rejected `pending_act
 
 | Table | Rows | Description |
 |-------|------|-------------|
-| `customers` | 59 | Fictional specialty alloys customers across 7 credit scenarios |
-| `credit_events` | ~80 | Pre-seeded signals from all three monitoring agents |
-| `agent_messages` | ~15 | Dunning letters, Teams alerts, SEC email alerts |
-| `pending_actions` | 3 | Credit limit reductions awaiting approval |
-| `negative_news` | 28 | Pre-classified news items |
-| `sec_monitoring` | 3 | Companies with active SEC alerts |
+| `customers` | 59 | Fictional specialty alloys customers across 7 scenarios |
+| `credit_events` | 48 | Pre-seeded signals |
+| `agent_messages` | ~30 | Alerts and composed messages |
+| `pending_actions` | 5 | Credit limit reductions awaiting approval |
+| `negative_news` | 5 | Pipeline-generated news items |
+| `sec_monitoring` | 3 | Companies with SEC monitoring |
+| `sec_filings` | 8 | Seeded filings |
+| `seed_news` | 5 | Demo-mode news source rows |
+| `seed_sec_filings` | 2 | Demo-mode SEC source rows |
 
 ---
 
 ## Moving to production
 
-To switch from demo to production data:
-
 1. Set `VITE_DEMO_MODE=false` in your frontend `.env`.
 2. Set `DEMO_MODE=false` (or remove it) in Supabase Edge Function secrets.
-3. Load real customer data into the `customers`, `ar_aging`, `payment_transactions`, `negative_news`, and `sec_monitoring` tables.
+3. Don't load `supabase/seed.sql` (or start from a fresh project). Load real data via the AR aging CSV upload.
 4. Harden RLS policies — remove anon write access from `pending_actions`, `customers`, and `credit_events`.
 5. Add Supabase Auth so users must sign in.
 
