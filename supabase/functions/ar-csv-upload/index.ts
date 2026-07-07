@@ -81,12 +81,16 @@ Deno.serve(async (req) => {
 
     await Promise.all(
       uniqueNames.map(async (name) => {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from("customers")
           .select("id, company_name")
           .ilike("company_name", name)
           .limit(1)
           .single();
+
+        if (error) {
+          console.error(`Customer lookup failed for "${name}":`, error.message);
+        }
 
         if (data) {
           customerLookup.set(name.toLowerCase(), data.id);
@@ -154,6 +158,16 @@ Deno.serve(async (req) => {
         );
       }
       inserted = toInsert.length;
+
+      for (const customerId of matchedCustomerIds) {
+        const { error: refreshError } = await supabase.rpc("fn_refresh_ar_aging", {
+          p_customer_id: customerId,
+          p_as_of: as_of_date ?? new Date().toISOString().split("T")[0],
+        });
+        if (refreshError) {
+          console.error(`Snapshot refresh failed for customer ${customerId}:`, refreshError.message);
+        }
+      }
     }
 
     return new Response(
