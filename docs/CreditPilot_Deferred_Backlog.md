@@ -1,7 +1,7 @@
 # CreditPilot — Deferred Work Backlog
 
 **Status:** Working document — not in GitHub (or commit to docs/ if useful for the audit)
-**Last updated:** 2026-05-31
+**Last updated:** 2026-07-03
 **Purpose:** Capture everything started-but-not-finished or explicitly deferred during the V1 taxonomy implementation, so it isn't lost. Reviewed and worked through after the agent-architecture standardization.
 
 ---
@@ -472,3 +472,27 @@ Commits: 781f11f, 8f28c91. Build green throughout (frontend has no harness — n
 Sources now include matched negative_news (as NEGATIVE_NEWS) and sec_filings (as filing_type, e.g. 10-Q), mapped into the existing event-shaped source so the frontend renders unchanged. Both use the matched-not-fallback discipline: negative_news_matched only on keyword hit; sec_filings_matched only for filings whose customer is named in the question (the sec_filings fetch is unfiltered top-10, so the intersection prevents over-sourcing). Verified: q4 gains news sources, q7 stays 0 (Boeing has no filings), q8 stays 0 (unknown customer), Triumph filing question shows its 3 dated 10-Qs. Harness 8/8.
 
 **Consciously NOT done:** per-customer filing cap. A customer with many filings would list all as sources. Non-issue at demo scale (max 3 filings/customer). If filing volume grows in production, cap filings-per-customer in the builder. Cross-type duplication (a customer showing both NEWS_EVENT and NEGATIVE_NEWS) kept deliberately — distinct records; dedup only if it reads noisy in the real UI.
+
+---
+
+## Migration baseline rebuild — DONE (2026-06-28 to 2026-07-03)
+
+Old 57-migration chain replaced with a clean schema baseline (`supabase/migrations/00000000000000_baseline.sql`, dumped from live schema — self-contained: pg_trgm, search_path pinned on all 6 functions, trigger calls schema-qualified). Old chain preserved in `supabase/migrations_archive/` (57 files, nothing lost — verified `next_dunning_date` drop migration archived correctly and its effect is reflected in baseline.sql + seed.sql, both confirmed clean via grep). Commit 4a747f8.
+
+Demo seed extracted to `supabase/seed.sql` — schema migrations now schema-only; demo data loads separately (`db push` then optional `psql -f supabase/seed.sql`). Production clones start clean, no purge needed. Commit 0a81332 (README updated to match).
+
+Verified end-to-end on a fresh scratch Supabase project: db push builds clean, seed.sql loads, exposure trigger + fn_rank_portfolio_risk() produce the correct 7 high-risk customers, CIA harness 8/8.
+
+Demo-boundary audit completed as part of this work: all 4 agents confirmed correct (news/sec/ar-aging run the real pipeline in demo, switching only at the fetch point; CIA is intentionally mixed — canned briefing/suggestions in demo, live question-mode on haiku). DEMO_MODE.md rewritten (b6848ff) to match; the old doc described the superseded pre-baked-bypass model.
+
+CLI unlinked from the demo project (was silently linked to a demo Supabase project ref — a bare `db push` would have hit it). No default push target now.
+
+**Still open from this session:**
+- Delete the throwaway scratch Supabase project used for verification (project ref umbbhniobhcghopcxyfh) — testing done, password was pasted in a chat so deletion moots exposure, but not yet deleted.
+- E1 (dev DB password rotation) — status not confirmed this session; verify.
+- The search_path fix lives only in the baseline — if functions are ever regenerated from the archived migration chain, they'd lose it. Non-issue unless someone un-baselines.
+- is_demo coverage still incomplete (not on `customers` or `ar_aging_snapshots`) — only matters if a true one-command demo-purge is wanted later.
+
+## next_dunning_date drop — CONFIRMED CLEAN (verified 2026-07-03)
+
+`invoices.next_dunning_date` was dropped 2026-06-06 (migration `20260605150000_b0_drop_next_dunning_date.sql`, now in migrations_archive/ after the baseline rebuild) alongside the `v_overdue_invoices` rewrite. This was flagged in the B0 plan's Phase 1d follow-up list as an unaudited column; confirmed during backlog review that it's genuinely gone (not referenced in baseline.sql or seed.sql) and the drop was clean.
