@@ -346,6 +346,19 @@ INSERT INTO public.customer_identifiers VALUES ('335725d0-97a9-45d5-acfc-059e01f
 INSERT INTO public.customer_identifiers VALUES ('7ce9a1bf-d351-4634-97d6-180e5c3cd2b9', 'c0000001-0000-0000-0000-000000000032', 'ticker', 'CDE', true, 'manual', NULL, '2026-06-04 22:15:53.102087+00', '2026-06-04 22:15:53.102087+00');
 INSERT INTO public.customer_identifiers VALUES ('8dadfd5d-bda0-4d66-b4b9-6aff9cba5bc1', 'c0000001-0000-0000-0000-000000000040', 'ticker', 'RAD', true, 'manual', NULL, '2026-06-04 22:15:53.102087+00', '2026-06-04 22:15:53.102087+00');
 
+--
+-- internal_customer_code — sequential CUST-NNN codes for all 59 customers (alphabetical by company_name)
+--
+WITH numbered AS (
+  SELECT id, company_name,
+         'CUST-' || LPAD(ROW_NUMBER() OVER (ORDER BY company_name)::text, 3, '0') AS code
+  FROM customers
+)
+INSERT INTO customer_identifiers (customer_id, id_type, id_value, is_primary, source)
+SELECT id, 'internal_customer_code', code, true, 'manual'
+FROM numbered
+ON CONFLICT DO NOTHING;
+
 
 --
 -- Data for Name: invoices; Type: TABLE DATA; Schema: public; Owner: -
