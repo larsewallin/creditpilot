@@ -15,14 +15,16 @@ export interface RawCSVRow {
 }
 
 export interface ParsedInvoice {
-  invoice_number:    string;
-  customer_name:     string;
-  invoice_date:      string;  // ISO date YYYY-MM-DD
-  due_date:          string;  // ISO date YYYY-MM-DD
-  amount:            number;
-  outstanding_amount: number;
-  currency:          string;  // default 'USD'
-  days_overdue:      number;  // calculated if not in CSV
+  invoice_number:        string;
+  customer_name:         string;
+  invoice_date:          string;  // ISO date YYYY-MM-DD
+  due_date:              string;  // ISO date YYYY-MM-DD
+  amount:                number;
+  outstanding_amount:    number;
+  currency:              string;  // default 'USD'
+  days_overdue:          number;  // calculated if not in CSV
+  duns?:                 string;
+  internal_customer_code?: string;
 }
 
 export interface ParseResult {
@@ -44,8 +46,10 @@ const COLUMN_ALIASES: Record<string, string[]> = {
   due_date:           ["due date", "payment due", "maturity date", "due", "payment date", "due_date"],
   amount:             ["amount", "invoice amount", "gross amount", "total", "original amount", "gross"],
   outstanding_amount: ["outstanding", "balance", "open amount", "remaining", "outstanding amount", "open balance", "balance due", "outstanding_amount"],
-  currency:           ["currency", "curr", "ccy"],
-  days_overdue:       ["days overdue", "dpd", "days past due", "overdue days", "days_overdue"],
+  currency:               ["currency", "curr", "ccy"],
+  days_overdue:           ["days overdue", "dpd", "days past due", "overdue days", "days_overdue"],
+  duns:                   ["duns", "duns_number", "d-u-n-s", "dnb_id"],
+  internal_customer_code: ["internal_customer_code", "customer_code", "internal_code", "erp_customer_id"],
 };
 
 const REQUIRED_FIELDS = ["invoice_number", "customer_name", "invoice_date", "due_date", "outstanding_amount"];
@@ -289,15 +293,20 @@ export function parseARCsv(
         });
       }
 
+      const duns                  = get("duns") || undefined;
+      const internal_customer_code = get("internal_customer_code") || undefined;
+
       invoices.push({
-        invoice_number:    invoiceNumber,
-        customer_name:     customerName,
-        invoice_date:      invoiceDate,
-        due_date:          dueDate,
+        invoice_number:        invoiceNumber,
+        customer_name:         customerName,
+        invoice_date:          invoiceDate,
+        due_date:              dueDate,
         amount,
-        outstanding_amount: outstanding,
+        outstanding_amount:    outstanding,
         currency,
-        days_overdue:      Math.max(0, days_overdue),
+        days_overdue:          Math.max(0, days_overdue),
+        duns,
+        internal_customer_code,
       });
     }
 
