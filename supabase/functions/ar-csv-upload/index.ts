@@ -3,8 +3,9 @@
  *
  * Accepts a multipart/form-data POST with a CSV file and an optional
  * column_map JSON blob. Parses the CSV using the parse-ar-csv skill,
- * matches customer names via case-insensitive ilike lookup, then replaces
- * open/overdue invoices for each matched customer with the uploaded data.
+ * resolves customers via identifier lookup (duns → internal_customer_code,
+ * in that precedence order), then replaces open/overdue invoices for each
+ * matched customer with the uploaded data.
  *
  * Request body: multipart/form-data
  *   file              — CSV file (required)
@@ -14,10 +15,11 @@
  *   customer_currency — expected currency code e.g. "USD" (optional, triggers currency mismatch warnings)
  *
  * Response:
- *   { inserted: number, skipped_rows: number, errors: [...], unmatched_customers: string[],
+ *   { inserted: number, skipped_rows: number, errors: [...],
+ *     unmatched_customers: { customer_name: string, reason: string }[],
  *     validation_warnings: [...], currency_warnings: [...] }
  *
- * Tables read:   customers
+ * Tables read:   customer_identifiers
  * Tables written: invoices
  */
 
@@ -72,41 +74,89 @@ Deno.serve(async (req) => {
 
     // ── Resolve customer IDs ────────────────────────────────────────────────
 
-    // Deduplicate customer names from parsed invoices
-    const uniqueNames = [...new Set(parseResult.invoices.map((inv) => inv.customer_name))];
+    // Collect unique identifier values present across all invoices
+    const uniqueDuns = [...new Set(
+      parseResult.invoices.map((inv) => inv.duns).filter((v): v is string => !!v)
+    )];
+    const uniqueCodes = [...new Set(
+      parseResult.invoices.map((inv) => inv.internal_customer_code).filter((v): v is string => !!v)
+    )];
 
-    // Fetch all customers (case-insensitive match per name)
-    const customerLookup = new Map<string, string>(); // lower(name) → id
-    const unmatchedCustomers: string[] = [];
+    // Batch fetch customer_identifiers — one query per identifier type
+    const dunsToCustId  = new Map<string, string>(); // duns value → customer_id
+    const codeToCustId  = new Map<string, string>(); // internal_customer_code value → customer_id
 
-    await Promise.all(
-      uniqueNames.map(async (name) => {
-        const { data, error } = await supabase
-          .from("customers")
-          .select("id, company_name")
-          .ilike("company_name", name)
-          .limit(1)
-          .single();
+    if (uniqueDuns.length > 0) {
+      const { data: dunsRows, error: dunsErr } = await supabase
+        .from("customer_identifiers")
+        .select("customer_id, id_value")
+        .eq("id_type", "duns")
+        .in("id_value", uniqueDuns);
+      if (dunsErr) console.error("customer_identifiers duns lookup failed:", dunsErr.message);
+      for (const row of dunsRows ?? []) {
+        dunsToCustId.set(row.id_value, row.customer_id);
+      }
+    }
 
-        if (error) {
-          console.error(`Customer lookup failed for "${name}":`, error.message);
+    if (uniqueCodes.length > 0) {
+      const { data: codeRows, error: codeErr } = await supabase
+        .from("customer_identifiers")
+        .select("customer_id, id_value")
+        .eq("id_type", "internal_customer_code")
+        .in("id_value", uniqueCodes);
+      if (codeErr) console.error("customer_identifiers internal_customer_code lookup failed:", codeErr.message);
+      for (const row of codeRows ?? []) {
+        codeToCustId.set(row.id_value, row.customer_id);
+      }
+    }
+
+    // Resolve each invoice to a customer_id using identifier precedence:
+    //   duns → internal_customer_code → unmatched
+    const unmatchedCustomers: { customer_name: string; reason: string }[] = [];
+    const seenUnmatched = new Set<string>();
+
+    const resolvedIds: (string | null)[] = parseResult.invoices.map((inv) => {
+      // Try duns first
+      if (inv.duns) {
+        const id = dunsToCustId.get(inv.duns);
+        if (id) return id;
+        // duns present but not found — fall through to internal_customer_code
+        if (inv.internal_customer_code) {
+          const id2 = codeToCustId.get(inv.internal_customer_code);
+          if (id2) return id2;
+          const reason = `duns not found: ${inv.duns}, internal_customer_code not found: ${inv.internal_customer_code}`;
+          const key = `${inv.customer_name}::${reason}`;
+          if (!seenUnmatched.has(key)) { seenUnmatched.add(key); unmatchedCustomers.push({ customer_name: inv.customer_name, reason }); }
+          return null;
         }
-
-        if (data) {
-          customerLookup.set(name.toLowerCase(), data.id);
-        } else {
-          unmatchedCustomers.push(name);
-        }
-      })
-    );
+        const reason = `duns not found: ${inv.duns}, no internal_customer_code provided`;
+        const key = `${inv.customer_name}::${reason}`;
+        if (!seenUnmatched.has(key)) { seenUnmatched.add(key); unmatchedCustomers.push({ customer_name: inv.customer_name, reason }); }
+        return null;
+      }
+      // No duns — try internal_customer_code alone
+      if (inv.internal_customer_code) {
+        const id = codeToCustId.get(inv.internal_customer_code);
+        if (id) return id;
+        const reason = `internal_customer_code not found: ${inv.internal_customer_code}`;
+        const key = `${inv.customer_name}::${reason}`;
+        if (!seenUnmatched.has(key)) { seenUnmatched.add(key); unmatchedCustomers.push({ customer_name: inv.customer_name, reason }); }
+        return null;
+      }
+      // No identifiers at all
+      const key = `${inv.customer_name}::no identifier provided`;
+      if (!seenUnmatched.has(key)) { seenUnmatched.add(key); unmatchedCustomers.push({ customer_name: inv.customer_name, reason: "no identifier provided" }); }
+      return null;
+    });
 
     // ── Build insert rows ───────────────────────────────────────────────────
 
     const uploadedAt = new Date().toISOString();
     const toInsert: Record<string, unknown>[] = [];
 
-    for (const inv of parseResult.invoices) {
-      const customerId = customerLookup.get(inv.customer_name.toLowerCase());
+    for (let i = 0; i < parseResult.invoices.length; i++) {
+      const inv = parseResult.invoices[i];
+      const customerId = resolvedIds[i];
       if (!customerId) continue; // unmatched — already tracked above
 
       toInsert.push({
