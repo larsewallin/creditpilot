@@ -493,6 +493,22 @@ CLI unlinked from the demo project (was silently linked to a demo Supabase proje
 - The search_path fix lives only in the baseline — if functions are ever regenerated from the archived migration chain, they'd lose it. Non-issue unless someone un-baselines.
 - is_demo coverage still incomplete (not on `customers` or `ar_aging_snapshots`) — only matters if a true one-command demo-purge is wanted later.
 
+## AR-Aging agent audit — upload path (2026-07-08)
+
+Audited the never-verified real-upload path (ar-csv-upload -> parse-ar-csv -> invoices -> agent) per the flagged handoff gap. Found and fixed three bugs, all verified end-to-end with a real test upload against Bloom Energy Corporation (customer c0000001-0000-0000-0000-000000000047):
+
+1. **CRITICAL — every real upload was failing.** ar-csv-upload wrote to `paid_amount`, a column dropped in B0 Phase 3 (only `amount_paid` remains). Every CSV upload since that migration returned a hard insert error. Fixed: renamed to `amount_paid`. Commit c106005.
+
+2. **Snapshots never refreshed after upload.** ar_aging_snapshots (and v_ar_aging_current, which the AR agent reads) was never refreshed after invoice insert — current_exposure updated via trigger, but snapshots/buckets/utilization_pct stayed stale until someone manually ran fn_refresh_all_ar_aging. Real uploaded data was invisible to the AR agent indefinitely. Fixed: ar-csv-upload now calls fn_refresh_ar_aging per matched customer after insert. Commit 2075aca.
+
+3. **Swallowed error on customer lookup.** The `.ilike(company_name)` lookup destructured only `data`, never `error` — an ambiguous match would silently land in unmatched_customers with no diagnostic. Fixed: error now destructured and logged. Commit 2075aca.
+
+Verified via live test upload + psql snapshot diff (before/after) + bucket-level reconciliation (invoice with days_overdue=38 correctly landed in bucket_31_60). Test data cleaned up after (invoice deleted, snapshot re-refreshed to baseline).
+
+**Still open — Gap B (next):** customer lookup is name-only (`.ilike`, exact case-insensitive match, not true fuzzy). Does not use `customer_identifiers` (DUNS/ticker/CIK/LEI/internal_code) at all, despite the locked Identifier Strategy doc specifying that precedence. This is the next task.
+
+---
+
 ## next_dunning_date drop — CONFIRMED CLEAN (verified 2026-07-03)
 
 `invoices.next_dunning_date` was dropped 2026-06-06 (migration `20260605150000_b0_drop_next_dunning_date.sql`, now in migrations_archive/ after the baseline rebuild) alongside the `v_overdue_invoices` rewrite. This was flagged in the B0 plan's Phase 1d follow-up list as an unaudited column; confirmed during backlog review that it's genuinely gone (not referenced in baseline.sql or seed.sql) and the drop was clean.
