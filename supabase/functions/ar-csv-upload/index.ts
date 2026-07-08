@@ -115,7 +115,7 @@ Deno.serve(async (req) => {
         invoice_date:       inv.invoice_date,
         due_date:           inv.due_date,
         invoice_amount:     inv.amount,
-        paid_amount:        inv.amount - inv.outstanding_amount,
+        amount_paid:        inv.amount - inv.outstanding_amount,
         outstanding_amount: inv.outstanding_amount,
         currency:           inv.currency ?? "USD",
         days_overdue:       inv.days_overdue,
