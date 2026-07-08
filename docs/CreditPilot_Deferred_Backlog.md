@@ -509,6 +509,22 @@ Verified via live test upload + psql snapshot diff (before/after) + bucket-level
 
 ---
 
+## AR-Aging upload — identifier-based customer matching (Gap B) — DONE (2026-07-08)
+
+Replaced name-only (.ilike company_name) customer matching in ar-csv-upload with identifier-based lookup per the locked Identifier Strategy doc. Precedence: duns -> internal_customer_code -> reject (no fuzzy name fallback; uploads without a resolvable identifier are rejected outright with a clear reason).
+
+Prerequisite: internal_customer_code was empty for all 59 customers (duns also empty — no real DUNS data available). Backfilled internal_customer_code as CUST-001..CUST-059 (alphabetical by company_name), seeded in supabase/seed.sql (commit aa194f9) so it's reproducible on a fresh DB. DUNS intentionally left unpopulated (would require real external D&B registry numbers).
+
+Changes:
+- parse-ar-csv.ts: added optional duns / internal_customer_code CSV columns with header aliases (commit 46fe32a).
+- ar-csv-upload/index.ts: batch-fetch customer_identifiers by duns and internal_customer_code (2 queries, not N), resolve each row with duns-first/internal_customer_code-fallback precedence, reject with per-row reason ({ customer_name, reason }) instead of a flat unmatched string array (commit 6e76a40).
+
+Verified live (not just deployed): old-style name-only CSV correctly rejected with reason "no identifier provided"; CSV with valid internal_customer_code correctly matched, inserted, and triggered a correct snapshot refresh (bucket placement verified). Test data cleaned up after, snapshot confirmed back to baseline.
+
+**Still open:** ticker/cik/lei are not used in upload matching (by design — those identify public-market/regulatory identity, not invoice-upload identity; only duns + internal_customer_code are relevant here). If a customer later needs to upload using DUNS, it must be added to customer_identifiers first (no upload flow exists yet to self-register a new identifier — out of scope, matches V1's "no auto-creation" rule in the Identifier Strategy doc).
+
+---
+
 ## next_dunning_date drop — CONFIRMED CLEAN (verified 2026-07-03)
 
 `invoices.next_dunning_date` was dropped 2026-06-06 (migration `20260605150000_b0_drop_next_dunning_date.sql`, now in migrations_archive/ after the baseline rebuild) alongside the `v_overdue_invoices` rewrite. This was flagged in the B0 plan's Phase 1d follow-up list as an unaudited column; confirmed during backlog review that it's genuinely gone (not referenced in baseline.sql or seed.sql) and the drop was clean.
