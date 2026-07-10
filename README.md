@@ -18,6 +18,8 @@ The repo is designed for local deployment — your AR data, customer financials,
 
 A live demo is available at creditpilot.vercel.app — a fictional $500M specialty alloys distributor with 59 customers across seven credit scenarios. No signup required.
 
+See [docs/USER_GUIDE.md](docs/USER_GUIDE.md) for a non-technical walkthrough of what CreditPilot does and how it's structured.
+
 ---
 
 ## How It Works
