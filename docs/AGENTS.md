@@ -1,6 +1,13 @@
 # Agent Documentation
 
-CreditPilot has four autonomous agents. Each is a Supabase Edge Function (TypeScript/Deno). They read from and write to a shared Postgres database. A human reviews AI-proposed actions before they take effect.
+     Each is a Supabase Edge Function (TypeScript/Deno). They read from and write to a shared Postgres database. `credit_events` is written exclusively through `publishEvent` (a validating gateway — payloads are checked against per-event-type Zod schemas before insert). Proposed actions (`pending_actions`) are written only by the CIA agent; a human reviews them before anything takes effect.
+
+All three monitoring agents (AR, News, SEC) share a common shape, established with the SEC agent as the reference implementation:
+
+- **Rate limit**: reject if a completed/running run exists within the past 60 minutes.
+- **DEMO_MODE self-reset**: at the start of a run, if `DEMO_MODE=true`, the agent clears its own prior demo-tagged output first, so repeated demo runs regenerate a clean, repeatable result instead of stacking duplicates. Production never self-deletes.
+- **Data-source boundary**: for News and SEC, demo vs. live is decided at a single fetch point (seed table vs. live API); everything downstream — processing, emission, notification — is identical code in both modes. AR aging has no such split; its data (invoices) lives in Postgres either way, so `DEMO_MODE` only stamps output and gates the reset.
+- **Every emitted event and message is stamped `is_demo: DEMO_MODE`.**
 
 ---
 
@@ -8,58 +15,43 @@ CreditPilot has four autonomous agents. Each is a Supabase Edge Function (TypeSc
 
 ### What it does
 
-Scans all customers for overdue AR buckets and high credit utilisation. For customers in the 61–90 day and 90+ day buckets it:
+Reads current AR aging state per customer and emits two kinds of signal:
 
-- Composes dunning letters (Claude-generated, staged 1–4 by severity)
-- Composes Microsoft Teams alerts for accounts with >$100K over 90 days
+- **Utilization breaches** — when a customer's credit utilization is over-limit, or high utilization combines with a weaker credit signal (utilization alone is not treated as risk).
+- **Overdue AR** — a per-customer aggregate of overdue balance (not per-invoice — per-invoice would be noisy at scale). One event per affected customer, summarizing total overdue, the four aging buckets, invoice count, and oldest days overdue.
+
+It also refreshes the payment-behaviour fields on `customers` (on-time rate, average days early/late, trend, health classification) — AR is the sole writer of these fields; the CIA and other consumers read them but do not write them.
+
+**Not yet built:** dunning letter composition and the over-90 Teams alert. The `compose-dunning-letter` skill exists but is not invoked by this agent — overdue detection is live; the notification/escalation phase that would consume it is still on the roadmap.
 
 ### Trigger
 
-Manual (Run Agent button in the AR Aging page) or programmatic.
+Manual (Run Agent button in the AR Aging page), programmatic, or implicitly whenever new AR data lands via CSV upload (the upload function refreshes the underlying snapshot the agent reads, but does not itself trigger an agent run).
 
 ### Data sources
 
-- `v_ar_aging_current` — current AR aging snapshot per customer
-- `payment_transactions` — last 24 payments per customer (used by `analyse-payment-behaviour` skill)
+- `v_ar_aging_current` — latest AR aging snapshot per customer
+- `invoices` — for overdue-bucket aggregation
+- `payment_transactions` — last N payments per customer, via the `analyse-payment-behaviour` skill
 
 ### Outputs
 
-| Table | Event / Record type | Condition |
-|-------|---------------------|-----------|
-| `credit_events` | `OVERDUE_BUCKET_1_30`, `OVERDUE_BUCKET_31_60`, `OVERDUE_BUCKET_61_90`, `OVERDUE_BUCKET_OVER_90` | Customer has balance in that bucket |
-| `credit_events` | `CRITICAL_UTILIZATION`, `HIGH_UTILIZATION` | Credit utilisation >95% or >80% |
-| `credit_events` | `CONCENTRATION_RISK` | Customer represents >20% of total AR portfolio |
-| `agent_messages` | `collection_reminder` (email, dunning letter) | Top 5 at-risk customers |
-| `agent_messages` | `internal_alert` (Teams) | Accounts with >$100K over 90 days |
+| Table | Event type | Condition |
+|-------|-----------|-----------|
+| `credit_events` | `UTILIZATION_THRESHOLD_BREACH` | Over-limit, or high utilization + weak credit signal |
+| `credit_events` | `OVERDUE_AR` | Customer has any active overdue invoices (excludes paid/written-off/pre-petition) |
+| `customers` | `payment_on_time_rate`, `payment_avg_days_early_late`, `payment_trend`, `payment_health` updated | Every run |
 | `agent_runs` | run audit record | Every execution |
-
-**Note:** AR aging agent is a pure signal agent — it does not write `pending_actions`. Credit limit decisions are owned by the CIA agent (briefing mode, Step 6b).
 
 ### Severity logic
 
-| Condition | Severity |
-|-----------|---------|
-| Balance in 90+ day bucket | critical |
-| Balance in 61–90 day bucket | high |
-| Balance in 31–60 day bucket | medium |
-| Balance in 1–30 day bucket | low |
+**UTILIZATION_THRESHOLD_BREACH:** `critical` if over-limit, `high` otherwise.
 
-### Dunning stage logic
-
-| Condition | Stage |
-|-----------|-------|
-| Over-90 bucket >$100K | 4 (legal demand) |
-| Over-90 bucket >$50K | 3 (final notice) |
-| Balance in 61–90 bucket | 2 (second reminder) |
-| Other | 1 (first reminder) |
+**OVERDUE_AR:** scales with the worst non-empty aging bucket — over-90 → critical (score 92), 61–90 → high (75), 31–60 → medium (55), 1–30 → low (30).
 
 ### Rate limit
 
 60 minutes between completed/running runs.
-
-### Demo mode
-
-Returns a pre-baked run log (49 customers scanned, 19 conditions found, 5 messages, 0 actions). Pure signal agent — does not write `pending_actions`.
 
 ---
 
@@ -67,16 +59,16 @@ Returns a pre-baked run log (49 customers scanned, 19 conditions found, 5 messag
 
 ### What it does
 
-Runs a full live news pipeline for each customer:
+Runs a live news pipeline per customer:
 
-1. Searches for negative news via Tavily (`search-news` skill, `TavilyProvider`)
-2. Deduplicates articles by content fingerprint (`btoa(customer_id|headline|date)`) against `negative_news.content_fingerprint`
-3. Classifies each new article with Claude Haiku (`classify-news` skill); falls back to keyword classifier if the API key is absent or the response is invalid
-4. Skips articles with `confidence < 0.7`
-5. Inserts qualifying articles into `negative_news`
-6. For medium/high/critical severity: writes a `credit_events` row and composes a Microsoft Teams alert
+1. Searches for news via Tavily.
+2. Deduplicates by content fingerprint against `negative_news.content_fingerprint`.
+3. Classifies each new article with Claude (confidence score + severity).
+4. Skips articles below the confidence threshold (`CONFIDENCE_THRESHOLD = 0.7`) for event/alert purposes — they're still recorded in `negative_news`, just not escalated.
+5. Inserts qualifying articles into `negative_news`.
+6. For medium/high/critical severity, emits a credit event and composes a Teams alert.
 
-If `TAVILY_API_KEY` is not set the agent falls back to legacy mode: reads existing unreviewed rows from `negative_news` and processes the top 5 critical/high items.
+In demo mode, the fetch step reads from a seed table instead of calling Tavily live; all classification and emission logic downstream is unchanged.
 
 ### Trigger
 
@@ -86,42 +78,23 @@ Manual (Run Agent button in the News Monitor page) or programmatic.
 
 | Source | Description |
 |--------|-------------|
-| `customers` | All customers (max 10 per run) — company name, ticker |
-| Tavily API | Live news search via `TAVILY_API_KEY` |
-| Anthropic API | Article classification via `ANTHROPIC_API_KEY` (Claude Haiku) |
+| `customers` | Portfolio customers to search for |
+| Tavily API (live) / seed table (demo) | Article source |
+| Anthropic API | Article classification |
 | `negative_news` | Fingerprint dedup check before insert |
 
 ### Outputs
 
-| Table | Event / Record type | Condition |
-|-------|---------------------|-----------|
-| `negative_news` | New article row | Passes dedup + confidence threshold |
-| `credit_events` | `NEGATIVE_NEWS_CRITICAL` | `severity = 'critical'` |
-| `credit_events` | `NEGATIVE_NEWS_HIGH` | `severity = 'high'` |
-| `credit_events` | `NEGATIVE_NEWS_MEDIUM` | `severity = 'medium'` |
-| `agent_messages` | `news_alert` (Teams) | Medium/high/critical article; credit event successfully written |
+| Table | Event type | Condition |
+|-------|-----------|-----------|
+| `negative_news` | New article row | Passes dedup check |
+| `credit_events` | `NEWS_EVENT` | Passes confidence threshold; severity is carried as a field on the event, not encoded in the type name |
+| `agent_messages` | Teams alert | Medium/high/critical article, event successfully written |
 | `agent_runs` | run audit record | Every execution |
-
-### Deduplication
-
-Two-layer approach:
-
-1. **Pre-check**: query `negative_news` by `content_fingerprint` before calling classify — avoids wasting API credits on known articles.
-2. **Safety net**: upsert with `ON CONFLICT (content_fingerprint) DO NOTHING` to handle race conditions.
-
-Credit events have a separate daily dedup index (`credit_events_daily_dedup_idx`) — one event per customer per event type per calendar day from this agent.
-
-### Confidence threshold
-
-`CONFIDENCE_THRESHOLD = 0.7`. Articles below this are inserted into `negative_news` but skipped for credit events and alerts. The `classify-news` skill never applies the threshold internally — filtering is this agent's responsibility.
 
 ### Rate limit
 
 60 minutes between completed/running runs.
-
-### Demo mode
-
-Returns a pre-baked run log (28 items scanned, 25 critical/high, 5 notifications). No rows are written.
 
 ---
 
@@ -129,87 +102,42 @@ Returns a pre-baked run log (28 items scanned, 25 critical/high, 5 notifications
 
 ### What it does
 
-Actively fetches and analyses recent SEC filings for all customers in the `sec_monitoring` table via the SEC EDGAR API (free, no API key required). For each customer:
+Fetches recent filings for monitored customers directly from SEC EDGAR (free, no API key) and scans filing text for risk language:
 
-1. Calls EDGAR submissions API to get recent 10-K, 10-Q, 8-K filings (last 90 days)
-2. Fetches the primary document for each filing and scans for risk keywords
-3. Deduplicates by `accession_number` — skips filings already in `sec_filings`
-4. For filings with risk signals: writes `sec_filings`, `credit_events`, `agent_messages`, and updates `sec_monitoring`
-5. Updates `last_checked_at` for all processed customers
-6. Processes max 10 customers per run; non-fatal per-customer errors continue the loop
+1. Calls EDGAR's submissions API for recent 10-K/10-Q/8-K filings.
+2. Fetches each filing's primary document and scans for risk keywords.
+3. Deduplicates by `accession_number` (globally unique across all EDGAR filers) — skips filings already in `sec_filings`.
+4. Writes `sec_filings` for every new filing, whether or not it carries a risk signal.
+5. For filings with risk signals: emits a credit event and composes an alert.
 
-### Trigger
-
-Manual (Run Agent button in the SEC Filings page) or programmatic.
+In demo mode, the fetch step reads from a seed table instead of calling EDGAR live.
 
 ### Data sources
 
 | Source | Description |
 |--------|-------------|
-| `sec_monitoring` | All monitored customers (with `customers` join, `is_demo` filter) |
-| `sec_filings` | Dedup check by `accession_number` before insert |
-| SEC EDGAR API | `https://data.sec.gov/submissions/CIK{paddedCik}.json` — free, no key |
-
-### Skills used
-
-| Skill | Purpose |
-|-------|---------|
-| `fetch-sec-filing.ts` (`EdgarProvider`) | Fetches submissions JSON, parses filing metadata, fetches filing document text (10 000 chars), detects risk keywords via `detectRiskSignals` |
-| `deliver-message.ts` (`LogProvider` fallback) | Delivers composed alert emails; falls back to console logging if no provider keys are configured |
-
-### Outputs
-
-| Table | Event / Record type | Condition |
-|-------|---------------------|-----------|
-| `sec_filings` | Filing row | Every new filing (with or without risk signals) |
-| `credit_events` | `GOING_CONCERN_WARNING` | `going_concern_warning` or `cash_runway_<3_quarters` signal |
-| `credit_events` | `COVENANT_WAIVER` | `covenant_waiver` signal |
-| `credit_events` | `CEO_DEPARTURE` | `CEO_departure` signal |
-| `credit_events` | `SEC_ALERT` | Other risk signals |
-| `agent_messages` | `sec_alert` (email) | Each filing with risk signals |
-| `sec_monitoring` | `alert_triggered`, `alert_date`, `risk_signals`, `last_checked_at` updated | After processing |
-| `agent_runs` | run audit record | Every execution |
-
-### Deduplication
-
-`sec_filings` has a global unique index on `accession_number` (EDGAR accession numbers are globally unique across all filers). The agent pre-checks before insert and skips known filings. Safe on repeated runs.
-
-### Severity logic
-
-| Risk signal | Severity |
-|-------------|---------|
-| `going_concern_warning`, `cash_runway_<3_quarters` | critical |
-| `covenant_waiver`, `CEO_departure` | high |
-| Other | medium |
+| `sec_monitoring` | Monitored customers |
+| `sec_filings` | Dedup check by accession_number |
+| SEC EDGAR API (live) / seed table (demo) | Filing source |
 
 ### Risk keywords detected
 
-| Keyword in filing text | Signal |
-|------------------------|--------|
-| going concern, substantial doubt | `going_concern_warning` |
-| covenant waiver, waiver of covenant, covenant breach | `covenant_waiver` |
-| chief executive officer resigned, ceo resigned, ceo departure | `CEO_departure` |
-| cash runway | `cash_runway_<3_quarters` |
-| material weakness | `material_weakness` |
-| restatement | `restatement` |
-| sec investigation | `sec_investigation` |
-| pension underfunding | `pension_underfunding` |
-| strategic review | `strategic_review` |
-| revenue miss | `revenue_miss` |
+The full, current keyword-to-signal mapping lives in `supabase/functions/_shared/skills/integration/fetch-sec-filing.ts` (`RISK_KEYWORDS`) — check that file directly rather than this doc for the authoritative list, since it's the kind of detail that drifts easily. As of this writing it includes going-concern language, covenant waivers/breaches, CEO departure language, cash runway, material weakness, restatement, SEC investigation, pension underfunding, strategic review, and revenue miss.
 
-### Environment variables
+### Outputs
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `CREDIT_TEAM_EMAIL` | `credit-team@company.com` | Recipient for SEC alert emails |
+| Table | Event type | Condition |
+|-------|-----------|-----------|
+| `sec_filings` | Filing row | Every new filing |
+| `credit_events` | `GOING_CONCERN` | Going-concern language detected — confirmed `critical` severity (score 92) |
+| `credit_events` | `SEC_OTHER` | Other risk signals — a deliberate catch-all. Covenant waiver, CEO departure, and revenue miss have dedicated typed events defined in the taxonomy (`COVENANT_WAIVER`, `CEO_DEPARTURE`, `REVENUE_MISS`) but the structured extraction needed to populate their specific fields isn't built yet, so these currently emit as `SEC_OTHER` with a `concern_category` field as a stopgap. |
+| `agent_messages` | Alert | Each filing with risk signals |
+| `sec_monitoring` | Tracking fields updated | After processing |
+| `agent_runs` | run audit record | Every execution |
 
 ### Rate limit
 
 60 minutes between completed/running runs.
-
-### Demo mode
-
-Returns a pre-baked run log (3 filings monitored, 2 alerts, 2 notifications). No EDGAR calls or writes.
 
 ---
 
@@ -217,48 +145,33 @@ Returns a pre-baked run log (3 filings monitored, 2 alerts, 2 notifications). No
 
 ### What it does
 
-Synthesises signals from all three monitoring agents into structured intelligence. Operates in three modes:
+Synthesises signals from the three monitoring agents into structured intelligence, in three modes:
 
-| Mode | Model | Purpose |
-|------|-------|---------|
-| `briefing` | Claude Opus (live) | Daily portfolio summary; processes unread `credit_events` |
-| `question` | Claude Sonnet (live) / Claude Haiku (demo) | Answers a specific credit question with cited sources |
-| `suggestions` | Claude Haiku (live) | Generates 4 relevant follow-up questions from recent events |
+| Mode | Model (live) | Model (demo) | Purpose |
+|------|--------------|---------------|---------|
+| `briefing` | `claude-opus-4-5` | — | Portfolio summary; processes unread credit_events; runs credit-limit decisioning |
+| `question` | `claude-sonnet-4-20250514` | `claude-haiku-4-5` | Answers a specific question with cited, deterministic sources |
+| `suggestions` | `claude-haiku-4-5` | `claude-haiku-4-5` | Generates follow-up questions from recent events |
 
-### Trigger
+(Model identifiers current as of this writing — check `cia-agent/index.ts` directly if precision matters, as these are the kind of detail that changes without a doc update.)
 
-- `briefing`: Run CIA button in the Credit Events page
-- `question`: Any question submitted via the CIA chat bar or `/cia?q=...` page
-- `suggestions`: On first page load (cached in sessionStorage)
+### Sources are deterministic, not LLM-generated
 
-### Data sources (briefing mode)
+Sources shown alongside an answer are built in code from the actual matched records (`credit_events`, `negative_news`, `sec_filings` — matched by keyword relevance to the question, not an unfiltered dump). This was a deliberate fix for two earlier problems: sources intermittently coming back empty due to a flaky second LLM call, and sources occasionally being fabricated by that call. Neither is possible now — a source shown to the user always corresponds to a real row.
 
-- `credit_events` where `cia_processed = false` — up to 100 most recent
-- `customers` — customer context (name, type, credit limit, balance)
-- `agent_runs` — cache TTL check per agent
+### Credit limit decisioning (briefing mode)
 
-### Data sources (question mode)
-
-- `credit_events` — keyword-filtered on `title` and `description` (up to 3 keywords, ilike); falls back to most recent 15 if <2 results
-
-### Skills used (briefing mode)
-
-| Skill | Purpose |
-|-------|---------|
-| `assess-composite-risk` | Adjusts utilization threshold based on active signals from multiple agents |
-| `calculate-credit-limit-proposal` | Determines credit limit reduction amount when composite risk recommends action |
+Runs `assessCompositeRisk` (flags customers with corroborating signals across multiple agents) and `calculateCreditLimitProposal` (determines whether to propose a reduction, and by how much) per at-risk customer. Where a proposal results, it's written to `pending_actions` — the CIA is the sole writer of this table.
 
 ### Outputs (briefing mode)
 
-| Table | Event / Record type | Condition |
-|-------|---------------------|-----------|
-| `credit_events` | `DAILY_BRIEFING` (scope: portfolio) | Every briefing run |
-| `credit_events` | `COMPOSITE_RISK_CRITICAL` or `COMPOSITE_RISK_ELEVATED` | Customer flagged by ≥2 agents |
-| `credit_events` | Source events updated: `cia_processed = true` | After processing |
-| `pending_actions` | `CREDIT_LIMIT_REDUCTION` | `assessCompositeRisk` recommends action AND `calculateCreditLimitProposal` returns `reduce` |
+| Table | Event type | Condition |
+|-------|-----------|-----------|
+| `credit_events` | `DAILY_BRIEFING` | Every briefing run |
+| `credit_events` | `COMPOSITE_RISK_CRITICAL` / `COMPOSITE_RISK_ELEVATED` | Customer flagged by multiple agents' signals |
+| `credit_events` | Source events marked `cia_processed = true` | After processing |
+| `pending_actions` | Proposed action | `assessCompositeRisk` + `calculateCreditLimitProposal` recommend one |
 | `agent_runs` | run audit record | Every execution |
-
-**CIA agent is the sole owner of `pending_actions`.** Sensing agents (AR aging, news, SEC) write `credit_events` only.
 
 ### Question mode response shape
 
@@ -280,34 +193,30 @@ Synthesises signals from all three monitoring agents into structured intelligenc
 }
 ```
 
-### Cache TTL (briefing mode staleness check)
+### Rate limit
 
-| Agent | TTL |
-|-------|-----|
-| ar-aging-agent | 24 hours |
-| news-monitor-agent | 4 hours |
-| sec-monitor-agent | 48 hours |
-
-### Demo mode
-
-- `briefing`: Returns `DEMO_BRIEFING` (hardcoded markdown). Upserts a seed run record.
-- `question`: Calls Claude Haiku with real credit_events from the database.
-- `suggestions`: Returns `DEMO_SUGGESTIONS` (4 hardcoded questions).
+60 minutes between completed/running runs.
 
 ---
 
 ## Event taxonomy
 
-All `credit_events` rows share these fields relevant to filtering and display:
+`credit_events` rows share these fields:
 
 | Field | Description |
 |-------|-------------|
-| `event_type` | SCREAMING_SNAKE_CASE signal identifier (see tables above) |
+| `event_type` | SCREAMING_SNAKE_CASE signal identifier — see per-agent tables above for what's actually emitted today. The full V1 taxonomy (29 types) includes many not-yet-built agents; `docs/EVENT_TAXONOMY.md` is the authoritative full list. |
 | `source_agent` | `ar_aging_agent`, `news_monitor_agent`, `sec_monitor_agent`, `cia-agent` |
 | `severity` | `critical`, `high`, `medium`, `low`, `info` |
-| `signal_type` | `AR_AGING`, `NEGATIVE_NEWS`, `SEC_FILING`, `CONCENTRATION`, `CIA_ASSESSMENT` |
+| `severity_score` | 0–100, **higher = worse** (opposite convention from `customers.credit_rating_score`, which is 0–100 lower = worse — these are deliberately different scales; see the data contract doc) |
 | `scope` | `customer` or `portfolio` |
-| `cia_processed` | `false` until CIA has synthesised the event |
-| `is_demo` | `true` for seed data; `false` for live data |
-| `action_required` | `true` if the event requires a human decision |
-| `action_type` | `CREDIT_LIMIT_REDUCTION`, `CREDIT_LIMIT_REVIEW`, etc. |
+| `cia_processed` | `false` until the CIA has synthesised the event into a briefing |
+| `is_demo` | `true` for seed/demo-generated data, `false` for live |
+| `correlation_id` | Groups corroborating events; root events have `correlation_id` = their own id |
+| `parent_event_id` | Cascade tracking, where applicable |
+
+---
+
+## Extending this system
+
+New agents follow the same shape described above — see `CONTRIBUTING.md` for the concrete steps (rate limiting, DEMO_MODE handling, `publishEvent` usage, `is_demo` tagging). Because every monitoring agent's only contract with the rest of the system is "write valid events to `credit_events`," the CIA and frontend require no changes to benefit from a new agent's output once it's emitting correctly.
