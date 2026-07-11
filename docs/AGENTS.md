@@ -1,6 +1,6 @@
 # Agent Documentation
 
-     Each is a Supabase Edge Function (TypeScript/Deno). They read from and write to a shared Postgres database. `credit_events` is written exclusively through `publishEvent` (a validating gateway — payloads are checked against per-event-type Zod schemas before insert). Proposed actions (`pending_actions`) are written only by the CIA agent; a human reviews them before anything takes effect.
+CreditPilot currently ships with four autonomous agents — more are expected as the system grows (see 'Extending this system' at the end of this doc). Each is a Supabase Edge Function (TypeScript/Deno). They read from and write to a shared Postgres database. `credit_events` is written exclusively through `publishEvent` (a validating gateway — payloads are checked against per-event-type Zod schemas before insert). Proposed actions (`pending_actions`) are written only by the CIA agent; a human reviews them before anything takes effect.
 
 All three monitoring agents (AR, News, SEC) share a common shape, established with the SEC agent as the reference implementation:
 
