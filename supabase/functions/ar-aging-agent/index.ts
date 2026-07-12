@@ -221,11 +221,12 @@ Deno.serve(async (req) => {
     }
 
     // --- OVERDUE_AR: one event per customer with active overdue invoices ---
+    const todayStr = new Date().toISOString().split("T")[0];
     const { data: overdueInvoices, error: overdueError } = await supabase
       .from("invoices")
-      .select("customer_id, amount_outstanding, days_overdue")
+      .select("customer_id, amount_outstanding, due_date")
       .not("status", "in", "(paid,written_off,pre_petition)")
-      .gt("days_overdue", 0);
+      .lt("due_date", todayStr);
 
     if (overdueError) {
       console.error("[ar-aging-agent] overdue invoices query failed:", JSON.stringify(overdueError));
@@ -241,9 +242,11 @@ Deno.serve(async (req) => {
       oldest_days: number;
     }>();
 
+    const today = new Date(todayStr + "T00:00:00Z");
     for (const inv of (overdueInvoices ?? [])) {
       const amount = Number(inv.amount_outstanding) || 0;
-      const days = Number(inv.days_overdue) || 0;
+      const dueDate = new Date(inv.due_date + "T00:00:00Z");
+      const days = Math.floor((today.getTime() - dueDate.getTime()) / 86400000);
       const custId: string = inv.customer_id;
       if (!overdueByCustomer.has(custId)) {
         overdueByCustomer.set(custId, { bucket_1_30: 0, bucket_31_60: 0, bucket_61_90: 0, bucket_over_90: 0, invoice_count: 0, oldest_days: 0 });
