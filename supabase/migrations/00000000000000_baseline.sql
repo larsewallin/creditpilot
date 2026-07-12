@@ -288,7 +288,7 @@ $$;
 -- Name: fn_refresh_ar_aging(uuid, date); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.fn_refresh_ar_aging(p_customer_id uuid, p_as_of date DEFAULT CURRENT_DATE) RETURNS void
+CREATE OR REPLACE FUNCTION public.fn_refresh_ar_aging(p_customer_id uuid, p_as_of date DEFAULT CURRENT_DATE) RETURNS void
     LANGUAGE plpgsql
     SET search_path = public, extensions
     AS $$
@@ -298,17 +298,17 @@ DECLARE
   v_lim BIGINT; v_util NUMERIC;
 BEGIN
   SELECT
-    COALESCE(SUM(amount_outstanding) FILTER (WHERE days_overdue = 0 AND status = 'current'), 0),
-    COALESCE(SUM(amount_outstanding) FILTER (WHERE days_overdue BETWEEN 1  AND 30 AND status != 'pre_petition'),  0),
-    COALESCE(SUM(amount_outstanding) FILTER (WHERE days_overdue BETWEEN 31 AND 60 AND status != 'pre_petition'),  0),
-    COALESCE(SUM(amount_outstanding) FILTER (WHERE days_overdue BETWEEN 61 AND 90 AND status != 'pre_petition'),  0),
-    COALESCE(SUM(amount_outstanding) FILTER (WHERE days_overdue > 90 AND status != 'pre_petition'), 0),
+    COALESCE(SUM(amount_outstanding) FILTER (WHERE (p_as_of - due_date) <= 0 AND status = 'current'), 0),
+    COALESCE(SUM(amount_outstanding) FILTER (WHERE (p_as_of - due_date) BETWEEN 1  AND 30 AND status != 'pre_petition'),  0),
+    COALESCE(SUM(amount_outstanding) FILTER (WHERE (p_as_of - due_date) BETWEEN 31 AND 60 AND status != 'pre_petition'),  0),
+    COALESCE(SUM(amount_outstanding) FILTER (WHERE (p_as_of - due_date) BETWEEN 61 AND 90 AND status != 'pre_petition'),  0),
+    COALESCE(SUM(amount_outstanding) FILTER (WHERE (p_as_of - due_date) > 90 AND status != 'pre_petition'), 0),
     COALESCE(SUM(amount_outstanding) FILTER (WHERE status = 'pre_petition'), 0),
-    COUNT(*) FILTER (WHERE days_overdue = 0  AND status = 'current'),
-    COUNT(*) FILTER (WHERE days_overdue BETWEEN 1  AND 30 AND status != 'pre_petition'),
-    COUNT(*) FILTER (WHERE days_overdue BETWEEN 31 AND 60 AND status != 'pre_petition'),
-    COUNT(*) FILTER (WHERE days_overdue BETWEEN 61 AND 90 AND status != 'pre_petition'),
-    COUNT(*) FILTER (WHERE days_overdue > 90 AND status != 'pre_petition')
+    COUNT(*) FILTER (WHERE (p_as_of - due_date) <= 0  AND status = 'current'),
+    COUNT(*) FILTER (WHERE (p_as_of - due_date) BETWEEN 1  AND 30 AND status != 'pre_petition'),
+    COUNT(*) FILTER (WHERE (p_as_of - due_date) BETWEEN 31 AND 60 AND status != 'pre_petition'),
+    COUNT(*) FILTER (WHERE (p_as_of - due_date) BETWEEN 61 AND 90 AND status != 'pre_petition'),
+    COUNT(*) FILTER (WHERE (p_as_of - due_date) > 90 AND status != 'pre_petition')
   INTO v_cur, v_b1, v_b2, v_b3, v_b4, v_pp,
        v_cc, v_c1, v_c2, v_c3, v_c4
   FROM invoices
