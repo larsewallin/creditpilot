@@ -525,6 +525,24 @@ Verified live (not just deployed): old-style name-only CSV correctly rejected wi
 
 ---
 
+## F2 — RESOLVED (2026-07-12): fn_refresh_ar_aging date bucketing + demo re-anchor
+
+Root cause confirmed: fn_refresh_ar_aging bucketed by the stored invoices.days_overdue column instead of computing (p_as_of - due_date) live. p_as_of was only ever used as the snapshot's date label -- it never affected which bucket an invoice landed in. This meant snapshots never reflected the passage of real time; a customer's aging only updated when something rewrote days_overdue (e.g. a CSV re-upload).
+
+This is a real production correctness gap, not just a demo cosmetic issue -- confirmed live on Bloom Energy before fixing: a $980K invoice correctly due and unpaid showed as bucket "current" when it was actually 90+ days overdue by real calendar time.
+
+Fixed in two parts, verified together:
+
+1. **fn_refresh_ar_aging rewritten** to bucket by (p_as_of - due_date) computed live, matching the CHECK/status guards already in place (migration 20260712000000, also applied directly to the baseline so a fresh db push includes the fix). Commit 3db0dfe.
+
+2. **One-time demo invoice date re-anchor.** Fixing the function alone, without re-anchoring data, would have made the demo portfolio look catastrophically broken: dry-run showed $68.5M of $77.9M jumping into bucket_over_90 and current_amount going to $0, because the demo's due_dates were seeded assuming "today" was mid-2026 and the calendar has since moved past that. Applied a precise per-invoice shift: due_date and invoice_date both shifted by (CURRENT_DATE - (due_date + days_overdue)) for every non-pre_petition, non-paid/written-off invoice (132 rows) -- this reproduces each invoice's exact previously-stored days_overdue when recomputed live, so every customer's demo narrative (Rite Aid bankrupt, McDermott deteriorating, etc.) is preserved exactly, just re-anchored to today's date. Verified: post-fix portfolio bucket totals (62,262,000 / 7,305,000 / 6,505,000 / 1,825,000 / 0 current-through-over_90, 77,897,000 total) exactly match the original healthy pre-bug distribution. current_exposure unaffected (unrelated trigger). Applied directly via psql (data, not schema) -- not captured in a migration since it's a one-time data correction, not a repeatable schema change.
+
+Harness 8/8 after both changes.
+
+**Still open (new, surfaced during this fix):** the *stored* `invoices.days_overdue` column itself has the same class of staleness problem -- it's computed once at upload time and never passively recomputed as calendar time passes. Unlike ar_aging_snapshots (now fixed to compute live), anything that reads invoices.days_overdue directly (not through fn_refresh_ar_aging) -- e.g. the CIA answering direct invoice questions -- will still see stale values between uploads. This needs either (a) a scheduled job that recomputes days_overdue for all open/overdue invoices periodically, or (b) callers computing it live from due_date instead of trusting the stored column, same fix pattern as this one. Logging as new backlog item, not fixing today -- out of scope for this pass, which was specifically the ar_aging_snapshots/bucketing correctness.
+
+---
+
 ## next_dunning_date drop — CONFIRMED CLEAN (verified 2026-07-03)
 
 `invoices.next_dunning_date` was dropped 2026-06-06 (migration `20260605150000_b0_drop_next_dunning_date.sql`, now in migrations_archive/ after the baseline rebuild) alongside the `v_overdue_invoices` rewrite. This was flagged in the B0 plan's Phase 1d follow-up list as an unaudited column; confirmed during backlog review that it's genuinely gone (not referenced in baseline.sql or seed.sql) and the drop was clean.
