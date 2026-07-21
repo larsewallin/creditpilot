@@ -16,7 +16,7 @@ Thank you for your interest in contributing. This document covers development se
 ### Steps
 
 ```bash
-git clone https://github.com/Lawa18/Creditpilot.git
+git clone https://github.com/larsewallin/Creditpilot.git
 cd Creditpilot
 npm install
 cp .env.example .env
@@ -111,7 +111,7 @@ Reusable logic (Claude API calls, financial calculations) goes in `supabase/func
 
 ## Reporting issues
 
-Open an issue on [GitHub](https://github.com/Lawa18/Creditpilot/issues) with:
+Open an issue on [GitHub](https://github.com/larsewallin/Creditpilot/issues) with:
 - Steps to reproduce
 - Expected vs. actual behaviour
 - Browser / Supabase CLI version if relevant

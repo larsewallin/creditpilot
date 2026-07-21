@@ -10,7 +10,7 @@
 
 ### 1. Clone and install
 ```bash
-git clone https://github.com/Lawa18/Creditpilot.git
+git clone https://github.com/larsewallin/Creditpilot.git
 cd Creditpilot
 npm install
 ```

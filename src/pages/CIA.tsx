@@ -140,7 +140,7 @@ export default function CIA() {
 
     if (DEMO_MODE && getDemoQuestionCount() >= CIA_DEMO_QUESTION_LIMIT) {
       setAnswer({
-        answer: `You've reached the ${CIA_DEMO_QUESTION_LIMIT}-question demo limit. Deploy your own instance of CreditPilot for unlimited access — it takes about 5 minutes. See the [GitHub repo](https://github.com/Lawa18/creditpilot) for instructions.`,
+        answer: `You've reached the ${CIA_DEMO_QUESTION_LIMIT}-question demo limit. Deploy your own instance of CreditPilot for unlimited access — it takes about 5 minutes. See the [GitHub repo](https://github.com/larsewallin/creditpilot) for instructions.`,
         sources: [],
         confidence: 'Low',
         confidence_reason: 'Demo question limit reached.',

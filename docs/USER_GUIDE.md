@@ -54,7 +54,7 @@ CreditPilot is open source, so you don't have to take "team of analysts" as a me
 
 ## It's open source — and built to grow
 
-CreditPilot's code is public: [github.com/Lawa18/creditpilot](https://github.com/Lawa18/creditpilot). That's a deliberate choice, not just a convenience.
+CreditPilot's code is public: [github.com/larsewallin/creditpilot](https://github.com/larsewallin/creditpilot). That's a deliberate choice, not just a convenience.
 
 The "team of analysts" you read about above is not a fixed team. It's a pattern — and the pattern is documented specifically so that new analysts can be added, by us or by anyone else, without redesigning the system.
 
