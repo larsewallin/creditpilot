@@ -1,20 +1,3 @@
-# What CreditPilot Does
-### A guide for users trying it for the first time
-
----
-
-## The problem you already know
-
-You sell to other businesses. Some are giants like Boeing. Some are smaller suppliers in your industry. Either way, when you ship them parts or services, you don't get paid that day. You get paid 30, 60, sometimes 90 days later.
-
-While you wait, you're carrying their risk. If one of your big customers goes bankrupt before paying, that's not just a missed payment — that's potentially a six- or seven-figure write-off. And it doesn't take a recession. Triumph Group, a real aerospace company, filed warning signals across multiple credit watchers in the past year. A supplier who didn't notice in time would have been exposed.
-
-You have credit policies. You have a credit team. You have insurance, maybe. But here's the honest situation in most credit departments: a small team is trying to watch hundreds or thousands of customers across dozens of industries, reading news, checking SEC filings, looking at payment patterns, talking to references. Things get missed. Not because anyone is careless — because there's too much to watch and not enough hours.
-
-CreditPilot is built for that exact problem.
-
----
-
 ## What CreditPilot actually is
 
 Think of it as a team of always-on analysts, each watching one specific thing.
