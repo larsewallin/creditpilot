@@ -6,13 +6,11 @@ Open-source autonomous AI agents for trade credit management.
 
 ## What is CreditPilot?
 
-CreditPilot is an open-source platform of autonomous AI agents for B2B trade credit management. Agents monitor overdue AR, scan for negative news, watch SEC filings for distress signals, and synthesise everything into a daily credit intelligence briefing — surfaced through a React dashboard and a Perplexity-style chat interface.
+CreditPilot is an open-source project of autonomous AI agents for B2B trade credit management. Agents monitor overdue AR, scan for negative news, watch SEC filings for distress signals, and synthesise everything into a daily credit intelligence briefing — surfaced through a React dashboard and a Perplexity-style chat interface.
 
 Think of it as "Perplexity for trade credit."
 
 Agents write their findings as structured credit events to a Postgres database, compose dunning letters and alerts, and propose actions (credit limit reductions, credit holds) for human approval. Nothing changes without a credit manager signing off. The Credit Intelligence Agent (CIA) answers questions in natural language, citing the specific signals behind its reasoning.
-
-Built by a trade credit practitioner to explore what's possible when you apply modern AI to the workflows credit managers actually do every day. More agents are planned.
 
 The repo is designed for local deployment — your AR data, customer financials, and credit events stay on your own infrastructure. The hosted demo uses Supabase, Vercel, and the Anthropic Claude API.
 
