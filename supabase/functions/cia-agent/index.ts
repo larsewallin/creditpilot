@@ -461,21 +461,28 @@ async function fetchRelevantData(
           .map((c: any) => c.id);
       }
 
+      const todayStr = new Date().toISOString().split("T")[0];
       let q = supabase
         .from("invoices")
         .select("id, invoice_number, customer_id, invoice_date, due_date, invoice_amount, outstanding_amount, status, days_overdue")
         .eq("is_demo", demoMode)
-        .order("days_overdue", { ascending: false })
+        .order("due_date", { ascending: true })
         .limit(20);
 
       if (custIds.length > 0) q = q.in("customer_id", custIds);
-      else q = q.gt("days_overdue", 0);
+      else q = q.lt("due_date", todayStr);
 
       const { data } = await q;
-      results.invoices = (data ?? []).map((inv: any) => ({
-        ...inv,
-        company_name: customerMap[inv.customer_id] ?? inv.customer_id,
-      }));
+      const today = new Date(todayStr + "T00:00:00Z");
+      results.invoices = (data ?? []).map((inv: any) => {
+        const dueDate = new Date(inv.due_date + "T00:00:00Z");
+        const liveDaysOverdue = Math.max(0, Math.floor((today.getTime() - dueDate.getTime()) / 86400000));
+        return {
+          ...inv,
+          days_overdue: liveDaysOverdue,
+          company_name: customerMap[inv.customer_id] ?? inv.customer_id,
+        };
+      });
     })(),
 
     // payment_transactions — recent history for mentioned customers
