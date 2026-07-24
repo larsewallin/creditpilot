@@ -447,18 +447,14 @@ async function fetchRelevantData(
 
     // invoices — filter by customer name mention or return at-risk
     tables.has("invoices") && (async () => {
-      const { data: customers } = await supabase
-        .from("customers")
-        .select("id, company_name")
-        .limit(20);
-
-      const customerMap = Object.fromEntries((customers ?? []).map((c: any) => [c.id, c.company_name]));
-
       let custIds: string[] = [];
       if (words.length > 0) {
-        custIds = (customers ?? [])
-          .filter((c: any) => words.some(w => c.company_name.toLowerCase().includes(w.toLowerCase())))
-          .map((c: any) => c.id);
+        const nameFilter = words.map(w => `company_name.ilike.%${w}%`).join(",");
+        const { data: matched } = await supabase
+          .from("customers")
+          .select("id")
+          .or(nameFilter);
+        custIds = (matched ?? []).map((c: any) => c.id);
       }
 
       const todayStr = new Date().toISOString().split("T")[0];
@@ -473,6 +469,17 @@ async function fetchRelevantData(
       else q = q.lt("due_date", todayStr);
 
       const { data } = await q;
+
+      const resultCustIds = [...new Set((data ?? []).map((inv: any) => inv.customer_id))];
+      let customerMap: Record<string, string> = {};
+      if (resultCustIds.length > 0) {
+        const { data: custData } = await supabase
+          .from("customers")
+          .select("id, company_name")
+          .in("id", resultCustIds);
+        customerMap = Object.fromEntries((custData ?? []).map((c: any) => [c.id, c.company_name]));
+      }
+
       const today = new Date(todayStr + "T00:00:00Z");
       results.invoices = (data ?? []).map((inv: any) => {
         const dueDate = new Date(inv.due_date + "T00:00:00Z");
@@ -487,16 +494,14 @@ async function fetchRelevantData(
 
     // payment_transactions — recent history for mentioned customers
     tables.has("payment_transactions") && (async () => {
-      const { data: customers } = await supabase
-        .from("customers")
-        .select("id, company_name")
-        .limit(20);
-
       let custIds: string[] = [];
       if (words.length > 0) {
-        custIds = (customers ?? [])
-          .filter((c: any) => words.some(w => c.company_name.toLowerCase().includes(w.toLowerCase())))
-          .map((c: any) => c.id);
+        const nameFilter = words.map(w => `company_name.ilike.%${w}%`).join(",");
+        const { data: matched } = await supabase
+          .from("customers")
+          .select("id")
+          .or(nameFilter);
+        custIds = (matched ?? []).map((c: any) => c.id);
       }
 
       let q = supabase
@@ -508,7 +513,17 @@ async function fetchRelevantData(
       if (custIds.length > 0) q = q.in("customer_id", custIds);
 
       const { data } = await q;
-      const customerMap = Object.fromEntries((customers ?? []).map((c: any) => [c.id, c.company_name]));
+
+      const resultCustIds = [...new Set((data ?? []).map((p: any) => p.customer_id))];
+      let customerMap: Record<string, string> = {};
+      if (resultCustIds.length > 0) {
+        const { data: custData } = await supabase
+          .from("customers")
+          .select("id, company_name")
+          .in("id", resultCustIds);
+        customerMap = Object.fromEntries((custData ?? []).map((c: any) => [c.id, c.company_name]));
+      }
+
       results.payment_transactions = (data ?? []).map((p: any) => ({
         ...p,
         company_name: customerMap[p.customer_id] ?? p.customer_id,
