@@ -1,0 +1,11 @@
+-- Fix mismatched customer_ids on the two SEC credit_events seed rows.
+-- c0000001-0000-0000-0000-000000000049 = Heliogen Inc (GOING CONCERN WARNING)
+-- c0000001-0000-0000-0000-000000000021 = Triumph Group  (COVENANT WAIVER)
+
+UPDATE public.credit_events
+  SET customer_id = 'c0000001-0000-0000-0000-000000000049'
+  WHERE id = 'e0000001-0000-0000-0000-000000000002';   -- Heliogen: GOING CONCERN WARNING
+
+UPDATE public.credit_events
+  SET customer_id = 'c0000001-0000-0000-0000-000000000021'
+  WHERE id = 'e0000001-0000-0000-0000-000000000004';   -- Triumph Group: COVENANT WAIVER

@@ -1,0 +1,10 @@
+project_id = "krnshldqgnqjmoyektbf"
+
+[functions.ar-aging-agent]
+verify_jwt = false
+
+[functions.news-monitor-agent]
+verify_jwt = false
+
+[functions.sec-monitor-agent]
+verify_jwt = false
