@@ -22,7 +22,7 @@ See the ["What is this?"](https://creditpilot.vercel.app/about) page in the live
 
 ```
 DATA IN
-Customer master data → customers table (manual setup or CSV)
+Customer master data → customers table (manual setup only — AR CSV upload matches existing customers, doesn't create them)
 AR aging export      → invoices table (CSV upload from any ERP)
 News                 → Tavily API (live fetch) or existing rows
 SEC filings          → SEC EDGAR API (live, free, no key required)
@@ -47,7 +47,7 @@ Nothing changes without human approval
 
 EXECUTED
 Approved action → customers.credit_limit updated
-Full audit trail written to credit_events
+Full audit trail written to credit_actions
 ```
 
 ---
@@ -79,19 +79,20 @@ Only your compiled frontend code (HTML/JS/CSS). No database queries pass through
 All your company data — customers, invoices, AR aging, credit events, agent messages. In self-hosted mode, this runs on your own infrastructure. In cloud mode, Supabase hosts on AWS with SOC 2 Type II compliance.
 
 ### What the Anthropic API receives
-Only the CIA and dunning letter agents make external API calls. The following data is sent:
+The CIA and News Monitor agents make external API calls today. The following data is sent:
 
 | Agent | Mode | Data sent to Anthropic |
 |-------|------|----------------------|
-| AR Aging | Dunning letter | Company name, overdue amounts, utilization %, payment rate, dunning stage |
 | News Monitor | Classification | Article headline and summary (already public) |
 | CIA | Briefing | Customer names, credit limits, balances, event types and descriptions |
-| CIA | Question | Same as briefing, filtered to relevant customers + user question text |
+| CIA | Question | Same as briefing, filtered to relevant customers + user question text, plus invoice numbers and payment transaction details when relevant to the question |
 | CIA | Suggestions | Event types and severities only |
 
-Invoice numbers, internal account IDs, and payment transaction details are never sent to the Anthropic API.
+Dunning-letter composition (`compose-dunning-letter.ts`) is a built skill that would also call Anthropic, but it isn't wired into any agent yet — planned, not currently active.
 
-**Note on customer data and privacy:** Customer names and financial data sent to the CIA agent are processed under Anthropic's API terms. Anthropic does not train on API data by default — see [Anthropic's privacy policy](https://www.anthropic.com/privacy). For deployments where customer identity must stay on-premise, use the local LLM option or configure CIA to send anonymised customer IDs instead of names.
+**Invoice numbers and payment transaction details are sent to the Anthropic API** when the CIA's question-answering mode builds context that includes them (e.g. a question about a specific invoice or a customer's payment history) — this is a correction from an earlier version of this doc, which claimed the opposite. Internal database IDs (UUIDs) are not sent; customer and invoice data is referenced by name/number, not primary key.
+
+**Note on customer data and privacy:** Customer names and financial data — including invoice numbers and payment transaction details when relevant to a question — sent to the CIA agent are processed under Anthropic's API terms. Anthropic does not train on API data by default — see [Anthropic's privacy policy](https://www.anthropic.com/privacy). For deployments where customer identity, invoice numbers, or transaction details must stay on-premise, use the local LLM option or configure CIA to send anonymised identifiers instead of real names/numbers.
 
 ### Local LLM option
 Replace the Anthropic API with a local model (e.g. Ollama) by implementing the same interface in `cia-agent/index.ts` and the generative skills. In fully local mode, no data leaves your infrastructure.
@@ -121,22 +122,24 @@ More agents will be added.
 ## Data Ingestion
 
 ### Customer Master Data
-Before agents can run, load your customer portfolio into the `customers` table. Each record requires:
+Before agents can run, load your customer portfolio into the `customers` table. The table has 44 columns in total — most are optional or agent-written, so this isn't an exhaustive list. Only two fields are actually required on insert:
 
 | Field | Required | Notes |
 |-------|----------|-------|
 | `company_name` | Yes | Used for news search and display |
-| `company_type` | Yes | `public`, `private`, or `sme` |
-| `credit_limit` | Yes | In your base currency |
-| `country_code` | No | ISO 3166-1 alpha-2; defaults to `US` |
+| `sector` | Yes | CHECK-constrained to 7 values: `Aerospace & Defense`, `Energy`, `Industrial Manufacturing`, `Materials`, `Transportation`, `Mining`, `Other` |
+
+A few other fields worth calling out explicitly: `company_type` (`public`, `private`, or `sme` — defaults to `public` if omitted), `credit_limit` (defaults to `0`), and `country_code` (ISO 3166-1 alpha-2, defaults to `US`).
 
 External identifiers (ticker, SEC CIK, DUNS, LEI) are **not** columns on `customers` — they live in the separate `customer_identifiers` table (one row per identifier, supporting multiple identifier types per customer). Public-company tickers and CIKs are loaded there; the SEC agent reads CIKs from it and skips customers with none.
+
+The rest of the schema falls into a few buckets: company/address details added for onboarding (`trade_name`, `website`, `naics_sic_code`, `street_address`, `city`, `postcode`, `international_business_name`); and agent-written fields you should never set manually (`risk_tags`, `payment_health`, `payment_on_time_rate`, `credit_rating_score`, and similar — these are computed and kept current by the agents themselves).
 
 Private and SME companies are fully supported. The news agent searches by company name. The SEC agent automatically skips companies with no CIK. Credit scoring works for all company types via manual entry or CSV import.
 
 The difference between `private` and `sme` is intentional but currently a data quality label — future agents will apply different thresholds and workflows for each. Use `private` for larger private companies and `sme` for smaller suppliers typically under $50M revenue.
 
-**V1 — Manual setup:** Insert customers via the Supabase dashboard, the AR aging CSV upload, or by loading the demo seed (`supabase/seed.sql`). The demo dataset includes 49 public companies and 10 private/SME customers as a reference.
+**V1 — Manual setup:** Insert customers via the Supabase dashboard or by loading the demo seed (`supabase/seed.sql`). The demo dataset includes 49 public companies and 10 private/SME customers as a reference. Customer records must exist before the AR aging CSV upload can process rows against them — that upload matches rows to existing customers via identifier lookup and reports any it can't match; it does not create new customer records.
 
 **Planned:** CSV import for customer master data, ERP API integration for automatic sync.
 
@@ -231,6 +234,7 @@ To try the demo first, set `DEMO_MODE = true` and leave `TAVILY_API_KEY` unset.
 
 ```bash
 supabase functions deploy ar-aging-agent
+supabase functions deploy ar-csv-upload
 supabase functions deploy news-monitor-agent
 supabase functions deploy sec-monitor-agent
 supabase functions deploy cia-agent
@@ -252,7 +256,7 @@ Open [http://localhost:5173](http://localhost:5173).
 
 Before loading real company data, lock down your Supabase project:
 
-1. Remove anon write policies from `pending_actions`, `customers`, `credit_actions`
+1. Remove anon write policies from `pending_actions`, `customers`, `credit_actions`, `agent_runs`, `credit_events`, `negative_news`, `sec_monitoring`
 2. Add authentication (Supabase Auth)
 3. Use a dedicated Supabase project — not the same one as the demo
 
