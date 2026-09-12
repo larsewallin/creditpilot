@@ -269,170 +269,189 @@ export default function ArAging() {
       {/* Upload Dialog */}
       <Dialog open={uploadOpen} onOpenChange={(open) => { if (!open) handleDialogClose(); }}>
         <DialogContent className="sm:max-w-md">
-          {uploadStep === "pick" && (
+          {DEMO_MODE ? (
             <>
               <DialogHeader>
                 <DialogTitle>Upload AR Data</DialogTitle>
               </DialogHeader>
-              <div className="space-y-4 py-2">
+              <div className="py-2">
                 <p className="text-xs text-muted-foreground">
-                  Upload a CSV export from your ERP. Column headers are auto-detected.
-                  Open and overdue invoices for matched customers will be replaced.
-                </p>
-                <div
-                  className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-foreground/40 transition-colors"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <Upload className="h-6 w-6 mx-auto mb-2 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">
-                    {uploadFile ? uploadFile.name : "Click to select a CSV file"}
-                  </p>
-                  {uploadFile && (
-                    <p className="text-[10px] text-muted-foreground mt-1">
-                      {(uploadFile.size / 1024).toFixed(1)} KB
-                    </p>
-                  )}
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".csv,text/csv"
-                    className="hidden"
-                    onChange={handleFileChange}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-foreground">Report date</label>
-                  <input
-                    type="date"
-                    value={reportDate}
-                    onChange={(e) => setReportDate(e.target.value)}
-                    className="w-full h-8 rounded-md border border-input bg-background px-3 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                  />
-                  <p className="text-[10px] text-muted-foreground">Used to calculate days overdue. Defaults to today.</p>
-                </div>
-                <p className="text-[10px] text-muted-foreground">
-                  Accepted columns: Invoice Number, Customer Name, Invoice Date, Due Date,
-                  Amount, Outstanding, Currency, Days Overdue — and common aliases.
+                  AR data upload is disabled in this shared demo to protect the dataset other visitors are viewing.
+                  In your own deployment, this uploads real AR data from your ERP and replaces open/overdue invoices for matched customers.
                 </p>
               </div>
               <DialogFooter>
-                <Button variant="outline" size="sm" onClick={handleDialogClose}>Cancel</Button>
-                <Button size="sm" onClick={handleUpload} disabled={!uploadFile || uploading}>
-                  {uploading ? "Uploading…" : "Upload"}
-                </Button>
+                <Button size="sm" onClick={handleDialogClose}>Close</Button>
               </DialogFooter>
             </>
-          )}
-
-          {uploadStep === "mapping" && mappingState && (
+          ) : (
             <>
-              <DialogHeader>
-                <DialogTitle>Map Columns</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 py-2">
-                <p className="text-xs text-muted-foreground">
-                  Some required columns couldn't be auto-detected. Match them to your CSV headers below.
-                </p>
-                {mappingState.unmapped.map((field) => {
-                  const fieldDef = REQUIRED_FIELDS.find((f) => f.key === field);
-                  return (
-                    <div key={field} className="flex items-center gap-3">
-                      <span className="text-xs font-medium w-36 shrink-0">{fieldDef?.label ?? field}</span>
-                      <Select
-                        value={manualMap[field] ?? ""}
-                        onValueChange={(val) => setManualMap((m) => ({ ...m, [field]: val }))}
-                      >
-                        <SelectTrigger className="h-8 text-xs flex-1">
-                          <SelectValue placeholder="Select column…" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {mappingState.available_columns.map((col) => (
-                            <SelectItem key={col} value={col} className="text-xs">{col}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+              {uploadStep === "pick" && (
+                <>
+                  <DialogHeader>
+                    <DialogTitle>Upload AR Data</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4 py-2">
+                    <p className="text-xs text-muted-foreground">
+                      Upload a CSV export from your ERP. Column headers are auto-detected.
+                      Open and overdue invoices for matched customers will be replaced.
+                    </p>
+                    <div
+                      className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-foreground/40 transition-colors"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <Upload className="h-6 w-6 mx-auto mb-2 text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground">
+                        {uploadFile ? uploadFile.name : "Click to select a CSV file"}
+                      </p>
+                      {uploadFile && (
+                        <p className="text-[10px] text-muted-foreground mt-1">
+                          {(uploadFile.size / 1024).toFixed(1)} KB
+                        </p>
+                      )}
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".csv,text/csv"
+                        className="hidden"
+                        onChange={handleFileChange}
+                      />
                     </div>
-                  );
-                })}
-              </div>
-              <DialogFooter>
-                <Button variant="outline" size="sm" onClick={() => setUploadStep("pick")}>Back</Button>
-                <Button
-                  size="sm"
-                  onClick={handleUpload}
-                  disabled={uploading || mappingState.unmapped.some((f) => !manualMap[f])}
-                >
-                  {uploading ? "Uploading…" : "Upload"}
-                </Button>
-              </DialogFooter>
-            </>
-          )}
-
-          {uploadStep === "success" && uploadResult && (
-            <>
-              <DialogHeader>
-                <DialogTitle>Upload Complete</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-3 py-2">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-secondary/50 rounded-lg p-3">
-                    <p className="text-[10px] text-muted-foreground uppercase">Invoices Imported</p>
-                    <p className="text-2xl font-bold text-foreground">{uploadResult.inserted}</p>
-                  </div>
-                  <div className="bg-secondary/50 rounded-lg p-3">
-                    <p className="text-[10px] text-muted-foreground uppercase">Rows Skipped</p>
-                    <p className="text-2xl font-bold text-foreground">{uploadResult.skipped_rows}</p>
-                  </div>
-                </div>
-                {uploadResult.unmatched_customers.length > 0 && (
-                  <div className="bg-secondary/30 rounded-lg p-3">
-                    <p className="text-xs font-medium mb-1">Unmatched customers</p>
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-foreground">Report date</label>
+                      <input
+                        type="date"
+                        value={reportDate}
+                        onChange={(e) => setReportDate(e.target.value)}
+                        className="w-full h-8 rounded-md border border-input bg-background px-3 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                      />
+                      <p className="text-[10px] text-muted-foreground">Used to calculate days overdue. Defaults to today.</p>
+                    </div>
                     <p className="text-[10px] text-muted-foreground">
-                      {uploadResult.unmatched_customers.join(", ")}
+                      Accepted columns: Invoice Number, Customer Name, Invoice Date, Due Date,
+                      Amount, Outstanding, Currency, Days Overdue — and common aliases.
                     </p>
                   </div>
-                )}
-                {uploadResult.errors.length > 0 && (
-                  <div className="bg-secondary/30 rounded-lg p-3 max-h-32 overflow-y-auto">
-                    <p className="text-xs font-medium mb-1">Row errors</p>
-                    {uploadResult.errors.slice(0, 10).map((e) => (
-                      <p key={e.row} className="text-[10px] text-muted-foreground">Row {e.row}: {e.message}</p>
-                    ))}
-                    {uploadResult.errors.length > 10 && (
-                      <p className="text-[10px] text-muted-foreground">…and {uploadResult.errors.length - 10} more</p>
-                    )}
-                  </div>
-                )}
-                {(uploadResult.validation_warnings ?? []).length > 0 && (
-                  <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3">
-                    <p className="text-xs font-medium text-yellow-600 dark:text-yellow-400 mb-1">
-                      {uploadResult.validation_warnings.length} row{uploadResult.validation_warnings.length !== 1 ? "s" : ""} with warnings — review before approving
+                  <DialogFooter>
+                    <Button variant="outline" size="sm" onClick={handleDialogClose}>Cancel</Button>
+                    <Button size="sm" onClick={handleUpload} disabled={!uploadFile || uploading}>
+                      {uploading ? "Uploading…" : "Upload"}
+                    </Button>
+                  </DialogFooter>
+                </>
+              )}
+
+              {uploadStep === "mapping" && mappingState && (
+                <>
+                  <DialogHeader>
+                    <DialogTitle>Map Columns</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4 py-2">
+                    <p className="text-xs text-muted-foreground">
+                      Some required columns couldn't be auto-detected. Match them to your CSV headers below.
                     </p>
-                    {uploadResult.validation_warnings.slice(0, 5).map((w, i) => (
-                      <p key={i} className="text-[10px] text-muted-foreground">Row {w.row} ({w.field}): {w.message}</p>
-                    ))}
-                    {uploadResult.validation_warnings.length > 5 && (
-                      <p className="text-[10px] text-muted-foreground">…and {uploadResult.validation_warnings.length - 5} more</p>
+                    {mappingState.unmapped.map((field) => {
+                      const fieldDef = REQUIRED_FIELDS.find((f) => f.key === field);
+                      return (
+                        <div key={field} className="flex items-center gap-3">
+                          <span className="text-xs font-medium w-36 shrink-0">{fieldDef?.label ?? field}</span>
+                          <Select
+                            value={manualMap[field] ?? ""}
+                            onValueChange={(val) => setManualMap((m) => ({ ...m, [field]: val }))}
+                          >
+                            <SelectTrigger className="h-8 text-xs flex-1">
+                              <SelectValue placeholder="Select column…" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {mappingState.available_columns.map((col) => (
+                                <SelectItem key={col} value={col} className="text-xs">{col}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" size="sm" onClick={() => setUploadStep("pick")}>Back</Button>
+                    <Button
+                      size="sm"
+                      onClick={handleUpload}
+                      disabled={uploading || mappingState.unmapped.some((f) => !manualMap[f])}
+                    >
+                      {uploading ? "Uploading…" : "Upload"}
+                    </Button>
+                  </DialogFooter>
+                </>
+              )}
+
+              {uploadStep === "success" && uploadResult && (
+                <>
+                  <DialogHeader>
+                    <DialogTitle>Upload Complete</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-3 py-2">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="bg-secondary/50 rounded-lg p-3">
+                        <p className="text-[10px] text-muted-foreground uppercase">Invoices Imported</p>
+                        <p className="text-2xl font-bold text-foreground">{uploadResult.inserted}</p>
+                      </div>
+                      <div className="bg-secondary/50 rounded-lg p-3">
+                        <p className="text-[10px] text-muted-foreground uppercase">Rows Skipped</p>
+                        <p className="text-2xl font-bold text-foreground">{uploadResult.skipped_rows}</p>
+                      </div>
+                    </div>
+                    {uploadResult.unmatched_customers.length > 0 && (
+                      <div className="bg-secondary/30 rounded-lg p-3">
+                        <p className="text-xs font-medium mb-1">Unmatched customers</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {uploadResult.unmatched_customers.join(", ")}
+                        </p>
+                      </div>
+                    )}
+                    {uploadResult.errors.length > 0 && (
+                      <div className="bg-secondary/30 rounded-lg p-3 max-h-32 overflow-y-auto">
+                        <p className="text-xs font-medium mb-1">Row errors</p>
+                        {uploadResult.errors.slice(0, 10).map((e) => (
+                          <p key={e.row} className="text-[10px] text-muted-foreground">Row {e.row}: {e.message}</p>
+                        ))}
+                        {uploadResult.errors.length > 10 && (
+                          <p className="text-[10px] text-muted-foreground">…and {uploadResult.errors.length - 10} more</p>
+                        )}
+                      </div>
+                    )}
+                    {(uploadResult.validation_warnings ?? []).length > 0 && (
+                      <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3">
+                        <p className="text-xs font-medium text-yellow-600 dark:text-yellow-400 mb-1">
+                          {uploadResult.validation_warnings.length} row{uploadResult.validation_warnings.length !== 1 ? "s" : ""} with warnings — review before approving
+                        </p>
+                        {uploadResult.validation_warnings.slice(0, 5).map((w, i) => (
+                          <p key={i} className="text-[10px] text-muted-foreground">Row {w.row} ({w.field}): {w.message}</p>
+                        ))}
+                        {uploadResult.validation_warnings.length > 5 && (
+                          <p className="text-[10px] text-muted-foreground">…and {uploadResult.validation_warnings.length - 5} more</p>
+                        )}
+                      </div>
+                    )}
+                    {(uploadResult.currency_warnings ?? []).length > 0 && (
+                      <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-3">
+                        <p className="text-xs font-medium text-orange-600 dark:text-orange-400 mb-1">
+                          {uploadResult.currency_warnings.length} invoice{uploadResult.currency_warnings.length !== 1 ? "s" : ""} with currency mismatch — verify credit limit currency
+                        </p>
+                        {uploadResult.currency_warnings.slice(0, 5).map((w, i) => (
+                          <p key={i} className="text-[10px] text-muted-foreground">{w.invoice_number}: {w.invoice_currency} (expected {w.expected_currency})</p>
+                        ))}
+                        {uploadResult.currency_warnings.length > 5 && (
+                          <p className="text-[10px] text-muted-foreground">…and {uploadResult.currency_warnings.length - 5} more</p>
+                        )}
+                      </div>
                     )}
                   </div>
-                )}
-                {(uploadResult.currency_warnings ?? []).length > 0 && (
-                  <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-3">
-                    <p className="text-xs font-medium text-orange-600 dark:text-orange-400 mb-1">
-                      {uploadResult.currency_warnings.length} invoice{uploadResult.currency_warnings.length !== 1 ? "s" : ""} with currency mismatch — verify credit limit currency
-                    </p>
-                    {uploadResult.currency_warnings.slice(0, 5).map((w, i) => (
-                      <p key={i} className="text-[10px] text-muted-foreground">{w.invoice_number}: {w.invoice_currency} (expected {w.expected_currency})</p>
-                    ))}
-                    {uploadResult.currency_warnings.length > 5 && (
-                      <p className="text-[10px] text-muted-foreground">…and {uploadResult.currency_warnings.length - 5} more</p>
-                    )}
-                  </div>
-                )}
-              </div>
-              <DialogFooter>
-                <Button size="sm" onClick={handleDialogClose}>Done</Button>
-              </DialogFooter>
+                  <DialogFooter>
+                    <Button size="sm" onClick={handleDialogClose}>Done</Button>
+                  </DialogFooter>
+                </>
+              )}
             </>
           )}
         </DialogContent>
