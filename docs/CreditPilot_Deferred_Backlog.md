@@ -1170,3 +1170,13 @@ Full README.md audit ahead of external engineer review, done in two passes since
 - The Security section's pre-production lockdown checklist named 3 of 7 tables that actually have anon write policies today -- added the missing 4 (agent_runs, credit_events, negative_news, sec_monitoring).
 
 **Lesson for future doc audits:** a first pass built from a specific list of things-to-check, however careful, is not the same as full section-by-section coverage -- pass 1's list came from the founder's own read-through plus obvious candidates, and still missed an entire section (Data Ingestion) along with the two most consequential findings of the whole exercise. Worth defaulting to full-document coverage rather than a curated checklist when the stakes include privacy-adjacent claims.
+
+---
+
+## Demo data-integrity vulnerability found and fixed (2026-09-11)
+
+Found while explaining the AR CSV upload flow to the founder in response to a question about what actually happens on upload. Real risk, not theoretical: ar-csv-upload matches rows to existing customers via DUNS or internal_customer_code only. All 59 demo customers have a seeded internal_customer_code, and supabase/seed.sql's own comment documents the exact generation pattern in plain English ("sequential CUST-NNN codes for all 59 customers, alphabetical by company_name") -- now publicly readable in the fresh public repo. A successful match deletes that customer's existing open/overdue invoices before inserting the uploaded rows (confirmed in ar-csv-upload/index.ts). Since the hosted demo is a single shared instance, not per-visitor, anyone could have crafted a CSV using the documented pattern and corrupted the AR data every other visitor sees -- with no automatic recovery, since the Reset Demo button only resets pending_actions and a few processed flags, it doesn't reload invoices from seed.
+
+Fixed (commit 8814cf8): the "Upload AR Data" button stays visible for discoverability, but the modal shows an explanatory message instead of the upload form when DEMO_MODE is true, gated at the top of the dialog so the later mapping/success steps are structurally unreachable, not just visually hidden. Verified live.
+
+Worth noting for whoever picks up further demo-hardening work: this was found by walking through the actual code path in detail while answering a question, not by a dedicated security review -- worth considering whether other demo-writable endpoints (anything hit by a POST from an unauthenticated visitor) deserve the same kind of walkthrough before the demo sees wider traffic.
