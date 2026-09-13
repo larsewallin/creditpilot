@@ -2,6 +2,10 @@
 // CIA regression test runner
 // Usage: node tests/cia/run.mjs
 // Requires: SUPABASE_URL and SUPABASE_ANON_KEY env vars
+// Optional: CIA_INTERNAL_TEST_SECRET (must match the Supabase Edge Function
+//   secret of the same name) -- bypasses cia-agent's per-IP daily question
+//   rate limit, which this harness's 8 questions/run would otherwise exceed.
+//   Without it, the harness runs against the real limit like any visitor.
 
 import { readFile, writeFile, mkdir } from "fs/promises";
 import { resolve, dirname } from "path";
@@ -11,6 +15,7 @@ const __dir = dirname(fileURLToPath(import.meta.url));
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+const CIA_INTERNAL_TEST_SECRET = process.env.CIA_INTERNAL_TEST_SECRET;
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   console.error("Error: SUPABASE_URL and SUPABASE_ANON_KEY must be set.");
@@ -34,6 +39,7 @@ export async function askQuestion(question) {
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      ...(CIA_INTERNAL_TEST_SECRET ? { "x-internal-test-secret": CIA_INTERNAL_TEST_SECRET } : {}),
     },
     body: JSON.stringify({ mode: "question", question }),
   });

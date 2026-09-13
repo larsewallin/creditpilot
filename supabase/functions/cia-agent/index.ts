@@ -890,6 +890,22 @@ async function fetchRelevantData(
   return results;
 }
 
+// Constant-time string comparison for the internal-test-secret check below.
+// Not defending against a realistic threat here (public edge function on
+// shared, cold-starting infra — network+runtime jitter swamps any timing
+// signal a naive === could leak, and the bypassed value is a soft demo
+// cost-control limit, not an auth boundary) — but it's ~10 dependency-free
+// lines that close the question permanently rather than leave it open.
+function timingSafeEqualStr(a: string, b: string): boolean {
+  const enc = new TextEncoder();
+  const aBytes = enc.encode(a);
+  const bBytes = enc.encode(b);
+  if (aBytes.length !== bBytes.length) return false;
+  let diff = 0;
+  for (let i = 0; i < aBytes.length; i++) diff |= aBytes[i] ^ bBytes[i];
+  return diff === 0;
+}
+
 // ─── Main Handler ─────────────────────────────────────────────────────────────
 
 serve(async (req: Request) => {
@@ -970,9 +986,18 @@ serve(async (req: Request) => {
     // DEMO_MODE) so a rejected request costs zero API calls, not just skips
     // the main answer call. demoQuestionCount stays in scope through the
     // success return further down so it can be reported back either way.
+    //
+    // Internal test bypass: the CIA regression harness (tests/cia/run.mjs)
+    // asks 8 questions per run, more than the 5/day limit allows — this isn't
+    // a workaround for that, it's a real shared-secret bypass for internal
+    // tooling, checked before (and independent of) the DEMO_MODE branch below.
+    const testSecret = Deno.env.get("CIA_INTERNAL_TEST_SECRET");
+    const providedSecret = req.headers.get("x-internal-test-secret");
+    const isInternalTest = !!testSecret && !!providedSecret && timingSafeEqualStr(providedSecret, testSecret);
+
     const DEMO_QUESTION_LIMIT = 5;
     let demoQuestionCount: number | null = null;
-    if (DEMO_MODE) {
+    if (DEMO_MODE && !isInternalTest) {
       const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
       try {
         const { data: count, error: rateLimitError } = await supabaseClient.rpc(
