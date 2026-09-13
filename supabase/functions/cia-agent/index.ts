@@ -963,6 +963,41 @@ serve(async (req: Request) => {
     if (!authHeader) return jsonRes({ error: "Unauthorized" }, 401);
     if (!question) return jsonRes({ error: "question is required" }, 400);
 
+    // Server-side rate limit — the only prior protection was a client-side
+    // sessionStorage counter (CIA.tsx), trivially bypassed by a new tab,
+    // incognito, or calling this endpoint directly. Placed before
+    // extractQuestionEntities below (a live Anthropic call regardless of
+    // DEMO_MODE) so a rejected request costs zero API calls, not just skips
+    // the main answer call. demoQuestionCount stays in scope through the
+    // success return further down so it can be reported back either way.
+    const DEMO_QUESTION_LIMIT = 5;
+    let demoQuestionCount: number | null = null;
+    if (DEMO_MODE) {
+      const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+      try {
+        const { data: count, error: rateLimitError } = await supabaseClient.rpc(
+          "fn_increment_ip_question_count",
+          { p_ip_address: ip }
+        );
+        if (rateLimitError) throw rateLimitError;
+        demoQuestionCount = count as number;
+      } catch (err) {
+        // Fail open — a rate-limit DB hiccup shouldn't take down the demo.
+        console.error("Rate limit check failed, allowing request:", err);
+      }
+
+      if (demoQuestionCount !== null && demoQuestionCount > DEMO_QUESTION_LIMIT) {
+        return jsonRes({
+          answer: `You've reached the demo's daily limit of ${DEMO_QUESTION_LIMIT} questions per visitor. This demo runs on real Anthropic API tokens, which cost money per question. To ask unlimited questions, deploy your own instance with your own Anthropic API key — see the [GitHub repo](https://github.com/larsewallin/creditpilot) for setup (about 5 minutes).`,
+          sources: [],
+          confidence: "Low",
+          confidence_reason: "Demo question limit reached.",
+          relatedQuestions: [],
+          demo_question_count: demoQuestionCount,
+        });
+      }
+    }
+
     try {
 
     const anthropic = new Anthropic({ apiKey: Deno.env.get("ANTHROPIC_API_KEY")! });
@@ -1405,6 +1440,7 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one sentence statin
         confidence: meta.confidence,
         confidence_reason: meta.confidence_reason,
         relatedQuestions,
+        ...(DEMO_MODE ? { demo_question_count: demoQuestionCount } : {}),
       });
     } catch (err) {
       console.error("Question mode inner error (Anthropic):", err);

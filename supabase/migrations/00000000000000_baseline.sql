@@ -178,6 +178,21 @@ CREATE TYPE public.scenario_type AS ENUM (
 
 
 --
+-- Name: fn_increment_ip_question_count(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.fn_increment_ip_question_count(p_ip_address text) RETURNS integer
+    LANGUAGE sql
+    AS $$
+  INSERT INTO public.ip_question_counts (ip_address, question_date, question_count)
+  VALUES (p_ip_address, CURRENT_DATE, 1)
+  ON CONFLICT (ip_address, question_date)
+  DO UPDATE SET question_count = ip_question_counts.question_count + 1, updated_at = now()
+  RETURNING question_count;
+$$;
+
+
+--
 -- Name: fn_multi_signal_convergence(boolean); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -882,6 +897,18 @@ ALTER TABLE invoices ADD COLUMN IF NOT EXISTS demo_days_offset integer;
 
 
 --
+-- Name: ip_question_counts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.ip_question_counts (
+    ip_address text NOT NULL,
+    question_date date NOT NULL,
+    question_count integer DEFAULT 0 NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
 -- Name: negative_news; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1549,6 +1576,14 @@ ALTER TABLE ONLY public.invoices
 
 ALTER TABLE ONLY public.invoices
     ADD CONSTRAINT invoices_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: ip_question_counts ip_question_counts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ip_question_counts
+    ADD CONSTRAINT ip_question_counts_pkey PRIMARY KEY (ip_address, question_date);
 
 
 --
@@ -2674,6 +2709,12 @@ ALTER TABLE public.growth_signals ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.invoices ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: ip_question_counts; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.ip_question_counts ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: negative_news; Type: ROW SECURITY; Schema: public; Owner: -

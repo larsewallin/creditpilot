@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-import { DEMO_MODE, CIA_DEMO_QUESTION_LIMIT } from "@/lib/constants";
+import { DEMO_MODE } from "@/lib/constants";
 import { DEMO_ANSWERS } from "@/lib/demoAnswers";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -97,23 +97,11 @@ function AnswerSkeleton({ question }: { question: string }) {
   );
 }
 
-// ─── Demo rate limit helpers ──────────────────────────────────────────────────
-
-const CIA_COUNT_KEY = 'cia_question_count'
-
-function getDemoQuestionCount(): number {
-  if (!DEMO_MODE) return 0
-  return parseInt(sessionStorage.getItem(CIA_COUNT_KEY) ?? '0', 10)
-}
-
-function incrementDemoQuestionCount(): number {
-  if (!DEMO_MODE) return 0
-  const next = getDemoQuestionCount() + 1
-  sessionStorage.setItem(CIA_COUNT_KEY, String(next))
-  return next
-}
-
 // ─── Fallback suggestions ─────────────────────────────────────────────────────
+
+// Display only — enforcement is entirely server-side (cia-agent, per IP per day).
+// Kept here only for the "Demo: N/5" footer text; not read by any logic.
+const DEMO_QUESTION_LIMIT = 5;
 
 const DEMO_SUGGESTIONS = [
   "Which customers have the highest credit risk right now?",
@@ -134,6 +122,9 @@ export default function CIA() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [related, setRelated] = useState<string[]>([]);
+  // Server-derived — set from cia-agent's response (demo_question_count),
+  // never guessed locally. null until the first real (non-canned) answer.
+  const [demoQuestionCount, setDemoQuestionCount] = useState<number | null>(null);
 
   // Fetch answer whenever question changes
   useEffect(() => {
@@ -142,18 +133,6 @@ export default function CIA() {
     setError(null);
     setRelated([]);
     setIsLoading(true);
-
-    if (DEMO_MODE && getDemoQuestionCount() >= CIA_DEMO_QUESTION_LIMIT) {
-      setAnswer({
-        answer: `You've reached the ${CIA_DEMO_QUESTION_LIMIT}-question demo limit. Deploy your own instance of CreditPilot for unlimited access — it takes about 5 minutes. See the [GitHub repo](https://github.com/larsewallin/creditpilot) for instructions.`,
-        sources: [],
-        confidence: 'Low',
-        confidence_reason: 'Demo question limit reached.',
-        relatedQuestions: [],
-      });
-      setIsLoading(false);
-      return;
-    }
 
     if (DEMO_MODE && DEMO_ANSWERS[question]) {
       setAnswer(DEMO_ANSWERS[question]);
@@ -166,7 +145,9 @@ export default function CIA() {
       .then(({ data, error: fnError }) => {
         if (fnError) throw new Error(fnError.message);
         if (data?.error) throw new Error(data.error);
-        incrementDemoQuestionCount();
+        if (DEMO_MODE && typeof data?.demo_question_count === "number") {
+          setDemoQuestionCount(data.demo_question_count);
+        }
         setAnswer(data as CIAAnswer);
       })
       .catch(err => setError(err instanceof Error ? err.message : "Unknown error"))
@@ -325,9 +306,9 @@ export default function CIA() {
         </>
       )}
 
-      {DEMO_MODE && (
+      {DEMO_MODE && demoQuestionCount !== null && (
         <p className="text-xs text-muted-foreground text-center mt-4">
-          Demo: {getDemoQuestionCount()}/{CIA_DEMO_QUESTION_LIMIT} questions used
+          Demo: {Math.min(demoQuestionCount, DEMO_QUESTION_LIMIT)}/{DEMO_QUESTION_LIMIT} questions used
         </p>
       )}
     </div>
