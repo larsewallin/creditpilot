@@ -66,7 +66,7 @@ export function CIAChat() {
   return (
     <>
       {/* ── Fixed bottom bar ─────────────────────────────────────────────── */}
-      <div className="fixed bottom-0 left-64 right-0 z-50 bg-background border-t border-border">
+      <div className="fixed bottom-0 left-0 md:left-64 right-0 z-50 bg-background border-t border-border">
         {/* Suggestion list — expands upward */}
         {isOpen && suggestions.length > 0 && (
           <div className="max-w-3xl mx-auto px-4 pt-2 pb-1">

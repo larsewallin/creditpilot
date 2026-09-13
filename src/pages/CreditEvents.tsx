@@ -155,7 +155,7 @@ export default function CreditEvents() {
                 destination && "cursor-pointer hover:bg-secondary/30 transition-colors"
               )}
             >
-              <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <SeverityBadge severity={evt.severity} />
@@ -174,7 +174,7 @@ export default function CreditEvents() {
                     <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{evt.description}</p>
                   )}
                 </div>
-                <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0">
+                <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0 mt-1">
                   {relativeTime(evt.created_at)}
                 </span>
               </div>
