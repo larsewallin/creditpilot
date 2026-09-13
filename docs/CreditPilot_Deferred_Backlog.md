@@ -1180,3 +1180,15 @@ Found while explaining the AR CSV upload flow to the founder in response to a qu
 Fixed (commit 8814cf8): the "Upload AR Data" button stays visible for discoverability, but the modal shows an explanatory message instead of the upload form when DEMO_MODE is true, gated at the top of the dialog so the later mapping/success steps are structurally unreachable, not just visually hidden. Verified live.
 
 Worth noting for whoever picks up further demo-hardening work: this was found by walking through the actual code path in detail while answering a question, not by a dedicated security review -- worth considering whether other demo-writable endpoints (anything hit by a POST from an unauthenticated visitor) deserve the same kind of walkthrough before the demo sees wider traffic.
+
+---
+
+## CIA question-mode had zero server-side rate limiting -- found and fixed (2026-09-13)
+
+Found while explaining to the founder how the demo's "5 question" limit worked. It didn't, not really: the only protection was a client-side sessionStorage counter in CIA.tsx, trivially bypassed by a new tab, incognito mode, or calling the cia-agent endpoint directly (the same way this project's own testing has been calling it via curl all session). The question-answering endpoint makes a real, paid Anthropic API call per request with no server-side cap of any kind -- a genuinely unbounded financial exposure on a fully public, unauthenticated endpoint.
+
+**Fixed in two commits:**
+1. (ca23740) Real server-side enforcement: new ip_question_counts table + fn_increment_ip_question_count atomic RPC enforce 5 questions per IP per day, checked before the first Anthropic call (extractQuestionEntities) so a rejected request costs nothing, only active when DEMO_MODE is true. Fails open on a DB error so a transient hiccup doesn't take the whole demo down. Removed the old client-side counter entirely; the "Demo: N/5" footer is now driven by a demo_question_count field the server returns on every response, not a locally-guessed number.
+2. (0aa7a07) Found immediately after shipping #1: the CIA regression harness (8 questions/run) exceeds the new 5/day limit, so questions 6-8 failed on every run regardless of whose IP it's on -- confirmed live via a real harness run. Added a CIA_INTERNAL_TEST_SECRET shared-secret bypass, checked via constant-time comparison against an x-internal-test-secret header, independent of DEMO_MODE. Verified end-to-end: generated a real secret, deployed, confirmed 8/8 harness questions pass with it set.
+
+Both fixes verified live, not just type-checked. Harness passes 8/8 with the bypass secret configured.
