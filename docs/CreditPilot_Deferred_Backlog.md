@@ -1198,3 +1198,20 @@ Both fixes verified live, not just type-checked. Harness passes 8/8 with the byp
 Rather than guess at a new number, measured real cost data first: added temporary logging to both Anthropic calls in question mode (extractQuestionEntities and the main answer call), ran the harness's 8 varied real questions, and pulled the actual usage objects Anthropic's API returns from Supabase's function logs. Real findings: input context size varies widely by question type (2,561 to 27,705 characters observed, roughly 4-12k tokens once combined with the entity-extraction call), averaging ~7,400 input tokens and ~213 output tokens per question. At Haiku 4.5 pricing ($1/M input, $5/M output), that's about $0.0085 per question -- well under a cent. Even a full worst-case month (100 users, all maxing out 20 questions/day, every day) would cost roughly $510 -- a real but comfortable ceiling given how unrealistic that scenario is in practice.
 
 Given the actual cost per question is negligible, raised the daily limit to 10 -- enough headroom for a real multi-device household to use the demo normally without hitting the wall the way this session's own testing did. Temporary logging fully removed afterward (confirmed via an empty git diff against the last committed state before redeploying clean).
+
+---
+
+## ARCHITECTURE.md full accuracy audit (2026-09-13, commit d602191)
+
+Prompted by the founder asking for an accurate recap of the edge-function architecture to answer an engineer's question -- rather than answer from the doc as-is, did a full section-by-section verification pass matching the two-pass README audit's rigor. Found several errors as serious as anything in that earlier audit, not just staleness:
+
+- System diagram falsely showed ar-aging-agent calling the Anthropic API -- it makes zero external calls (confirmed pure signal agent).
+- "All four agents share a common pattern" was actually only true for 3 of the 5 real edge functions -- cia-agent has no rate limit or self-reset logic at all, and ar-csv-upload isn't a monitoring agent in any sense. Restructured into three separate, accurately-scoped sections rather than one false generalization.
+- Shared skills table was missing 6 of 14 real skills, including classify-news -- the single most heavily-used generative skill in the system (called by news-monitor-agent for every classification).
+- deliver-message's description undersold what's built: Email/Teams/Slack providers are all already implemented and wired via env-var selection in cia-agent, not merely "extensible."
+- Event-flow diagram described the composite-risk/briefing pipeline as working -- matches the same broken/deferred pathway found and documented in today's earlier README fix (see the "composite-risk/briefing pipeline is silently broken" entry above).
+- RLS anon-write table list was missing 3 of 7 tables with real open write access -- the exact same gap, and the exact same 3 missing tables (agent_runs, negative_news, sec_monitoring), found in the README audit.
+
+Also added the newer per-IP question-mode rate limit as its own documented mechanism (previously undocumented anywhere), and fixed several smaller factual errors (env var count, Actions.tsx's approve-vs-reject behavior, the baseline.sql "single migration" claim already known to be false from the README audit).
+
+**Pattern worth noting for future maintenance:** README.md and ARCHITECTURE.md shared several of the exact same stale claims (the single-baseline claim, the incomplete RLS table list) -- these two docs were likely accurate together at some point and have since drifted in parallel. When one is corrected, worth checking whether the other makes the same claim before assuming it's already fine.
