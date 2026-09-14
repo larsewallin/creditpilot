@@ -11,11 +11,12 @@ Supabase Postgres ◄───────────────────�
     │                                             │
     │  supabase.functions.invoke(...)             │ writes
     ▼                                             │
-Supabase Edge Functions (Deno)                    │
-    ├── ar-aging-agent    ──► Anthropic Claude API │
-    ├── news-monitor-agent ──► Tavily + Claude API │
-    ├── sec-monitor-agent  ──► SEC EDGAR API       │
-    └── cia-agent          ──► Anthropic Claude API┘
+Supabase Edge Functions (Deno)                      │
+    ├── ar-aging-agent     (no external API calls)  │
+    ├── news-monitor-agent ──► Tavily + Claude API   │
+    ├── sec-monitor-agent  ──► SEC EDGAR API         │
+    ├── cia-agent          ──► Anthropic Claude API  │
+    └── ar-csv-upload      (CSV ingestion endpoint)  ┘
 ```
 
 There is no separate API server. The React frontend queries Postgres directly via the Supabase client (PostgREST). Agents are invoked by the frontend via `supabase.functions.invoke` and write their results to shared Postgres tables.
@@ -26,14 +27,14 @@ There is no separate API server. The React frontend queries Postgres directly vi
 
 Built with React 18, Vite, TypeScript, Tailwind CSS, and shadcn/ui. Routing is React Router v6. Data fetching uses TanStack Query (React Query).
 
-The frontend is deployed to Vercel. It connects to Supabase via two environment variables: `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`.
+The frontend is deployed to Vercel. It reads three environment variables: `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` (Supabase connection) and `VITE_DEMO_MODE` (read directly in `lib/constants.ts`).
 
 ### Key pages
 
 | Route | File | Purpose |
 |-------|------|---------|
 | `/events` | `CreditEvents.tsx` | Central signal log — default landing page |
-| `/actions` | `Actions.tsx` | Pending action queue (from `pending_actions`); approve/reject writes an audit row to `credit_actions` |
+| `/actions` | `Actions.tsx` | Pending action queue (from `pending_actions`); approve writes an audit row to `credit_actions` — reject only updates `pending_actions.status`, no `credit_actions` row |
 | `/aging` | `ArAging.tsx` | AR aging dashboard |
 | `/news` | `NewsMonitor.tsx` | Negative news alert feed |
 | `/sec` | `SecFilings.tsx` | SEC filing monitoring with EDGAR links |
@@ -56,17 +57,33 @@ The frontend is deployed to Vercel. It connects to Supabase via two environment 
 
 ## Edge functions
 
-All four agents are Supabase Edge Functions written in TypeScript/Deno. They share a common pattern:
+There are 5 Supabase Edge Functions written in TypeScript/Deno, but they do not all share one common pattern — confirmed directly against each function's code, not assumed from the fact that 3 of them look similar. Described separately below rather than as one false "all agents" generalization.
+
+### The 3 monitoring agents (ar-aging-agent, news-monitor-agent, sec-monitor-agent)
+
+These three genuinely share the same pattern, confirmed line-for-line in each:
 
 1. **OPTIONS preflight** — return CORS headers immediately.
-2. **Rate limit** — reject requests if a completed/running run exists within the past 60 minutes (HTTP 429).
+2. **Rate limit** — reject requests if a completed/running run exists within the past 60 minutes (HTTP 429). `RATE_LIMIT_MINUTES = 60` in all three.
 3. **DEMO_MODE self-reset** — if `Deno.env.get("DEMO_MODE") === "true"`, the agent first clears its own prior demo-tagged output (credit_events + its working table, e.g. negative_news/sec_filings) so re-running the demo regenerates a clean, repeatable result instead of stacking duplicates or silently deduping to nothing. Production never self-deletes.
 4. **Insert `agent_runs` row** — status `running`.
-5. **Fetch source data** — at this single point, monitoring agents branch `DEMO_MODE ? seed table : live source` (news/SEC only — AR aging has no seed/live split since its data source, invoices, is internal to the system either way).
+5. **Fetch source data** — at this single point, these agents branch `DEMO_MODE ? seed table : live source` (news/SEC only — AR aging has no seed/live split since its data source, invoices, is internal to the system either way).
 6. **Process and emit** — every downstream step (classification, risk detection, severity scoring) is identical in demo and production. Events are written via `publishEvent` (validated payloads, severity reconciliation, correlation_id) — this is the only path allowed to write to `credit_events`. Every inserted row is stamped `is_demo: DEMO_MODE`.
 7. **Update `agent_runs`** — status `completed` or `failed`.
 
-**Important:** demo mode is not a bypass. All three monitoring agents run their real detection/classification/emission logic against seed data in demo — no pre-baked run logs, no skipped API calls (except the deliberate `DEMO_MODE`-gated cost controls noted per-agent in `docs/AGENTS.md`, e.g. News agent skipping live Tavily calls in favor of seed articles).
+**Important:** demo mode is not a bypass. All three run their real detection/classification/emission logic against seed data in demo — no pre-baked run logs, no skipped API calls (except the deliberate `DEMO_MODE`-gated cost controls noted per-agent in `docs/AGENTS.md`, e.g. News agent skipping live Tavily calls in favor of seed articles).
+
+### cia-agent — does not follow the pattern above
+
+Confirmed directly: `cia-agent` has no `RATE_LIMIT_MINUTES`/HTTP 429 gate anywhere in its code, and no DEMO_MODE self-reset delete logic. Its `agent_runs` usage is different in kind, not degree:
+
+- **`briefing` mode** (default): in demo, upserts a single fixed demo run row for display purposes (not a gate). In production, reads the *other three* agents' `agent_runs` history to compute a `stale_agents` list for the briefing (via a per-agent cache TTL: 24h for ar-aging-agent, 4h for news-monitor-agent, 48h for sec-monitor-agent) — this is a staleness signal, not a self-rate-limit — then writes its own `agent_runs` row as a plain audit record, with no reject-if-recent check guarding it.
+- **`question` mode**: no `agent_runs` interaction at all. Instead, enforces a **separate, newer mechanism**: a 10-questions-per-IP-per-day limit (`ip_question_counts` table + `fn_increment_ip_question_count` atomic RPC), active only when `DEMO_MODE` is true, checked before the first Anthropic call so a rejected request costs nothing. An `x-internal-test-secret` header (checked via constant-time comparison against the `CIA_INTERNAL_TEST_SECRET` Supabase secret) bypasses this for internal tooling, independent of `DEMO_MODE`.
+- **`suggestions` mode**: no rate limit of any kind.
+
+### ar-csv-upload — a CSV ingestion endpoint, not a monitoring agent
+
+Confirmed directly: no `agent_runs` interaction, no rate limit, no `DEMO_MODE` self-reset — none of the monitoring-agent pattern applies. It resolves each uploaded row's customer via `customer_identifiers` (DUNS, then `internal_customer_code`; unresolvable rows are rejected, not name-matched), replaces that customer's open/overdue invoices, and refreshes `ar_aging_snapshots`. See "AR data ingestion" under Event flow below.
 
 ### Shared skills
 
@@ -78,16 +95,22 @@ Reusable logic in `supabase/functions/_shared/skills/`:
 | `parse-ar-csv` | Analytical | Parses uploaded AR aging CSVs — ERP column-alias mapping, date/amount normalization, validation warnings |
 | `calculate-credit-limit-proposal` | Analytical | Determines whether to reduce a credit limit and by how much |
 | `assess-composite-risk` | Analytical | Flags customers with corroborating signals from multiple agents |
+| `aggregate-credit-scores` | Analytical | Combines multiple providers' credit signals into one aggregate score |
+| `detect-rating-change` | Analytical | Detects and classifies a credit rating change between two snapshots |
+| `normalise-credit-signal` | Analytical | Converts any provider's credit score to a common 0–100 scale |
 | `fetch-sec-filing` | Integration | Fetches recent SEC filings via EDGAR API; detects risk keywords |
-| `deliver-message` | Integration | Provider-agnostic message delivery (Teams today; Slack/email extensible) |
+| `fetch-credit-score` | Integration | Provider-agnostic credit score fetcher; stubbed providers, not currently wired into any agent |
+| `search-news` | Integration | Provider-agnostic news search with deduplication; used by news-monitor-agent |
+| `deliver-message` | Integration | Provider-agnostic message delivery — `LogProvider`, `EmailProvider`, `TeamsProvider`, and `SlackProvider` are all already implemented and wired (cia-agent's credit-decisioning path selects between them based on which of `SENDGRID_API_KEY`/`TEAMS_WEBHOOK_URL`/`SLACK_WEBHOOK_URL` are set) |
 | `compose-dunning-letter` | Generative | Calls Claude to draft a staged (1–4) dunning letter. **Not currently invoked by any agent** — the overdue-AR detection (`OVERDUE_AR`) is built and live, but the notification/letter-composition phase that would consume it is still on the roadmap. |
-| `compose-teams-alert` | Generative | Composes a Microsoft Teams adaptive card alert |
+| `compose-teams-alert` | Generative | Pure text formatting (no external calls) — produces a subject/body pair suitable for Teams or email delivery, not an actual Teams Adaptive Card JSON payload |
+| `classify-news` | Generative | Calls Claude Haiku to classify article severity with a strict JSON schema; used by news-monitor-agent for every classification |
 
 ---
 
 ## Database
 
-Supabase Postgres. Schema lives in `supabase/migrations/00000000000000_baseline.sql` — a single self-contained baseline dumped from the live schema (not an incremental migration chain). Prior migration history (57 files) is preserved for reference in `supabase/migrations_archive/` but is no longer applied. Demo seed data is separate, in `supabase/seed.sql`, loaded independently of the schema (`supabase db push` then `psql -f supabase/seed.sql`).
+Supabase Postgres. Schema is defined by `supabase/migrations/00000000000000_baseline.sql` (a full dump of the live schema at the time it was created) plus a real, growing chain of dated migrations layered on top of it since — no longer a single self-contained baseline; both are applied in filename order by `supabase db push`. Prior (pre-baseline) migration history (57 files) is preserved for reference in `supabase/migrations_archive/` but is no longer applied. Demo seed data is separate, in `supabase/seed.sql`, loaded independently of the schema (`supabase db push` then `psql -f supabase/seed.sql`).
 
 ### Core tables
 
@@ -106,6 +129,7 @@ Supabase Postgres. Schema lives in `supabase/migrations/00000000000000_baseline.
 | `sec_monitoring` | Companies watched for SEC filing alerts |
 | `sec_filings` | Fetched SEC filings with extracted risk signals |
 | `payment_transactions` | Payment history used by the AR Aging Agent's payment-behaviour skill |
+| `ip_question_counts` | Per-IP, per-day question-mode counters for cia-agent's rate limit (`ip_address`, `question_date`, `question_count`) |
 
 ### Key views
 
@@ -141,8 +165,11 @@ Frontend calls supabase.functions.invoke('cia-agent', {mode:'briefing'})
 cia-agent reads credit_events where cia_processed = false
     │
     ├──► calls Claude (live) or returns demo briefing content
-    ├──► writes DAILY_BRIEFING event
-    ├──► writes COMPOSITE_RISK_CRITICAL / COMPOSITE_RISK_ELEVATED for multi-signal customers
+    ├──► attempts to write DAILY_BRIEFING / COMPOSITE_RISK_CRITICAL / COMPOSITE_RISK_ELEVATED
+    │        events — confirmed BROKEN: these event_type values aren't in the
+    │        credit_events CHECK constraint, so every insert silently fails
+    │        (error only console.error'd). Zero such rows exist in production.
+    │        Deferred to v3/v4 — see docs/CreditPilot_Deferred_Backlog.md.
     ├──► writes pending_actions (proposed actions) ← sole owner
     └──► marks source events cia_processed = true
     │
@@ -162,7 +189,7 @@ User reviews /actions, approves/rejects
 
 The demo uses open RLS policies so anyone can interact with the demo data without signing in. Before loading real company data:
 
-1. Remove anon write policies from `pending_actions`, `customers`, `credit_events`, `credit_actions`.
+1. Remove anon write policies from `pending_actions`, `customers`, `credit_events`, `credit_actions`, `agent_runs`, `negative_news`, `sec_monitoring` (confirmed live: these 7 tables currently have anon write access).
 2. Add Supabase Auth.
 3. Use a dedicated Supabase project — not the demo project.
 
