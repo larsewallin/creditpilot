@@ -987,15 +987,16 @@ serve(async (req: Request) => {
     // the main answer call. demoQuestionCount stays in scope through the
     // success return further down so it can be reported back either way.
     //
-    // Internal test bypass: the CIA regression harness (tests/cia/run.mjs)
-    // asks 8 questions per run, more than the 5/day limit allows — this isn't
-    // a workaround for that, it's a real shared-secret bypass for internal
-    // tooling, checked before (and independent of) the DEMO_MODE branch below.
+    // Internal test bypass: a real shared-secret bypass for internal tooling
+    // (e.g. the CIA regression harness, tests/cia/run.mjs), checked before
+    // (and independent of) the DEMO_MODE branch below — not tied to any
+    // specific question count, so it stays correct if the harness or the
+    // daily limit changes size independently of each other.
     const testSecret = Deno.env.get("CIA_INTERNAL_TEST_SECRET");
     const providedSecret = req.headers.get("x-internal-test-secret");
     const isInternalTest = !!testSecret && !!providedSecret && timingSafeEqualStr(providedSecret, testSecret);
 
-    const DEMO_QUESTION_LIMIT = 5;
+    const DEMO_QUESTION_LIMIT = 10;
     let demoQuestionCount: number | null = null;
     if (DEMO_MODE && !isInternalTest) {
       const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";

@@ -100,8 +100,8 @@ function AnswerSkeleton({ question }: { question: string }) {
 // ─── Fallback suggestions ─────────────────────────────────────────────────────
 
 // Display only — enforcement is entirely server-side (cia-agent, per IP per day).
-// Kept here only for the "Demo: N/5" footer text; not read by any logic.
-const DEMO_QUESTION_LIMIT = 5;
+// Kept here only for the "Demo: N/10" footer text; not read by any logic.
+const DEMO_QUESTION_LIMIT = 10;
 
 const DEMO_SUGGESTIONS = [
   "Which customers have the highest credit risk right now?",

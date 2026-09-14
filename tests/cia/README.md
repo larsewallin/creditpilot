@@ -10,7 +10,7 @@ Set environment variables:
     export SUPABASE_ANON_KEY="<anon key from Supabase dashboard>"
     export CIA_INTERNAL_TEST_SECRET="<value from Supabase Edge Function secrets>"
 
-`CIA_INTERNAL_TEST_SECRET` is optional but strongly recommended: cia-agent enforces a 5-question-per-IP-per-day limit whenever `DEMO_MODE` is true, and this harness asks 8 questions per run -- without the secret, questions 6-8 will fail against the real limit on every run. Setting it sends a matching `x-internal-test-secret` header that bypasses the limit entirely for this harness.
+`CIA_INTERNAL_TEST_SECRET` is optional but strongly recommended: cia-agent enforces a 10-question-per-IP-per-day limit whenever `DEMO_MODE` is true, shared with real visitors on that same IP. Setting it sends a matching `x-internal-test-secret` header that bypasses the limit entirely for this harness, so test runs never eat into or get blocked by that quota, regardless of how many questions the harness or the daily limit grow to.
 
 This must match the `CIA_INTERNAL_TEST_SECRET` value set in Supabase (Dashboard -> Edge Functions -> Manage secrets). If it isn't set there yet, generate one with:
 
