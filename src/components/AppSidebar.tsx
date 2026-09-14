@@ -23,7 +23,7 @@ export function AppSidebar() {
   });
 
   return (
-    <aside className="w-64 h-screen overflow-y-auto bg-sidebar flex flex-col shrink-0">
+    <aside className="w-64 h-dvh overflow-y-auto bg-sidebar flex flex-col shrink-0">
       <div className="p-5 border-b border-sidebar-border">
         <h1 className="text-sidebar-foreground font-semibold text-base">CreditPilot</h1>
       </div>
