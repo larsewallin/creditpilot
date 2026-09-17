@@ -29,7 +29,10 @@
  * Rate limit: 60 minutes between runs (HTTP 429 if exceeded).
  * Demo mode:  Returns a pre-baked run log. No rows written.
  *             Controlled by DEMO_MODE=true Supabase secret.
- * Max customers per run: 10.
+ * Max customers per run: 10 live (real sequential EDGAR HTTP calls), 200 in
+ *   demo (indexed Postgres lookup only, no external calls) — see
+ *   MAX_CUSTOMERS_PER_RUN_LIVE / MAX_CUSTOMERS_PER_RUN_DEMO. Ordered by
+ *   last_checked_at ascending so coverage rotates fairly under the live cap.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.98.0";
 import { fetchSecFilings, fetchSeedSecFilings } from "../_shared/skills/integration/fetch-sec-filing.ts";
@@ -43,7 +46,15 @@ const corsHeaders = {
 };
 
 const RATE_LIMIT_MINUTES = 60;
-const MAX_CUSTOMERS_PER_RUN = 10;
+// Live: real, sequential EDGAR HTTP calls per customer (submissions + per-filing
+// index/document fetches) — a genuine execution-time and courtesy-rate-limit
+// concern against a third-party API, so kept conservative.
+// Demo: fetchSeedSecFilings is a single indexed Postgres lookup against a 2-row
+// seed table — zero external calls, so the cap is only a generous backstop, not
+// a real constraint. Sized comfortably above the current 47 monitored customers
+// so every one is genuinely reprocessed every run, not an arbitrary subset.
+const MAX_CUSTOMERS_PER_RUN_LIVE = 10;
+const MAX_CUSTOMERS_PER_RUN_DEMO = 200;
 const CREDIT_TEAM_EMAIL = Deno.env.get("CREDIT_TEAM_EMAIL") ?? "credit-team@company.com";
 
 Deno.serve(async (req) => {
@@ -109,12 +120,20 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // 1. Load monitored customers (with customer join, is_demo filter, max 10)
+    // 1. Load monitored customers (with customer join, is_demo filter, capped).
+    //    Ordered by last_checked_at ascending (nulls first) so the customers
+    //    that have gone longest without a check are processed first — a
+    //    self-balancing rotation. This matters for the live cap (still real
+    //    and below the customer count): a flat customer_id sort with a static
+    //    limit would freeze on the same subset forever. It's a no-op for the
+    //    demo cap, which is sized above the whole customer set anyway.
+    const maxCustomersPerRun = DEMO_MODE ? MAX_CUSTOMERS_PER_RUN_DEMO : MAX_CUSTOMERS_PER_RUN_LIVE;
     const { data: monitoring, error: monitoringError } = await supabase
       .from("sec_monitoring")
       .select("id, customer_id, cik, risk_signals_detected, customers!inner(company_name)")
       .eq("is_demo", DEMO_MODE)
-      .limit(MAX_CUSTOMERS_PER_RUN);
+      .order("last_checked_at", { ascending: true, nullsFirst: true })
+      .limit(maxCustomersPerRun);
     if (monitoringError) {
       console.error("sec_monitoring query failed:", JSON.stringify(monitoringError));
     }
@@ -307,6 +326,15 @@ Deno.serve(async (req) => {
           updatePayload.alert_triggered = true;
           updatePayload.alert_date      = now.slice(0, 10);
           updatePayload.risk_signals_detected = [...new Set(newRiskSignals)];
+        } else {
+          // No qualifying risk signal found this run — actively clear any
+          // previously-set alert state rather than leaving it stale. Without
+          // this, a customer whose condition resolved (or whose evidence was
+          // reset and is being freshly re-evaluated) would show a permanently
+          // frozen "Alert Active" with no backing credit_events/sec_filings.
+          updatePayload.alert_triggered = false;
+          updatePayload.alert_date      = null;
+          updatePayload.risk_signals_detected = [];
         }
         await supabase.from("sec_monitoring")
           .update(updatePayload)
