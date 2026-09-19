@@ -243,7 +243,7 @@ B0 (demo data rebuild) is done. B4 (taxonomy pass) is done. **B5 (V1 risk-rankin
 
 **Small / housekeeping (do anytime):**
 - B3 (publishEvent run_id passthrough — committed to, just not scheduled).
-- **q4_negative_news is intermittently flaky on `min_sources >= 2`.** The model sometimes structures 2 NEWS_EVENT sources in the formal array (Arconic + Triumph), sometimes only 1, even though the answer prose consistently names multiple negative-news customers with rich data. Observed at least twice. Re-running typically clears it. Options when convenient: lower `min_sources` to 1, or add a "must_mention" content check. Don't lower the bar mid-task; do this as deliberate test maintenance.
+- **q4_negative_news flakiness -- RESOLVED, confirmed 2026-09-19.** tests/cia/questions.json's q4 already has `min_sources: 1` and `must_mention: ["Arconic"]` only (not requiring both Arconic and Triumph structured as sources) -- exactly the fix this item proposed. Applied at some point without a closing note; verified directly in the current questions.json, no code change needed.
 
 **Then:** engineer audit of the repo.
 
