@@ -35,6 +35,7 @@ export interface PublishEventInput {
   summary?: string;
   payload: Record<string, unknown>;
   is_demo?: boolean;
+  run_id?: string | null;
 }
 
 export interface PublishEventResult {
@@ -134,6 +135,7 @@ export async function publishEvent(input: PublishEventInput): Promise<PublishEve
     summary: input.summary ?? null,
     payload: validatedPayload,
     is_demo: input.is_demo ?? false,
+    run_id: input.run_id ?? null,
   });
 
   if (error) {
