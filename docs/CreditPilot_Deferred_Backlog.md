@@ -209,8 +209,8 @@ Why deferred until after B4: severity_score values across event types are an inp
 **D0. Demo repeatability (state reset). (NEW — found during News refactor.)**
 Demo re-runs are not repeatable: an agent dedups against its working table (negative_news for News, sec_filings for SEC) by fingerprint/accession, so the FIRST demo run produces events but subsequent runs skip everything already inserted and produce nothing new. This is CORRECT production behaviour (don't re-emit the same finding every run) but makes demo non-repeatable without a manual reset (we cleared the fingerprinted negative_news rows by hand to re-verify). Fix: a demo-only state reset at the start of a run — `if (DEMO_MODE) { clear the demo-generated rows for the seed entities }` — so re-running the demo always regenerates the full set. MUST be gated on DEMO_MODE so production is unchanged (the single DEMO_MODE flag stays the only demo/prod difference). Applies to SEC and News alike — do it uniformly, ideally as a small shared helper, when convenient.
 
-**D0b. Stale hand-placed negative_news demo rows. (NEW — found during News refactor.)**
-negative_news contains ~32 old hand-placed demo rows from 2026-02-27 (Spirit, Rite Aid, Yellow, McDermott, Proterra, etc.) plus a few from April/May, all with NULL content_fingerprint (not pipeline-generated). These predate the seed_news→pipeline approach. They should be cleaned out so demo news data = pipeline output only. BEFORE deleting: confirm the harness (q4 negative_news) doesn't depend on any of them — q4 currently passes reading the pipeline-generated rows, but verify. Low priority, data-hygiene.
+**D0b. Stale hand-placed negative_news demo rows. — RESOLVED (confirmed live 2026-09-19).**
+Queried live: 0 rows with NULL content_fingerprint, 5 of 5 negative_news rows (is_demo=true) are pipeline-generated. The ~32 stale hand-placed rows this item described are gone -- most likely cleaned up as a side effect of some later data pass (B0 rebuild or one of the seed.sql re-dumps), never called out by name. No action needed.
 
 
 **D1. Muted/suppressed flag.**
