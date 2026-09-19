@@ -70,7 +70,7 @@ And in the middle of all of it is the CIA, accessible from anywhere through a se
 
 ## Who's building this
 
-I have spent the last two decades in trade and receivables finance. By day I work in trade credit insurance at Coface and at night I take a stab at this project to try and push the limits on what's possible to build. I'm not married to a specific model, but this project has been built mainly using Claude Code.
+Hi, I'm Lars. I have spent the last two decades in trade and receivables finance. By day I work in trade credit insurance at Coface and at night I take a stab at this project to try and push the limits on what's possible to build. I'm not married to a specific model, but this project has been built mainly using Claude Code.
 
 Follow along as new agents ship, or reach out if trade credit insurance is relevant to your business.
 
