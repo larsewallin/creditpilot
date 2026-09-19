@@ -242,7 +242,6 @@ DATABASE_URL (with password) may be sitting in ~/.zshrc in plaintext. Acceptable
 B0 (demo data rebuild) is done. B4 (taxonomy pass) is done. **B5 (V1 risk-ranking encoding) is also done** — see the confirmation entry below; this section was stale and still listed both as pending.
 
 **Small / housekeeping (do anytime):**
-- F1-F4 AR-aging bugs from B0 Phase 4 (pre-petition double-counting in mid-range buckets, days_overdue staleness in fn_refresh_ar_aging, amount vs amount_paid in the payment-behaviour skill, total_outstanding excluding pre-petition amounts).
 - B3 (publishEvent run_id passthrough — committed to, just not scheduled).
 - **q4_negative_news is intermittently flaky on `min_sources >= 2`.** The model sometimes structures 2 NEWS_EVENT sources in the formal array (Arconic + Triumph), sometimes only 1, even though the answer prose consistently names multiple negative-news customers with rich data. Observed at least twice. Re-running typically clears it. Options when convenient: lower `min_sources` to 1, or add a "must_mention" content check. Don't lower the bar mid-task; do this as deliberate test maintenance.
 
@@ -313,6 +312,8 @@ Applies to any future drops (e.g. the still-deferred `ticker`/`sec_cik` → cust
 - **F5 — RESOLVED** (migration 20260607234500). Catch-up migration adds the 6 unmigrated sec_monitoring columns + drops the stale ai_risk_score/ai_summary/risk_signals so a fresh rebuild matches live. No-op against current live.
 
 F2 remains open (frozen demo aging time — tied to a future time-anchoring pass).
+
+**F2 — RESOLVED, note above was stale (confirmed 2026-09-19).** Closed by two later, unrelated fixes that this F-series summary was never updated to reflect: the 2026-08-11 "AR Aging page / Credit Events desync" fix rewrote v_ar_aging_current/v_ar_aging_portfolio to compute aging buckets live from invoices.due_date on every query (migration 20260811000000), and the 2026-08-14 "Demo invoice date staleness — permanent fix" added demo_days_offset + fn_reset_demo_invoice_dates(), wired into initDemo.ts so every demo reset re-anchors due_date = CURRENT_DATE + offset. Together: the views can't go stale (always live), and the underlying dates can't go stale (auto re-anchor on reset). All of F1-F5 is now closed; nothing open in the F-series.
 
 ---
 
