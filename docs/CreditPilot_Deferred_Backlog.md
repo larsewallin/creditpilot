@@ -376,22 +376,13 @@ Replaced the LLM-generated sources panel with deterministic sources built from f
 
 ---
 
-## B3 — publishEvent run_id passthrough (DEFERRED, but COMMITTED to do — not optional)
+## B3 — publishEvent run_id passthrough — RESOLVED (2026-09-19)
 
-**Status check (2026-09-19): partially done, not complete.** The schema half already exists — `credit_events.run_id uuid` (nullable) with an FK to `agent_runs(id)` is in baseline.sql today. But `publishEvent.ts`'s `PublishEventInput` interface has no `run_id` field, and none of the agent call sites (AR, News, SEC) pass one — confirmed via direct grep, zero matches. So every `credit_events` row's `run_id` is silently NULL today; the column exists but nothing writes to it. Steps 2-5 below (the actual passthrough wiring) are still genuinely open.
+**Wired and verified live.** `publishEvent.ts`'s `PublishEventInput` interface now accepts an optional `run_id`, written into the credit_events insert as `run_id ?? null`. All 6 publishEvent call sites across ar-aging-agent, news-monitor-agent (both the main path and legacyPath, which already receives run_id as a function parameter), and sec-monitor-agent now pass their existing per-run `run_id` variable (each agent already creates one via `crypto.randomUUID()` at run start for its own agent_runs row) -- confirmed via grep, all 6 call sites patched, zero missed. Commit 7e6d51a.
 
-**Decision (2026-06-17):** add `run_id` to credit_events so every event traces back to the agent run that produced it. This IS wanted (traceability for debugging + audit) — deferred only on timing, not on whether to do it.
+**Verified end-to-end, not just type-checked:** `deno check` clean on all 4 touched files, deployed (ar-aging-agent, news-monitor-agent, sec-monitor-agent -- publishEvent.ts is shared code bundled into each, not a standalone function), then manually triggered a real ar-aging-agent run and confirmed live: the 5 freshly-emitted credit_events rows all carry `run_id = 75da3d57-8d8d-4125-a825-36a467b2f5d9`, exactly matching the run_id the agent's own response returned. All 5 steps from the original scope are done.
 
-**Why deferred, not done now:** cross-cutting change (schema + publishEvent interface + all three agents pass run_id) with no immediate consumer yet. Best done right before/during the engineer audit, when the trace is actually used.
-
-**Scope when done:**
-1. Migration: add nullable `run_id uuid` to credit_events (nullable so historical rows are fine).
-2. publishEvent: add optional `run_id` param, write it to the row.
-3. Each agent (AR, News, SEC): pass run_id (already created at run start) into every publishEvent call.
-4. Verify EVERY publishEvent call site passes run_id (grep all calls — a missed one = silent null, the drift class we keep catching). After wiring, confirm 0 nulls among freshly-emitted demo events.
-5. Confirm credit_events.run_id matches the agent_runs row.
-
-**Not blocking anything.** Pick up when the audit is near.
+**Decision (2026-06-17):** add `run_id` to credit_events so every event traces back to the agent run that produced it. This IS wanted (traceability for debugging + audit).
 
 ---
 
