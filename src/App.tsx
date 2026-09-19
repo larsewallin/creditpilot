@@ -57,7 +57,7 @@ function SidebarLayout() {
         </SheetContent>
       </Sheet>
 
-      <main className="flex-1 p-6 overflow-auto">
+      <main className="flex-1 p-6 pb-20 overflow-auto">
         <Button
           size="icon"
           variant="ghost"
