@@ -237,16 +237,13 @@ DATABASE_URL (with password) may be sitting in ~/.zshrc in plaintext. Acceptable
 
 ---
 
-## Suggested order — what's actually next
+## Suggested order — what's actually next (updated 2026-09-19)
 
-**Critical-path pre-audit:**
-1. **B0 — Demo Data Rebuild (Option B).** Plan locked 2026-06-02 in `/mnt/user-data/outputs/CreditPilot_B0_Rebuild_Plan.md`. Multi-session effort: complete audit, settle four user-facing design decisions (input contract, identifier resolution, currency=USD-only, country=address country), apply schema + data migrations, verify. Absorbs B-prime (customer_identifiers + EDGAR verification), addresses D0b (stale negative_news cruft), and D0c (payment_transactions realism). Surfaced because three sessions of agent work each discovered the same kind of data rot.
-2. **B5 encoding** — V1 priority rule (locked design in `CreditPilot_Risk_Ranking_Priority_V1.md`). Encode after B0 so the encoding builds on clean data. Fixes the live credit_limit-ordered retrieval bug.
-
-B4 is done. B5 design is done. B-prime is absorbed into B0.
+B0 (demo data rebuild) is done. B4 (taxonomy pass) is done. **B5 (V1 risk-ranking encoding) is also done** — see the confirmation entry below; this section was stale and still listed both as pending.
 
 **Small / housekeeping (do anytime):**
-- B3 (publishEvent run_id decision), CLAUDE.md to repo root, confirm E1 (dev DB password rotation done).
+- F1-F4 AR-aging bugs from B0 Phase 4 (pre-petition double-counting in mid-range buckets, days_overdue staleness in fn_refresh_ar_aging, amount vs amount_paid in the payment-behaviour skill, total_outstanding excluding pre-petition amounts).
+- B3 (publishEvent run_id passthrough — committed to, just not scheduled).
 - **q4_negative_news is intermittently flaky on `min_sources >= 2`.** The model sometimes structures 2 NEWS_EVENT sources in the formal array (Arconic + Triumph), sometimes only 1, even though the answer prose consistently names multiple negative-news customers with rich data. Observed at least twice. Re-running typically clears it. Options when convenient: lower `min_sources` to 1, or add a "must_mention" content check. Don't lower the bar mid-task; do this as deliberate test maintenance.
 
 **Then:** engineer audit of the repo.
@@ -1227,3 +1224,19 @@ Root cause, fully traced: MAX_CUSTOMERS_PER_RUN=10 was applied uniformly to both
 Fixed in three parts: (1) split into MAX_CUSTOMERS_PER_RUN_LIVE (10, unchanged) and MAX_CUSTOMERS_PER_RUN_DEMO (200, comfortably exceeds the real 47) so the demo path's arbitrary truncation is eliminated; (2) added last_checked_at-ascending ordering as a self-balancing rotation -- deliberately not a flat customer_id sort, which would have permanently frozen live coverage on the same 10 companies forever, a worse regression than the bug it would have replaced; (3) fixed the one-way ratchet so a reprocessed customer with no qualifying signals actively clears any stale alert_triggered/alert_date/risk_signals_detected rather than leaving them frozen.
 
 Verified live: a manually-triggered reconciliation run processed all 47 customers in one pass (confirmed via a shared last_checked_at timestamp across all 47 rows), found exactly the 2 genuine seeded conditions, and Triumph/Heliogen now show consistent, evidence-backed state across sec_monitoring, credit_events, and sec_filings, with accession numbers matching seed_sec_filings exactly.
+
+
+---
+
+## B5 — confirmed already encoded, doc was stale (2026-09-19)
+
+Asked to start B5 (V1 risk-ranking encoding, per the locked design in `CreditPilot_Risk_Ranking_Priority_V1.md`). Before writing anything, checked the live code against the design doc's four-step encoding plan rather than assuming it was still open -- this backlog file's own "Suggested order" section still listed it as not-yet-done, which turned out to be stale, not accurate.
+
+Found all four steps already complete, most likely landed silently as part of the CIA arithmetic-reliability sweep (2026-08-29/30) and the list-completeness audit (2026-09-02/03), neither of which called out B5 by name in their own log entries:
+
+1. **Ranked-customers query** -- `fn_rank_portfolio_risk()` (baseline.sql) implements the locked rule exactly: membership gate `current_exposure > 0 AND (credit_rating_score < 30 OR scenario='bankruptcy' OR 'BANKRUPTCY' = ANY(risk_tags) OR GOING_CONCERN event exists OR latest pre_petition_amount > 0)`, ranked `is_high_risk DESC, current_exposure DESC, recent_severity_sum DESC, latest_event_date DESC NULLS LAST, company_name` (name as a final determinism tiebreak, a small improvement over the design doc's three-key order). Its old `LIMIT 25` (which would have silently truncated the set) was removed in migration `20260902000000_remove_portfolio_risk_limit.sql`, confirmed separately during the list-completeness audit.
+2. **Surfaced in CIA's context** -- cia-agent's portfolio-level branch (no named customer, no sector) calls `supabase.rpc('fn_rank_portfolio_risk')` and builds an `## OFFICIAL HIGH-RISK CUSTOMER LIST (business-locked ranking -- the complete, authoritative answer to any "highest risk" / "most at-risk" portfolio-wide question)` context section from every row where `is_high_risk` is true -- the full qualifying set, not a top-N truncation, matching the design doc's explicit requirement.
+3. **q1 harness expectation** -- `tests/cia/questions.json`'s `q1_portfolio_risk_ranking` already expects `must_mention: ["McDermott", "Rite Aid", "Proterra", "Yellow"]`, matching the V1 set from the design doc's own sanity-check table, plus a `consistency_check` at `min_pass_rate: 0.75`.
+4. **8/8 verified** -- confirmed passing as part of every session since (each CIA change in this backlog since late August was gated on the full harness, which includes q1).
+
+No code changes made -- this entry exists so the backlog stops describing finished work as open. Updated the "Suggested order" section above (which still listed both B0 and B5 as pending) to reflect current reality.
