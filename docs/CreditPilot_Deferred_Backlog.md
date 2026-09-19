@@ -222,15 +222,15 @@ V1 sidesteps this by emitting at the right scope (environment events rather than
 **D3. Archival job.**
 Policy is documented (events > 24 months move to credit_events_archive). The actual periodic job is not built. Build when live-table volume warrants it — not urgent at current scale.
 
-**D4. Sources panel UX.**
-Customers-table rows should appear as source cards in the CIA's sources panel (currently only credit_events rows do). Frontend work, deferred.
+**D4. Sources panel UX. — RESOLVED, note was stale (confirmed 2026-09-19).**
+Customers-table rows do appear as source cards today: cia-agent's tagMap already tags customer-table entries (`table: "customers"`) and includes them in the sources array via `source_type: entry.table`; CIA.tsx's frontend already handles `source_type === "customers"` for both the click-through route (`/customers?customer_id=`) and the label rendering. This most likely landed as a side effect of the CIA citation redesign (2026-08-27) or the arithmetic-reliability sweep, neither of which called out D4 by name. Verified directly in code, not assumed.
 
 ---
 
 ## E. Security / ops hygiene
 
-**E1. Rotate the dev database password.**
-The database password was exposed in a chat during setup. Reset it (Supabase dashboard → Settings → Database → Reset database password) and update DATABASE_URL in the terminal and ~/.zshrc. The anon key does not need rotating (public by design).
+**E1. Rotate the dev database password. — Effectively satisfied, original incident superseded (confirmed 2026-09-19).**
+This item was opened for an early setup-time exposure. Separately, a real second exposure happened during the list-completeness audit work (an `env | grep` command printed a live DATABASE_URL with password): that incident's entry confirms "Founder rotated the credential immediately; connection reconfirmed working afterward," and a standing CLAUDE.md rule was added against printing credentials in future sessions. Since a rotation is confirmed to have happened at least once, more recently than the original incident this item was opened for, treating this as closed rather than tracking it as still-open. E2's underlying caveat (DATABASE_URL sits in ~/.zshrc in plaintext, fine for dev, revisit before production) still stands.
 
 **E2. DATABASE_URL handling.**
 DATABASE_URL (with password) may be sitting in ~/.zshrc in plaintext. Acceptable for a dev database; revisit before anything production-facing (use a secret manager).
@@ -377,6 +377,8 @@ Replaced the LLM-generated sources panel with deterministic sources built from f
 ---
 
 ## B3 — publishEvent run_id passthrough (DEFERRED, but COMMITTED to do — not optional)
+
+**Status check (2026-09-19): partially done, not complete.** The schema half already exists — `credit_events.run_id uuid` (nullable) with an FK to `agent_runs(id)` is in baseline.sql today. But `publishEvent.ts`'s `PublishEventInput` interface has no `run_id` field, and none of the agent call sites (AR, News, SEC) pass one — confirmed via direct grep, zero matches. So every `credit_events` row's `run_id` is silently NULL today; the column exists but nothing writes to it. Steps 2-5 below (the actual passthrough wiring) are still genuinely open.
 
 **Decision (2026-06-17):** add `run_id` to credit_events so every event traces back to the agent run that produced it. This IS wanted (traceability for debugging + audit) — deferred only on timing, not on whether to do it.
 
