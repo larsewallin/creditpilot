@@ -81,13 +81,6 @@ const SEED_PENDING_ACTIONS = [
   },
 ];
 
-const SEED_CREDIT_LIMITS = [
-  { id: "c0000001-0000-0000-0000-000000000029", limit: 3000000 },
-  { id: "c0000001-0000-0000-0000-000000000008", limit: 4500000 },
-  { id: "c0000001-0000-0000-0000-000000000005", limit: 5000000 },
-];
-
-
 /**
  * Full demo reset + agent invocation.
  * Called by both the Reset Demo button (Actions.tsx) and the
@@ -95,36 +88,15 @@ const SEED_CREDIT_LIMITS = [
  */
 export async function initDemo() {
   // ── 1. Reset all tables to seed state ────────────────────────────────────
-
-  // Reset all demo pending_actions back to pending
-  await supabase
-    .from("pending_actions")
-    .update({ status: "pending", reviewed_by: null, reviewed_at: null, review_note: null })
-    .eq("is_demo", true);
-
-  await supabase
-    .from("agent_messages")
-    .update({ status: "pending" })
-    .eq("is_demo", true);
-
-  for (const { id, limit } of SEED_CREDIT_LIMITS) {
-    await supabase.from("customers").update({ credit_limit: limit }).eq("id", id);
-  }
-
-  // negative_news — reset reviewed state (rows always exist from migrations, RLS blocks delete)
-  await supabase
-    .from("negative_news")
-    .update({ reviewed: false, reviewed_by: null, reviewed_at: null })
-    .eq("is_demo", true);
-
-  await supabase
-    .from("credit_events")
-    .update({ cia_processed: false, cia_processed_at: null })
-    .eq("is_demo", true);
-
-  // invoices — reset demo due_dates relative to today (prevents aging-bucket drift over time)
-  const { error: invoiceDateError } = await supabase.rpc("fn_reset_demo_invoice_dates");
-  if (invoiceDateError) console.error("[initDemo] invoice date reset failed:", invoiceDateError.message);
+  // Runs server-side via the demo-actions edge function (service role) — these
+  // tables (pending_actions, agent_messages, customers, negative_news,
+  // credit_events) and the invoices RPC are anon-read-only. See
+  // 20260920000000_tighten_anon_write_rls.sql. The seed credit-limit values
+  // now live in supabase/functions/demo-actions/index.ts.
+  const { error: resetError } = await supabase.functions.invoke("demo-actions", {
+    body: { action: "reset" },
+  });
+  if (resetError) console.error("[initDemo] reset failed:", resetError.message);
 
   // ── 2. Invoke all agents ──────────────────────────────────────────────────
 

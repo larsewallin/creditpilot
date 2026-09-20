@@ -62,29 +62,25 @@ export default function Actions() {
   });
 
   // ── Approve ─────────────────────────────────────────────────────────────────
+  // Writes go through the demo-actions edge function (service role) rather than
+  // directly via the anon key — pending_actions/customers/credit_actions are
+  // anon-read-only. See 20260920000000_tighten_anon_write_rls.sql.
   const approveMutation = useMutation({
     mutationFn: async ({ action, note }: { action: any; note: string }) => {
-      await supabase.from("pending_actions").update({
-        status: "approved",
-        reviewed_by: "demo_user",
-        reviewed_at: new Date().toISOString(),
-        review_note: note || null,
-      }).eq("id", action.id);
-
-      if (action.action_type === "CREDIT_LIMIT_REDUCTION" && action.proposed_value != null) {
-        await supabase.from("customers").update({ credit_limit: action.proposed_value }).eq("id", action.customer_id);
-      }
-
-      await supabase.from("credit_actions").insert({
-        customer_id: action.customer_id,
-        action_date: new Date().toISOString().split("T")[0],
-        action_type: action.action_type,
-        description: `Approved. ${note ? note + ". " : ""}${action.rationale ?? ""}`,
-        agent_name: action.agent_name,
-        old_limit: action.current_value,
-        new_limit: action.proposed_value,
-        performed_by: "demo_user",
+      const { error } = await supabase.functions.invoke("demo-actions", {
+        body: {
+          action: "approve",
+          pending_action_id: action.id,
+          action_type: action.action_type,
+          customer_id: action.customer_id,
+          proposed_value: action.proposed_value,
+          current_value: action.current_value,
+          agent_name: action.agent_name,
+          rationale: action.rationale,
+          note,
+        },
       });
+      if (error) throw error;
     },
     onSuccess: () => {
       refetchPending();
@@ -100,12 +96,10 @@ export default function Actions() {
   // ── Reject ──────────────────────────────────────────────────────────────────
   const rejectMutation = useMutation({
     mutationFn: async ({ id, note }: { id: string; note: string }) => {
-      await supabase.from("pending_actions").update({
-        status: "rejected",
-        reviewed_by: "demo_user",
-        reviewed_at: new Date().toISOString(),
-        review_note: note || null,
-      }).eq("id", id);
+      const { error } = await supabase.functions.invoke("demo-actions", {
+        body: { action: "reject", pending_action_id: id, note },
+      });
+      if (error) throw error;
     },
     onSuccess: () => {
       refetchPending();
