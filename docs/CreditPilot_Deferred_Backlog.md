@@ -61,11 +61,7 @@ Once both SEC and News are on the contract, the notification phase is near-ident
 
 ## B. Taxonomy / documentation cleanup
 
-**B1. Update taxonomy doc: parent_event_id vs triggered_by.**
-The taxonomy doc refers to a `triggered_by` field for cascade tracking. In implementation we kept the existing `parent_event_id` column instead (same concept, better name). Update docs/EVENT_TAXONOMY.md everywhere it says triggered_by to say parent_event_id, and note the root-event convention (parent_event_id null, correlation_id = own id).
-
-**B2. Confirm repo taxonomy doc is the revised version.**
-We revised the taxonomy mid-implementation (collapsed NEGATIVE_NEWS + POSITIVE_NEWS into NEWS_EVENT; dropped SEC_FILING_10K/10Q/8K; added SEC_OTHER; added filing_source_type to typed SEC events). Confirm docs/EVENT_TAXONOMY.md in the repo reflects all of this and matches event_schemas.ts. (Believed done, but verify.)
+**B1/B2 — RESOLVED, confirmed 2026-09-20.** docs/EVENT_TAXONOMY.md already explains parent_event_id as serving the triggered_by concept ("this column predates the V1 taxonomy and serves as the 'triggered_by' concept; we kept the existing name rather than adding a redundant column") and already reflects the revised taxonomy (NEWS_EVENT, SEC_OTHER present; no stale NEGATIVE_NEWS/POSITIVE_NEWS/SEC_FILING_10K references found). No changes needed.
 
 **B3. publishEvent run_id field.**
 We discussed adding an optional run_id passthrough to publishEvent for the audit trail, then decided to let it go for SEC (run_id is still recorded in agent_runs / agent_messages). Revisit when standardizing agents: decide whether the Agent Contract wants run_id on credit_events rows for traceability. If yes, add it to publishEvent's interface once, for all agents.
