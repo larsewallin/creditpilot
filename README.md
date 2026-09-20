@@ -256,11 +256,11 @@ Open [http://localhost:5173](http://localhost:5173).
 
 Before loading real company data, lock down your Supabase project:
 
-1. Remove anon write policies from `pending_actions`, `customers`, `credit_actions`, `agent_runs`, `credit_events`, `negative_news`, `sec_monitoring`
-2. Add authentication (Supabase Auth)
-3. Use a dedicated Supabase project — not the same one as the demo
+1. ✅ Done (2026-09-20) — anon write access removed from `pending_actions`, `customers`, `credit_actions`, `agent_runs`, `credit_events`, `negative_news`, `sec_monitoring`. All 7 tables are anon-read-only now; the two write flows that need them (approve/reject, demo reset) go through the `demo-actions` edge function (service role key). See `supabase/migrations/20260920000000_tighten_anon_write_rls.sql`.
+2. Add authentication (Supabase Auth) — still open
+3. Use a dedicated Supabase project — not the same one as the demo — still open
 
-The demo deployment uses intentionally open RLS policies so anyone can interact with the seed data. These must be replaced before going to production.
+The demo deployment still uses an anon key with no auth, so anyone can read the seed data and trigger the demo-actions flows (by design, for the public demo). Items 2-3 must be done before loading real company data.
 
 ---
 

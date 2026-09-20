@@ -231,6 +231,14 @@ This item was opened for an early setup-time exposure. Separately, a real second
 **E2. DATABASE_URL handling.**
 DATABASE_URL (with password) may be sitting in ~/.zshrc in plaintext. Acceptable for a dev database; revisit before anything production-facing (use a secret manager).
 
+**E3. Anon-key RLS write exposure. ✅ RESOLVED (2026-09-20, migration `20260920000000_tighten_anon_write_rls.sql`, commit 90c0e5e).**
+Security audit found 7 tables (`pending_actions`, `customers`, `credit_events`, `credit_actions`, `agent_runs`, `negative_news`, `sec_monitoring`) with anon INSERT/UPDATE policies — writable directly via PostgREST by anyone with devtools, since the anon key is necessarily embedded in the frontend bundle. Traced every actual anon write in `src/` before fixing:
+- `agent_runs` INSERT, `sec_monitoring` INSERT+UPDATE, and `negative_news`'s unrestricted `"Public insert"` (not even role-gated) were dead exposure — nothing in the frontend used them. Dropped outright.
+- The real writes (Actions.tsx approve/reject; `initDemo()`'s full reset) now go through a new `demo-actions` edge function (service role key), same pattern as `ar-csv-upload`/`publishEvent`. Frontend no longer writes any table directly via the anon key.
+- Bonus find: `agent_messages` UPDATE and the `fn_reset_demo_invoice_dates()` RPC call in the old client-side reset were **already silently no-ops** for anon — RLS had no anon UPDATE policy on `agent_messages` or `invoices`, and the function isn't `SECURITY DEFINER`. Routing them through the service-role edge function fixed this as a side effect.
+- Verified live (approve, reject, reset all confirmed working post-lockdown) and CIA harness 8/8.
+- Follow-up, not yet done: `supabase db push` failed on a pre-existing migration-history/remote drift (repo history was squashed at some point; remote's tracking table has ~30 versions not in the local `migrations/` folder) — applied this migration directly via `psql` instead. `supabase migration repair` would fix the drift properly but wasn't in scope here; log as a new small item if it blocks a future `db push`.
+
 ---
 
 ## Suggested order — what's actually next (updated 2026-09-19)

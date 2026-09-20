@@ -189,8 +189,8 @@ User reviews /actions, approves/rejects
 
 The demo uses open RLS policies so anyone can interact with the demo data without signing in. Before loading real company data:
 
-1. Remove anon write policies from `pending_actions`, `customers`, `credit_events`, `credit_actions`, `agent_runs`, `negative_news`, `sec_monitoring` (confirmed live: these 7 tables currently have anon write access).
-2. Add Supabase Auth.
-3. Use a dedicated Supabase project — not the demo project.
+1. ✅ Done (2026-09-20) — anon write policies removed from `pending_actions`, `customers`, `credit_events`, `credit_actions`, `agent_runs`, `negative_news`, `sec_monitoring`. Approve/reject and demo-reset writes now go through the `demo-actions` edge function (service role), not directly via the anon key. See `supabase/migrations/20260920000000_tighten_anon_write_rls.sql`.
+2. Add Supabase Auth. — still open
+3. Use a dedicated Supabase project — not the demo project. — still open
 
 See the Security section in `README.md` for full guidance.
