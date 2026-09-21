@@ -11,7 +11,10 @@
 -- inherently volume-weighted with no special weighting logic needed. Deliberately
 -- not filtering by is_demo, matching v_payment_behaviour's existing pattern.
 
-CREATE VIEW v_payment_behaviour_portfolio AS
+-- OR REPLACE: baseline.sql already creates this view (same columns,
+-- confirmed identical) on a fresh push. Plain CREATE VIEW would fail with
+-- "relation already exists".
+CREATE OR REPLACE VIEW v_payment_behaviour_portfolio AS
 SELECT
   COUNT(DISTINCT customer_id) AS customer_count,
   COUNT(*) AS total_payments,

@@ -14,7 +14,10 @@
 -- cia-agent uses the service-role client, which bypasses RLS regardless, so
 -- this only closes off anon read/write without touching the real write path.
 
-CREATE TABLE public.ip_question_counts (
+-- IF NOT EXISTS: baseline.sql already creates this table (same columns,
+-- confirmed identical) on a fresh push. Plain CREATE TABLE would fail with
+-- "relation already exists".
+CREATE TABLE IF NOT EXISTS public.ip_question_counts (
   ip_address     text NOT NULL,
   question_date  date NOT NULL,
   question_count integer NOT NULL DEFAULT 0,
