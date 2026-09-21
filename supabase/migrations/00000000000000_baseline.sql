@@ -939,7 +939,6 @@ CREATE TABLE public.negative_news (
     CONSTRAINT negative_news_severity_check CHECK ((severity = ANY (ARRAY['critical'::text, 'high'::text, 'medium'::text, 'low'::text])))
 );
 
-ALTER TABLE public.credit_events ADD COLUMN IF NOT EXISTS negative_news_id uuid REFERENCES public.negative_news(id) ON DELETE SET NULL;
 
 
 --
@@ -1592,6 +1591,11 @@ ALTER TABLE ONLY public.ip_question_counts
 
 ALTER TABLE ONLY public.negative_news
     ADD CONSTRAINT negative_news_pkey PRIMARY KEY (id);
+
+-- Moved here from right after negative_news's CREATE TABLE: this FK needs
+-- negative_news_pkey (above) to exist first. See commit fixing statement-
+-- ordering bugs surfaced by a fresh `supabase db push` against staging.
+ALTER TABLE public.credit_events ADD COLUMN IF NOT EXISTS negative_news_id uuid REFERENCES public.negative_news(id) ON DELETE SET NULL;
 
 
 --
