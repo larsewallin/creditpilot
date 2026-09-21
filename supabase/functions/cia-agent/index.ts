@@ -1321,7 +1321,7 @@ serve(async (req: Request) => {
 
     const context = contextParts.join("\n\n");
 
-    const model = DEMO_MODE ? "claude-haiku-4-5" : "claude-sonnet-4-20250514";
+    const model = DEMO_MODE ? "claude-haiku-4-5" : "claude-sonnet-5";
     const maxTokens = DEMO_MODE ? 600 : 900;
 
     try {
@@ -1384,7 +1384,7 @@ serve(async (req: Request) => {
       let metaMessage: Anthropic.Message | undefined;
       try {
         metaMessage = await anthropic.messages.create({
-          model: DEMO_MODE ? "claude-haiku-4-5" : "claude-sonnet-4-20250514",
+          model: DEMO_MODE ? "claude-haiku-4-5" : "claude-sonnet-5",
           max_tokens: 4000,
           system: `Return ONLY valid JSON, no other text. You are grading an answer about a B2B trade credit portfolio.
 
