@@ -78,7 +78,14 @@ ORDER BY (
     ELSE 5
   END), a.total_outstanding DESC;
 
-CREATE OR REPLACE VIEW v_ar_aging_portfolio AS
+-- DROP+CREATE (not OR REPLACE): baseline.sql already establishes this view
+-- with the wider column set from a later migration (20260904, bucket counts),
+-- and CREATE OR REPLACE VIEW cannot drop columns from an existing view. This
+-- migration is historically "narrower" than baseline's current state on a
+-- fresh push; 20260904's own migration re-widens it right after. No other
+-- object depends on this view (checked), so the drop is safe.
+DROP VIEW IF EXISTS v_ar_aging_portfolio;
+CREATE VIEW v_ar_aging_portfolio AS
 SELECT
   COUNT(DISTINCT customer_id) AS customer_count,
   SUM(current_amount) AS total_current,
