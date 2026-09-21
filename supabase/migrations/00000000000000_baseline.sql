@@ -756,8 +756,8 @@ CREATE TABLE public.customer_identifiers (
     CONSTRAINT customer_identifiers_source_check CHECK ((source = ANY (ARRAY['manual'::text, 'edgar_verified'::text, 'customer_supplied'::text, 'duns_lookup'::text])))
 );
 
-ALTER TABLE customer_identifiers DROP CONSTRAINT IF EXISTS customer_identifiers_id_type_check;
-ALTER TABLE customer_identifiers ADD CONSTRAINT customer_identifiers_id_type_check
+ALTER TABLE public.customer_identifiers DROP CONSTRAINT IF EXISTS customer_identifiers_id_type_check;
+ALTER TABLE public.customer_identifiers ADD CONSTRAINT customer_identifiers_id_type_check
   CHECK (id_type IN ('duns', 'ticker', 'cik', 'lei', 'internal_customer_code', 'tax_id'));
 
 
@@ -816,15 +816,15 @@ CREATE TABLE public.customers (
     CONSTRAINT customers_sector_check CHECK ((sector = ANY (ARRAY['Aerospace & Defense'::text, 'Energy'::text, 'Industrial Manufacturing'::text, 'Materials'::text, 'Transportation'::text, 'Mining'::text, 'Other'::text])))
 );
 
-ALTER TABLE customers ADD COLUMN IF NOT EXISTS international_business_name text;
-ALTER TABLE customers ADD COLUMN IF NOT EXISTS trade_name text;
-ALTER TABLE customers ADD COLUMN IF NOT EXISTS website text;
-ALTER TABLE customers ADD COLUMN IF NOT EXISTS naics_sic_code text;
-ALTER TABLE customers ADD COLUMN IF NOT EXISTS street_address text;
-ALTER TABLE customers ADD COLUMN IF NOT EXISTS city text;
-ALTER TABLE customers ADD COLUMN IF NOT EXISTS postcode text;
-ALTER TABLE customers ADD COLUMN IF NOT EXISTS invoicing_currency text DEFAULT 'USD';
-ALTER TABLE customers ADD COLUMN IF NOT EXISTS credit_manager text;
+ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS international_business_name text;
+ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS trade_name text;
+ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS website text;
+ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS naics_sic_code text;
+ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS street_address text;
+ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS city text;
+ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS postcode text;
+ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS invoicing_currency text DEFAULT 'USD';
+ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS credit_manager text;
 
 
 --
@@ -893,7 +893,7 @@ CREATE TABLE public.invoices (
     currency text DEFAULT 'USD'::text
 );
 
-ALTER TABLE invoices ADD COLUMN IF NOT EXISTS demo_days_offset integer;
+ALTER TABLE public.invoices ADD COLUMN IF NOT EXISTS demo_days_offset integer;
 
 
 --
@@ -939,7 +939,7 @@ CREATE TABLE public.negative_news (
     CONSTRAINT negative_news_severity_check CHECK ((severity = ANY (ARRAY['critical'::text, 'high'::text, 'medium'::text, 'low'::text])))
 );
 
-ALTER TABLE credit_events ADD COLUMN IF NOT EXISTS negative_news_id uuid REFERENCES negative_news(id) ON DELETE SET NULL;
+ALTER TABLE public.credit_events ADD COLUMN IF NOT EXISTS negative_news_id uuid REFERENCES negative_news(id) ON DELETE SET NULL;
 
 
 --
@@ -1118,8 +1118,8 @@ SELECT
     WHEN a.bucket_1_30 > 0 THEN 'LOW'
     ELSE 'CURRENT'
   END AS risk_tier
-FROM customers c
-LEFT JOIN customer_identifiers ti ON ti.customer_id = c.id AND ti.id_type = 'ticker' AND ti.is_primary = true
+FROM public.customers c
+LEFT JOIN public.customer_identifiers ti ON ti.customer_id = c.id AND ti.id_type = 'ticker' AND ti.is_primary = true
 JOIN LATERAL (
   SELECT
     COALESCE(SUM(outstanding_amount) FILTER (WHERE (CURRENT_DATE - due_date) <= 0 AND status = 'current'), 0) AS current_amount,
@@ -1139,7 +1139,7 @@ JOIN LATERAL (
     COUNT(*) FILTER (WHERE (CURRENT_DATE - due_date) BETWEEN 61 AND 90 AND status != 'pre_petition') AS bucket_61_90_count,
     COUNT(*) FILTER (WHERE (CURRENT_DATE - due_date) > 90 AND status != 'pre_petition') AS bucket_over_90_count,
     COUNT(*) AS total_invoice_count
-  FROM invoices
+  FROM public.invoices
   WHERE customer_id = c.id AND status NOT IN ('paid', 'written_off')
 ) a ON true
 ORDER BY (
@@ -1177,7 +1177,7 @@ SELECT
   SUM(bucket_31_60_count) AS total_bucket_31_60_count,
   SUM(bucket_61_90_count) AS total_bucket_61_90_count,
   SUM(bucket_over_90_count) AS total_bucket_over_90_count
-FROM v_ar_aging_current;
+FROM public.v_ar_aging_current;
 
 
 --
