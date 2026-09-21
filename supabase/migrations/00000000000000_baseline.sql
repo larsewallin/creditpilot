@@ -393,7 +393,7 @@ $$;
 -- Name: fn_reset_demo_invoice_dates(); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE OR REPLACE FUNCTION fn_reset_demo_invoice_dates() RETURNS void
+CREATE OR REPLACE FUNCTION public.fn_reset_demo_invoice_dates() RETURNS void
     LANGUAGE plpgsql
     SET search_path = public, extensions
     AS $$
@@ -1085,7 +1085,7 @@ CREATE TABLE public.seed_sec_filings (
 -- Name: v_ar_aging_current; Type: VIEW; Schema: public; Owner: -
 --
 
-CREATE OR REPLACE VIEW v_ar_aging_current AS
+CREATE OR REPLACE VIEW public.v_ar_aging_current AS
 SELECT
   c.id AS customer_id,
   c.company_name,
@@ -1156,7 +1156,7 @@ ORDER BY (
 -- Name: v_ar_aging_portfolio; Type: VIEW; Schema: public; Owner: -
 --
 
-CREATE OR REPLACE VIEW v_ar_aging_portfolio AS
+CREATE OR REPLACE VIEW public.v_ar_aging_portfolio AS
 SELECT
   COUNT(DISTINCT customer_id) AS customer_count,
   SUM(current_amount) AS total_current,
