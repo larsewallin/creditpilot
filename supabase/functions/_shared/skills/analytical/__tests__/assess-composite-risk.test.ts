@@ -19,11 +19,12 @@ describe("assessCompositeRisk", () => {
 
   // ── Single signal — threshold adjustment ────────────────────────────────────
 
-  it("NEGATIVE_NEWS_HIGH → threshold drops to 65%, util 62% → no action", () => {
+  it("NEWS_EVENT (high) → threshold drops to 65%, util 62% → no action", () => {
     const result = assessCompositeRisk({
       utilization_pct: 62,
       credit_score: 60,
-      active_event_types: ["NEGATIVE_NEWS_HIGH"],
+      active_event_types: ["NEWS_EVENT"],
+      active_signal_severities: ["high"],
       agents_flagging: ["news-monitor-agent"],
     });
     expect(result.adjusted_threshold).toBe(65); // 75-10=65
@@ -31,11 +32,12 @@ describe("assessCompositeRisk", () => {
     expect(result.severity).toBe("medium");
   });
 
-  it("NEGATIVE_NEWS_HIGH → threshold 65%, util 66% → recommend action, medium severity", () => {
+  it("NEWS_EVENT (high) → threshold 65%, util 66% → recommend action, medium severity", () => {
     const result = assessCompositeRisk({
       utilization_pct: 66,
       credit_score: 60,
-      active_event_types: ["NEGATIVE_NEWS_HIGH"],
+      active_event_types: ["NEWS_EVENT"],
+      active_signal_severities: ["high"],
       agents_flagging: ["news-monitor-agent"],
     });
     expect(result.adjusted_threshold).toBe(65); // 75-10=65
@@ -45,11 +47,12 @@ describe("assessCompositeRisk", () => {
 
   // ── Multi-signal threshold stacking ─────────────────────────────────────────
 
-  it("NEGATIVE_NEWS_HIGH + COVENANT_WAIVER → threshold 53% (−10 −12)", () => {
+  it("NEWS_EVENT (high) + COVENANT_WAIVER → threshold 53% (−10 −12)", () => {
     const result = assessCompositeRisk({
       utilization_pct: 64,
       credit_score: 50,
-      active_event_types: ["NEGATIVE_NEWS_HIGH", "COVENANT_WAIVER"],
+      active_event_types: ["NEWS_EVENT", "COVENANT_WAIVER"],
+      active_signal_severities: ["high"],
       agents_flagging: ["news-monitor-agent", "sec-monitor-agent"],
     });
     expect(result.adjusted_threshold).toBe(53); // 75-10-12=53
@@ -57,11 +60,12 @@ describe("assessCompositeRisk", () => {
     expect(result.severity).toBe("high"); // 2 agents
   });
 
-  it("NEGATIVE_NEWS_HIGH + COVENANT_WAIVER + GOING_CONCERN_WARNING → threshold floor 40% (−10 −12 −15)", () => {
+  it("NEWS_EVENT (high) + COVENANT_WAIVER + GOING_CONCERN → threshold floor 40% (−10 −12 −15)", () => {
     const result = assessCompositeRisk({
       utilization_pct: 51,
       credit_score: 45,
-      active_event_types: ["NEGATIVE_NEWS_HIGH", "COVENANT_WAIVER", "GOING_CONCERN_WARNING"],
+      active_event_types: ["NEWS_EVENT", "COVENANT_WAIVER", "GOING_CONCERN"],
+      active_signal_severities: ["high"],
       agents_flagging: ["news-monitor-agent", "sec-monitor-agent", "ar-aging-agent"],
     });
     // delta=37 → 75-37=38, floor at 40
@@ -160,11 +164,12 @@ describe("assessCompositeRisk", () => {
       utilization_pct: 35,
       credit_score: 10, // distress −15pp
       active_event_types: [
-        "NEGATIVE_NEWS_CRITICAL", // −10pp
-        "GOING_CONCERN_WARNING",  // −15pp
-        "COVENANT_WAIVER",        // −10pp
-        "CEO_DEPARTURE",          // −5pp
+        "NEWS_EVENT",      // −10pp (critical severity, below)
+        "GOING_CONCERN",   // −15pp
+        "COVENANT_WAIVER", // −12pp
+        "CEO_DEPARTURE",   // −5pp
       ],
+      active_signal_severities: ["critical"],
       agents_flagging: ["ar-aging-agent", "news-monitor-agent", "sec-monitor-agent"],
     });
     // Raw delta: 10+15+12+5+15 = 57pp → 75-57 = 18, but floor is 40
