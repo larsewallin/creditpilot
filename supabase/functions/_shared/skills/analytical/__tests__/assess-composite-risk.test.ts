@@ -29,10 +29,14 @@ describe("assessCompositeRisk", () => {
     });
     expect(result.adjusted_threshold).toBe(65); // 75-10=65
     expect(result.recommend_action).toBe(false);
-    expect(result.severity).toBe("medium");
+    // 1 agent + active high-severity signal → "high" per the severity rules
+    // (same rule covered explicitly below in "single agent + active
+    // high-severity signal → severity high"), not "medium" — the two are
+    // coupled through the same active_signal_severities flag in the real code.
+    expect(result.severity).toBe("high");
   });
 
-  it("NEWS_EVENT (high) → threshold 65%, util 66% → recommend action, medium severity", () => {
+  it("NEWS_EVENT (high) → threshold 65%, util 66% → recommend action, high severity", () => {
     const result = assessCompositeRisk({
       utilization_pct: 66,
       credit_score: 60,
@@ -42,7 +46,8 @@ describe("assessCompositeRisk", () => {
     });
     expect(result.adjusted_threshold).toBe(65); // 75-10=65
     expect(result.recommend_action).toBe(true);
-    expect(result.severity).toBe("medium");
+    // See note in the previous test: 1 agent + high-severity signal → "high".
+    expect(result.severity).toBe("high");
   });
 
   // ── Multi-signal threshold stacking ─────────────────────────────────────────
