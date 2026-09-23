@@ -13,7 +13,7 @@ const navItems = [
   { title: "Customers", path: "/customers", icon: Users },
 ];
 
-export function AppSidebar() {
+export function AppSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
   const { data: company } = useQuery({
     queryKey: ["company"],
     queryFn: async () => {
@@ -42,6 +42,7 @@ export function AppSidebar() {
                   : "text-sidebar-muted hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
               )
             }
+            onClick={onNavigate}
           >
             <item.icon className="h-4 w-4 shrink-0" />
             <span className="flex-1">{item.title}</span>
@@ -53,6 +54,7 @@ export function AppSidebar() {
         <NavLink
           to="/about"
           className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-sidebar-muted hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-colors w-full"
+          onClick={onNavigate}
         >
           <Info className="h-4 w-4 shrink-0" />
           <span className="flex-1 text-left">What is this?</span>
