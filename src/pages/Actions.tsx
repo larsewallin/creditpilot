@@ -137,12 +137,26 @@ export default function Actions() {
         </div>
         {DEMO_MODE && (
           <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-1.5 text-muted-foreground">
-                <RotateCcw className="h-3.5 w-3.5" />
-                Reset Demo
-              </Button>
-            </AlertDialogTrigger>
+            <div>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 text-muted-foreground"
+                  disabled={resetting}
+                >
+                  {resetting ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <RotateCcw className="h-3.5 w-3.5" />
+                  )}
+                  {resetting ? "Resetting…" : "Reset Demo"}
+                </Button>
+              </AlertDialogTrigger>
+              {resetting && (
+                <p className="text-xs text-muted-foreground mt-1">Takes about 10 seconds</p>
+              )}
+            </div>
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>Reset the demo?</AlertDialogTitle>
