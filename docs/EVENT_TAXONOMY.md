@@ -248,13 +248,13 @@ Customer's payment behavior is trending worse.
 - **Producer:** Payment Behaviour Monitor
 - **Consumers:** Risk Agent, Working Capital Optimizer (when built), CIA
 - **Scope:** customer
-- **Severity:** medium to high
+- **Severity:** medium to critical (5–10 day swing → medium, 10–20 → high, 20+ → critical)
 - **Payload:**
   - `severity_score`: 0–100
-  - `current_avg_days_to_pay`: number
-  - `prior_avg_days_to_pay`: number
+  - `current_avg_days_to_pay`: number (avg `days_early_late` over the current 30-day window — field name predates the agent; kept as-is, see deferred backlog)
+  - `prior_avg_days_to_pay`: number (same, prior 30-day window)
   - `trend_direction`: 'worsening' | 'sharply_worsening'
-  - `observation_window_days`: integer
+  - `observation_window_days`: integer (length of each window, 30)
   - `summary`: string
 
 #### `PAYMENT_IMPROVEMENT`
@@ -272,11 +272,12 @@ Customer's payment timing is becoming unpredictable (high variance).
 - **Producer:** Payment Behaviour Monitor
 - **Consumers:** Risk Agent, CIA
 - **Scope:** customer
-- **Severity:** low to medium
+- **Severity:** high to critical (fires only once stddev >= 10 days, so the floor is "high"; 10–20 → high, 20+ → critical)
 - **Payload:**
   - `severity_score`: 0–100
-  - `standard_deviation_days`: number
+  - `standard_deviation_days`: number (population stddev of `days_early_late` over the current 30-day window)
   - `observation_window_days`: integer
+  - `summary`: string
 
 ---
 
