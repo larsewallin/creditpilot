@@ -65,7 +65,9 @@
  *     "isPublic": false,
  *     "ticker": null,
  *     "cik": null,
- *     "paymentPersona": "healthy"
+ *     "paymentPersona": "healthy",
+ *     "naicsSicCode": "211110",
+ *     "invoicingCurrency": "USD"
  *   }
  */
 
@@ -137,6 +139,8 @@ interface CustomerInput {
   creditRatingSource?: string | null;
   notes?: string | null;
   paymentPersona?: PaymentPersona;
+  naicsSicCode?: string | null;
+  invoicingCurrency?: string | null;
 }
 
 const REQUIRED_FIELDS: (keyof CustomerInput)[] = [
@@ -191,6 +195,10 @@ function validate(input: CustomerInput): asserts input is Required<
 
   if (input.paymentPersona !== undefined && !VALID_PERSONAS.includes(input.paymentPersona)) {
     problems.push(`invalid paymentPersona "${input.paymentPersona}" — must be one of: ${VALID_PERSONAS.join(", ")}`);
+  }
+
+  if (input.invoicingCurrency != null && !/^[A-Z]{3}$/.test(input.invoicingCurrency)) {
+    problems.push(`invalid invoicingCurrency "${input.invoicingCurrency}" — must be a 3-letter ISO 4217 code (e.g. "EUR")`);
   }
 
   if (input.isPublic && !input.ticker && !input.cik) {
@@ -284,6 +292,8 @@ function parseCliInput(): { input: CustomerInput; dryRun: boolean; rollbackId: s
       "credit-rating-source": { type: "string" },
       notes: { type: "string" },
       "payment-persona": { type: "string" },
+      "naics-sic-code": { type: "string" },
+      "invoicing-currency": { type: "string" },
     },
     allowPositionals: true,
   });
@@ -316,6 +326,8 @@ function parseCliInput(): { input: CustomerInput; dryRun: boolean; rollbackId: s
     creditRatingSource: values["credit-rating-source"],
     notes: values.notes,
     paymentPersona: values["payment-persona"] as PaymentPersona | undefined,
+    naicsSicCode: values["naics-sic-code"],
+    invoicingCurrency: values["invoicing-currency"],
   };
 
   // CLI flags override config file values when both are given.
@@ -393,6 +405,15 @@ async function main() {
     company_type: input.isPublic ? "public" : "private",
     notes: input.notes ?? null,
     risk_tags: [],
+    // Added by migration 20260828000000_customer_profile_fields.sql — not yet
+    // in the generated Supabase types (src/integrations/supabase/types.ts is
+    // stale for these two columns), so this insert isn't type-checked against
+    // them. invoicing_currency is profile metadata only in V1: it doesn't
+    // trigger any currency conversion (multi-currency aggregation is
+    // unbuilt — backlog D1d) — credit_limit/payment amounts stay plain USD
+    // figures regardless of this field. See docs/CUSTOMER_PROFILE_FIELDS.md.
+    naics_sic_code: input.naicsSicCode ?? null,
+    invoicing_currency: input.invoicingCurrency ?? "USD",
   };
 
   const identifierRows = [

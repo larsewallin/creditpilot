@@ -180,6 +180,12 @@ export function CustomerDetail({ customer }: { customer: any }) {
           <div className="text-xs text-muted-foreground space-y-1">
             <p>Account Manager: <span className="text-foreground">{customer.account_manager}</span></p>
             <p>Payment Terms: <span className="text-foreground">{customer.payment_terms_days} days</span></p>
+            {customer.naics_sic_code && (
+              <p>NAICS/SIC Code: <span className="text-foreground">{customer.naics_sic_code}</span></p>
+            )}
+            {customer.invoicing_currency && (
+              <p>Invoicing Currency: <span className="text-foreground">{customer.invoicing_currency}</span></p>
+            )}
           </div>
         </TabsContent>
 
