@@ -167,7 +167,13 @@ export default function CreditEvents() {
                     </span>
                   </div>
                   <p className="text-sm">
-                    <span className="font-semibold text-foreground">{evt.customers?.company_name ?? "—"}</span>
+                    {evt.customers?.company_name ? (
+                      <span className="font-semibold text-foreground">{evt.customers.company_name}</span>
+                    ) : evt.payload?.sector ? (
+                      <span className="italic text-muted-foreground">{evt.payload.sector} sector</span>
+                    ) : (
+                      <span className="font-semibold text-foreground">—</span>
+                    )}
                   </p>
                   {evt.title && (
                     <p className="text-sm font-medium text-foreground mt-0.5">{evt.title}</p>
