@@ -148,6 +148,11 @@ Deno.serve(async (req) => {
         console.error("[demo-actions:reset] invoice date reset failed:", invoiceDateError.message);
       }
 
+      const { error: paymentDateError } = await supabase.rpc("fn_reset_demo_payment_dates");
+      if (paymentDateError) {
+        console.error("[demo-actions:reset] payment date reset failed:", paymentDateError.message);
+      }
+
       return json({ ok: true });
     }
 
