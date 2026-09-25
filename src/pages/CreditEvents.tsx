@@ -19,6 +19,8 @@ const AGENT_TABS = [
   { value: "ar_aging_agent", label: "AR Aging" },
   { value: "news_monitor_agent", label: "News" },
   { value: "sec_monitor_agent", label: "SEC" },
+  { value: "payment_behaviour_agent", label: "Payment" },
+  { value: "industry_risk_agent", label: "Industry" },
 ];
 
 function getEventDestination(evt: any): string | null {

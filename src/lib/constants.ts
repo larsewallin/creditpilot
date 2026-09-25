@@ -25,6 +25,22 @@ export const AGENT_CONFIG = {
     textClass: "text-agent-sec",
     dotClass: "bg-agent-sec",
   },
+  payment_behaviour_agent: {
+    label: "Payment Behaviour",
+    colorClass: "agent-payment",
+    borderClass: "border-l-agent-payment",
+    bgClass: "bg-agent-payment/10",
+    textClass: "text-agent-payment",
+    dotClass: "bg-agent-payment",
+  },
+  industry_risk_agent: {
+    label: "Industry Risk",
+    colorClass: "agent-industry",
+    borderClass: "border-l-agent-industry",
+    bgClass: "bg-agent-industry/10",
+    textClass: "text-agent-industry",
+    dotClass: "bg-agent-industry",
+  },
 } as const;
 
 export type AgentName = keyof typeof AGENT_CONFIG;

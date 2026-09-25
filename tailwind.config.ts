@@ -67,6 +67,8 @@ export default {
           aging: "hsl(var(--agent-aging))",
           sec: "hsl(var(--agent-sec))",
           seed: "hsl(var(--agent-seed))",
+          payment: "hsl(var(--agent-payment))",
+          industry: "hsl(var(--agent-industry))",
         },
         severity: {
           critical: "hsl(var(--severity-critical))",

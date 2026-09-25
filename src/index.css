@@ -40,6 +40,8 @@
     --agent-aging: 38 92% 50%;
     --agent-sec: 258 90% 66%;
     --agent-seed: 215 16% 47%;
+    --agent-payment: 180 70% 40%;
+    --agent-industry: 330 75% 55%;
 
     /* Severity colors */
     --severity-critical: 0 84% 60%;
