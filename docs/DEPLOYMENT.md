@@ -52,6 +52,7 @@ These enable real message delivery. If not set, all messages fall back to `LogPr
 | `SLACK_WEBHOOK_URL` | Enables Slack delivery via incoming webhook |
 | `ATRADIUS_API_KEY` | Optional — enables Atradius credit score fetching |
 | `EULER_HERMES_API_KEY` | Optional — enables Euler Hermes credit score fetching |
+| `FRED_API_KEY` | Optional — enables live FRED/BLS economic data for the Industry Risk Monitor's INDUSTRY_DOWNTURN signal. Without it, that signal is silently skipped in live mode (the source reports `enabled: false`). Get a free key at [fred.stlouisfed.org/docs/api/api_key.html](https://fred.stlouisfed.org/docs/api/api_key.html). Not needed for demo mode, and not needed for INDUSTRY_DISRUPTION (GDELT's API requires no key). |
 
 ---
 
@@ -61,6 +62,8 @@ These enable real message delivery. If not set, all messages fall back to `LogPr
 supabase functions deploy ar-aging-agent
 supabase functions deploy news-monitor-agent
 supabase functions deploy sec-monitor-agent
+supabase functions deploy payment-behaviour-agent
+supabase functions deploy industry-risk-agent
 supabase functions deploy cia-agent
 ```
 
@@ -139,5 +142,6 @@ In Vercel → Project → Settings → Domains, add your domain and follow the D
 | `SLACK_WEBHOOK_URL` | No | Enables Slack delivery via incoming webhook |
 | `ATRADIUS_API_KEY` | No | Enables Atradius credit score fetching |
 | `EULER_HERMES_API_KEY` | No | Enables Euler Hermes credit score fetching |
+| `FRED_API_KEY` | No | Enables the Industry Risk Monitor's live FRED/BLS economic data (INDUSTRY_DOWNTURN); GDELT (INDUSTRY_DISRUPTION) needs no key |
 
 No delivery keys are needed for demo mode — `LogProvider` fallback logs all messages to the console.

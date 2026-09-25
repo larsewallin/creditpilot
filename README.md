@@ -6,7 +6,7 @@ Open-source AI agents exploring trade credit and risk management.
 
 ## What is CreditPilot?
 
-CreditPilot is an open-source project exploring how AI agents can automate parts of credit and risk management for companies that sell on trade terms. Agents monitor overdue AR, scan for negative news, and watch SEC filings for distress signals, writing what they find into a shared event log. The Credit Intelligence Agent (CIA) reads that log and answers questions in natural language, citing the specific records behind every claim.
+CreditPilot is an open-source project exploring how AI agents can automate parts of credit and risk management for companies that sell on trade terms. Agents monitor overdue AR, scan for negative news, watch SEC filings for distress signals, track payment-timing trends, and monitor sector-level economic and news signals — writing what they find into a shared event log. The Credit Intelligence Agent (CIA) reads that log and answers questions in natural language, citing the specific records behind every claim.
 
 Agents also propose actions, like credit limit reductions or account holds, for a human to approve or reject. Nothing changes without sign-off.
 
@@ -26,13 +26,17 @@ Customer master data → customers table (manual setup only — AR CSV upload ma
 AR aging export      → invoices table (CSV upload from any ERP)
 News                 → Tavily API (live fetch) or existing rows
 SEC filings          → SEC EDGAR API (live, free, no key required)
+Sector econ data     → FRED/BLS API (live, free key required) or existing rows
+Sector news          → GDELT DOC 2.0 API (live, free, no key required)
 Credit scores        → D&B, Coface, Experian (stubbed, ready to wire)
 
 AGENTS READ AND SIGNAL
-AR Aging Agent  → reads invoices → writes OVERDUE_AR, UTILIZATION_THRESHOLD_BREACH credit_events
-News Agent      → fetches + classifies news → writes NEWS_EVENT credit_events
-SEC Agent       → fetches EDGAR filings → writes GOING_CONCERN, SEC_OTHER credit_events
+AR Aging Agent       → reads invoices → writes OVERDUE_AR, UTILIZATION_THRESHOLD_BREACH credit_events
+News Agent           → fetches + classifies news → writes NEWS_EVENT credit_events
+SEC Agent            → fetches EDGAR filings → writes GOING_CONCERN, SEC_OTHER credit_events
 (SEC agent automatically skips private companies with no CIK)
+Payment Behaviour Agent → compares 30-day payment-timing windows → writes PAYMENT_DETERIORATION, PAYMENT_IMPROVEMENT, PAYMENT_VOLATILITY credit_events
+Industry Risk Agent  → FRED/BLS econ data + GDELT news, per sector present in the portfolio → writes INDUSTRY_DOWNTURN, INDUSTRY_DISRUPTION credit_events (scope='industry', the only agent not scoped to a single customer)
 
 CIA SYNTHESISES
 Reads all unprocessed credit_events
@@ -110,8 +114,14 @@ Fetches live news via the Tavily API, classifies severity using Claude Haiku wit
 ### SEC Filing Monitor Agent (`sec-monitor-agent`)
 Fetches live filings from the SEC EDGAR API (free, no API key required). Detects risk signals via keyword matching across 10 signal types. Deduplicates by accession number. Composes email alerts to the credit analysis team via `deliver-message.ts`.
 
+### Payment Behaviour Monitor Agent (`payment-behaviour-agent`)
+Pure signal agent — no external API calls. For each customer with positive exposure, compares two 30-day windows of payment-timing history (`payment_transactions.days_early_late`) and writes `credit_events` only: PAYMENT_DETERIORATION, PAYMENT_IMPROVEMENT, PAYMENT_VOLATILITY. Does not touch `customers.payment_health`/`payment_trend` — that write-back stays with the AR Aging Agent.
+
+### Industry Risk Monitor Agent (`industry-risk-agent`)
+The first sector-scoped agent (`scope='industry'`, not tied to one customer). Only checks sectors actually present in the portfolio. Two independent sources, each toggled on by whether its dependency is available: FRED/BLS economic data (needs a free `FRED_API_KEY`) feeds INDUSTRY_DOWNTURN; GDELT news (public API, no key needed) feeds INDUSTRY_DISRUPTION. Normalizes each economic signal's sign to the sector's producer/consumer exposure direction before applying a firing threshold — e.g. a falling oil price is a downturn signal for Energy (a producer) but not for Transportation (a consumer of fuel), from the same raw market move.
+
 ### Credit Intelligence Agent (`cia-agent`)
-Synthesises signals from all three monitoring agents into structured intelligence. Operates in three modes: `briefing` (daily portfolio summary, calls Claude Opus), `question` (answers a specific credit question with cited sources, calls Claude Sonnet), and `suggestions` (generates relevant follow-up questions, calls Claude Haiku). Marks source events as processed after each briefing run.
+Synthesises signals from all five monitoring agents into structured intelligence. Operates in three modes: `briefing` (daily portfolio summary, calls Claude Opus), `question` (answers a specific credit question with cited sources, calls Claude Sonnet), and `suggestions` (generates relevant follow-up questions, calls Claude Haiku). Marks source events as processed after each briefing run.
 
 See [docs/AGENTS.md](docs/AGENTS.md) for full agent documentation including event taxonomies.
 
@@ -359,15 +369,17 @@ creditpilot/
 │   ├── functions/
 │   │   ├── _shared/
 │   │   │   └── skills/            # Reusable skill functions
-│   │   │       ├── analytical/    # analyse-payment-behaviour, calculate-credit-limit-proposal,
-│   │   │       │                  #   assess-composite-risk, aggregate-credit-scores,
+│   │   │       ├── analytical/    # analyse-payment-behaviour, analyse-payment-trend, calculate-credit-limit-proposal,
+│   │   │       │                  #   assess-composite-risk, aggregate-credit-scores, sector-exposure-direction,
 │   │   │       │                  #   detect-rating-change, normalise-credit-signal, parse-ar-csv
-│   │   │       ├── integration/   # fetch-sec-filing, fetch-credit-score, deliver-message, search-news
+│   │   │       ├── integration/   # fetch-sec-filing, fetch-credit-score, fetch-industry-signal, deliver-message, search-news
 │   │   │       └── generative/    # classify-news, compose-dunning-letter, compose-teams-alert
 │   │   ├── ar-aging-agent/        # AR Aging monitoring agent
 │   │   ├── ar-csv-upload/         # CSV ingestion endpoint for AR data
 │   │   ├── news-monitor-agent/    # Negative news monitoring agent
 │   │   ├── sec-monitor-agent/     # SEC filing monitoring agent
+│   │   ├── payment-behaviour-agent/ # Payment-timing trend monitoring agent
+│   │   ├── industry-risk-agent/   # Sector-scoped econ + news monitoring agent
 │   │   └── cia-agent/             # Credit Intelligence Agent (synthesis + Q&A)
 │   ├── migrations/                # Schema baseline (00000000000000_baseline.sql) + dated follow-up migrations
 │   ├── migrations_archive/        # Historical migration chain (reference only)

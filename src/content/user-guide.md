@@ -10,7 +10,7 @@ CreditPilot is an open-source project exploring how AI agents can automate credi
 
 Think of it as a team of always-on analysts, each watching one specific thing.
 
-One reads the news. Every few hours it scans for stories about every company in a portfolio, and the moment something concerning shows up, it writes a short, sourced note. Another reads SEC filings, catching covenant breaches, going-concern language, or executive departures the moment a public customer files one. A third watches accounts receivable: who's over their credit limit, who's overdue and by how much, who's quietly drifting from paying on time to paying late.
+One reads the news. Every few hours it scans for stories about every company in a portfolio, and the moment something concerning shows up, it writes a short, sourced note. Another reads SEC filings, catching covenant breaches, going-concern language, or executive departures the moment a public customer files one. A third watches accounts receivable: who's over their credit limit, who's overdue and by how much, who's quietly drifting from paying on time to paying late. A fourth watches payment timing itself, comparing a customer's most recent month of payments against the month before to catch a deteriorating or improving trend before it shows up anywhere else. A fifth watches the economic and news environment around each industry sector in the portfolio — not any single customer. It knows the difference between a falling commodity price being bad news for the sector that sells it and good news for the sector that buys it, and adjusts what it reports accordingly.
 
 None of these analysts talk to each other. They all just write what they find into one shared log, called Credit Events. That's the raw feed of everything happening across a portfolio, in real time.
 
@@ -34,7 +34,7 @@ CreditPilot is open source, so the "team of analysts" doesn't have to stay a met
 
 The analysts are independent programs, called agents, not one big AI. Each one is a small, focused service, technically a Supabase Edge Function, that does exactly one job. More analysts can and will be "hired" to continue growing this credit-management orchestration.
 
-The AR Aging Agent watches accounts receivable: overdue balances broken into age buckets, credit utilization, and payment-behavior trends. The News Monitor Agent searches for and classifies negative news about every customer in a portfolio. The SEC Filing Monitor Agent pulls filings directly from the SEC's EDGAR system for public customers and scans them for risk language. The Credit Intelligence Agent, the CIA, is the synthesis layer. It doesn't watch anything on its own. It reads what the other three have written and answers questions in plain English, with sources.
+The AR Aging Agent watches accounts receivable: overdue balances broken into age buckets, credit utilization, and payment-behavior trends. The News Monitor Agent searches for and classifies negative news about every customer in a portfolio. The SEC Filing Monitor Agent pulls filings directly from the SEC's EDGAR system for public customers and scans them for risk language. The Payment Behaviour Monitor Agent compares a customer's payment timing across two 30-day windows to catch a deteriorating trend, an improving one, or growing unpredictability. The Industry Risk Monitor Agent watches sector-level economic data and news — the only one of the five that isn't tied to a single customer, watching an industry sector as a whole instead, and adjusting for whether that sector buys or sells the thing a given price move affects. The Credit Intelligence Agent, the CIA, is the synthesis layer. It doesn't watch anything on its own. It reads what the other four have written and answers questions in plain English, with sources.
 
 The agents don't call each other directly. Each monitoring agent writes its findings into one shared table of events, and the CIA reads that table. This keeps every agent simple and independently testable. An agent's only job is to watch its one thing and write down what it finds, in a standard format. Nothing more.
 
@@ -46,7 +46,7 @@ The team of analysts described above isn't a fixed team. It's a pattern, documen
 
 A new agent is just a new watcher that follows the shared contract. It's a self-contained function that watches one thing: a data source, an API, a feed. It writes what it finds into the same shared event log every other agent uses, in the same standard shape. It respects the same demo and live separation, so it's safe to test without touching real data. Once it's writing events correctly, the CIA can already read and reason about its findings, with no changes needed to the CIA itself.
 
-That last point is the real payoff of the design. The CIA gets smarter automatically as more analysts are added, because it already knows how to read the shared event format. New agents such as a Payment Behavior Analyst, a Country Risk Analyst, an Industry Risk Analyst, or an FX Exposure Analyst would each plug into the same slot the existing three occupy.
+That last point is the real payoff of the design. The CIA gets smarter automatically as more analysts are added, because it already knows how to read the shared event format. New agents such as a Country Risk Analyst or an FX Exposure Analyst would each plug into the same slot the existing five occupy.
 
 The repo's CONTRIBUTING.md walks through the exact steps and conventions — how to write events, how rate-limiting and audit logging are handled — so a new agent behaves consistently with the existing ones from day one. Anyone can also help shape the roadmap by opening an issue describing what kind of risk signal they'd want CreditPilot to watch, which becomes a candidate for the next analyst.
 
@@ -62,7 +62,7 @@ Actions is where proposed recommendations wait for review, each one tied back to
 
 AR Aging shows accounts receivable broken down by age bucket, credit utilization, and overdue exposure per customer, kept current as new AR data comes in.
 
-News Monitor, SEC Filings, and Customers are filtered views into the underlying data each analyst produces.
+News Monitor, SEC Filings, and Customers are filtered views into the underlying data each analyst produces. Payment Behaviour and Industry Risk don't have their own dedicated pages yet — their events show up in the main Credit Events feed like everything else, filterable by event type.
 
 And in the middle of all of it is the CIA, accessible from anywhere through a search bar for asking questions in plain English. It's the conversational layer over everything else.
 
