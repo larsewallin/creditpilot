@@ -353,9 +353,10 @@ An industry sector is showing material weakness.
 - **Payload:**
   - `severity_score`: 0–100
   - `sector`: enum from `customers.sector` (Aerospace & Defense, Energy, Industrial Manufacturing, Materials, Transportation, Mining, Other)
-  - `indicator`: string (e.g. 'aerospace order book index')
-  - `change_percent`: number
-  - `period_days`: integer
+  - `indicator`: 'production_output' | 'producer_prices' | 'employment' | 'commodity_price' | 'capacity_utilization' — controlled enum, not free text
+  - `change_percent`: number — sign is normalized to the sector's exposure direction (producer vs consumer of the underlying indicator), not the raw unsigned market move; negative always means deterioration for that sector. See the sector exposure-direction table in the Industry Risk Monitor agent.
+  - `period_days`: integer — pinned at 365 (year-over-year), matching how government economic series (FRED/BLS) are actually reported; not a rolling daily window like Payment Behaviour's 30-day windows.
+  - `source_series`: string, optional — the originating series ID for traceability (e.g. "FRED:IPMAN")
   - `summary`: string
 
 #### `INDUSTRY_DISRUPTION`
@@ -368,7 +369,7 @@ Material disruption affecting an industry.
 - **Payload:**
   - `severity_score`: 0–100
   - `sector`: enum
-  - `disruption_type`: 'supply_chain' | 'regulatory' | 'technology' | 'demand_shock' | 'other'
+  - `disruption_type`: 'geopolitical' | 'natural_disaster' | 'labor' | 'supply_chain' | 'regulatory' | 'technology' | 'demand_shock' | 'other'
   - `summary`: string
   - `evidence_url`: string
 

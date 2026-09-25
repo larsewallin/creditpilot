@@ -190,19 +190,28 @@ export const InterestRateChangePayload = z.object({
   effective_date: z.string().date(),
 });
 
+export const IndustryIndicatorEnum = z.enum([
+  "production_output",
+  "producer_prices",
+  "employment",
+  "commodity_price",
+  "capacity_utilization",
+]);
+
 export const IndustryDownturnPayload = z.object({
   severity_score: SeverityScore,
   sector: SectorEnum,
-  indicator: z.string(),
+  indicator: IndustryIndicatorEnum,
   change_percent: z.number(),
   period_days: z.number().int(),
+  source_series: z.string().optional(),
   summary: z.string(),
 });
 
 export const IndustryDisruptionPayload = z.object({
   severity_score: SeverityScore,
   sector: SectorEnum,
-  disruption_type: z.enum(["supply_chain", "regulatory", "technology", "demand_shock", "other"]),
+  disruption_type: z.enum(["geopolitical", "natural_disaster", "labor", "supply_chain", "regulatory", "technology", "demand_shock", "other"]),
   summary: z.string(),
   evidence_url: z.string().url(),
 });
