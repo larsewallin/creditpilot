@@ -62,7 +62,7 @@ Actions is where proposed recommendations wait for review, each one tied back to
 
 AR Aging shows accounts receivable broken down by age bucket, credit utilization, and overdue exposure per customer, kept current as new AR data comes in.
 
-News Monitor, SEC Filings, and Customers are filtered views into the underlying data each analyst produces. Payment Behaviour and Industry Risk don't have their own dedicated pages yet — their events show up in the main Credit Events feed like everything else, filterable by event type.
+News Monitor, SEC Filings, and Customers are filtered views into the underlying data each analyst produces. Payment Behaviour and Industry Risk don't have their own dedicated pages yet — their events show up in the main Credit Events feed, each with its own color-coded label and filter tab, same as every other agent.
 
 And in the middle of all of it is the CIA, accessible from anywhere through a search bar for asking questions in plain English. It's the conversational layer over everything else.
 
