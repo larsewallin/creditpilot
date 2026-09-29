@@ -30,6 +30,14 @@ function getEventDestination(evt: any): string | null {
   if (evt.source_agent === "sec_monitor_agent") {
     return `/sec?customer_id=${evt.customer_id}`;
   }
+  if (evt.source_agent === "payment_behaviour_agent" && evt.customer_id) {
+    return `/payments?customer_id=${evt.customer_id}`;
+  }
+  // Industry events are scope='industry' with customer_id null — they route by
+  // sector from the payload instead.
+  if (evt.source_agent === "industry_risk_agent" && evt.payload?.sector) {
+    return `/industry?sector=${encodeURIComponent(evt.payload.sector)}`;
+  }
   return null;
 }
 

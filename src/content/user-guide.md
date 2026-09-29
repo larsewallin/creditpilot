@@ -62,7 +62,13 @@ Actions is where proposed recommendations wait for review, each one tied back to
 
 AR Aging shows accounts receivable broken down by age bucket, credit utilization, and overdue exposure per customer, kept current as new AR data comes in.
 
-News Monitor, SEC Filings, and Customers are filtered views into the underlying data each analyst produces. Payment Behaviour and Industry Risk don't have their own dedicated pages yet — their events show up in the main Credit Events feed, each with its own color-coded label and filter tab, same as every other agent.
+News Monitor, SEC Filings, and Customers are filtered views into the underlying data each analyst produces.
+
+Payment Behaviour shows every customer's payment timing — the last 30 days against the 30 days before that — sorted worst-first, and opens up to the individual payments behind each figure.
+
+Industry Risk is the one page that isn't organized by customer. It lists the sectors your portfolio is actually exposed to, and what each analyst found about them: the economic series being watched, and the news that moved them.
+
+Every one of these pages can be opened directly from a Credit Events card, landing on the exact customer or sector that event was about.
 
 And in the middle of all of it is the CIA, accessible from anywhere through a search bar for asking questions in plain English. It's the conversational layer over everything else.
 
