@@ -53,7 +53,7 @@ export default function SecFilings() {
 
   useEffect(() => {
     if (!highlightedCustomerId || isLoading) return;
-    document.getElementById(`sec-${highlightedCustomerId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    document.getElementById(`sec-${highlightedCustomerId}`)?.scrollIntoView({ behavior: "auto", block: "center" });
   }, [highlightedCustomerId, isLoading, monitoring]);
 
   if (isLoading) return <div className="space-y-4"><SkeletonCard /><SkeletonCard /><SkeletonCard /></div>;

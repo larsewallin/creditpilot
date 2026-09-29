@@ -87,7 +87,7 @@ export default function CreditEvents() {
 
   useEffect(() => {
     if (!highlightedEventId || isLoading) return;
-    document.getElementById(`event-${highlightedEventId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    document.getElementById(`event-${highlightedEventId}`)?.scrollIntoView({ behavior: "auto", block: "center" });
   }, [highlightedEventId, isLoading, events]);
 
   const hasActiveSession = sessionStorage.getItem("demo_activated") === "true";

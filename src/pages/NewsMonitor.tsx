@@ -35,7 +35,7 @@ export default function NewsMonitor() {
 
   useEffect(() => {
     if (!highlightedEventId || isLoading) return;
-    document.getElementById(`news-${highlightedEventId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    document.getElementById(`news-${highlightedEventId}`)?.scrollIntoView({ behavior: "auto", block: "center" });
   }, [highlightedEventId, isLoading, news]);
 
   if (isLoading) return <div className="space-y-4"><SkeletonCard /><SkeletonTable rows={8} /></div>;
