@@ -104,6 +104,11 @@ export async function initDemo() {
     supabase.functions.invoke("ar-aging-agent", { body: { triggered_by: "auto" } }),
     supabase.functions.invoke("news-monitor-agent", { body: { triggered_by: "auto" } }),
     supabase.functions.invoke("sec-monitor-agent", { body: { triggered_by: "auto" } }),
+    // Added 2026-09-30 (F1): these two were previously never invoked on reset,
+    // so a demo reset never refreshed their events even though both agents
+    // self-reset their own prior demo credit_events each run (see A5/A6).
+    supabase.functions.invoke("payment-behaviour-agent", { body: { triggered_by: "auto" } }),
+    supabase.functions.invoke("industry-risk-agent", { body: { triggered_by: "auto" } }),
   ]);
   await supabase.functions.invoke("cia-agent", { body: {} });
 
@@ -114,6 +119,12 @@ export async function initDemo() {
   sessionStorage.setItem("demo_activated", "true");
   sessionStorage.setItem(
     "demo_agents",
-    JSON.stringify(["ar_aging_agent", "news_monitor_agent", "sec_monitor_agent"])
+    JSON.stringify([
+      "ar_aging_agent",
+      "news_monitor_agent",
+      "sec_monitor_agent",
+      "payment_behaviour_agent",
+      "industry_risk_agent",
+    ])
   );
 }
