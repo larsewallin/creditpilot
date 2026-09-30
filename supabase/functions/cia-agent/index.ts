@@ -1511,31 +1511,15 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one sentence statin
 
   // ── BRIEFING mode (default) ────────────────────────────────────────────────
 
-  // Demo fast-path
-  if (DEMO_MODE) {
-    const { error: runError } = await supabaseClient
-      .from("agent_runs")
-      .upsert({
-        id: DEMO_SEED_RUN_ID,
-        agent_name: "cia-agent",
-        status: "completed",
-        completed_at: new Date().toISOString(),
-        created_at: new Date().toISOString(),
-      }, { onConflict: "id" });
-
-    if (runError) console.error("Demo upsert error:", runError);
-
-    return jsonRes({
-      run_id: DEMO_SEED_RUN_ID,
-      demo: true,
-      briefing: DEMO_BRIEFING,
-      events_processed: 12,
-      stale_agents: [],
-      messages: DEMO_MESSAGES,
-    });
-  }
-
-  // Live briefing path
+  // DEMO_MODE now runs the real briefing/decisioning pipeline below instead of
+  // short-circuiting to a hardcoded DEMO_BRIEFING constant. (Fixed 2026-09-30, F0 —
+  // previously this returned canned text and never touched agent_runs, credit_events,
+  // pending_actions, or customers.risk_tags in demo, so /actions never reflected any
+  // agent's real output.) Scoping to demo data is already handled below via
+  // `.eq("is_demo", DEMO_MODE)` on the events query and `is_demo: DEMO_MODE` on every
+  // write. Two demo-specific guards: the narrative call below uses claude-haiku-4-5
+  // instead of claude-opus-4-5 (cost), and external alert delivery (email/Teams/Slack)
+  // is skipped entirely in demo (step 6b) regardless of which webhook secrets are set.
   const authHeader = req.headers.get("Authorization");
   if (!authHeader) {
     return jsonRes({ error: "Unauthorized" }, 401);
@@ -1619,7 +1603,7 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one sentence statin
   let briefing = "";
   try {
     const message = await anthropic.messages.create({
-      model: "claude-opus-4-5",
+      model: DEMO_MODE ? "claude-haiku-4-5" : "claude-opus-4-5",
       max_tokens: 2000,
       system: systemPrompt,
       messages: [{ role: "user", content: userPrompt }],
@@ -1786,40 +1770,45 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one sentence statin
       is_demo: DEMO_MODE,
     });
 
-    // Compose and deliver credit action alert to credit team
-    const alert = composeTeamsAlert({
-      alert_type: "credit_limit_action",
-      company_name: customer.company_name ?? custId,
-      severity: riskAssessment.severity === "critical" ? "critical" : "high",
-      headline: `Credit limit reduction proposed: $${customer.credit_limit.toLocaleString()} → $${proposal.proposed_limit.toLocaleString()}`,
-      details: riskAssessment.rationale,
-      metric_label: "Proposed reduction",
-      metric_value: `${proposal.reduction_pct}%`,
-      recommended_action: "Review and approve or reject in the Actions page.",
-    });
+    // Compose and deliver credit action alert to credit team.
+    // Skipped entirely in demo (F0, 2026-09-30) — demo customers are fictional and
+    // this must never send a real email/Teams/Slack message regardless of which
+    // webhook secrets happen to be configured on this project.
+    if (!DEMO_MODE) {
+      const alert = composeTeamsAlert({
+        alert_type: "credit_limit_action",
+        company_name: customer.company_name ?? custId,
+        severity: riskAssessment.severity === "critical" ? "critical" : "high",
+        headline: `Credit limit reduction proposed: $${customer.credit_limit.toLocaleString()} → $${proposal.proposed_limit.toLocaleString()}`,
+        details: riskAssessment.rationale,
+        metric_label: "Proposed reduction",
+        metric_value: `${proposal.reduction_pct}%`,
+        recommended_action: "Review and approve or reject in the Actions page.",
+      });
 
-    await deliverMessage({
-      channel: "email",
-      recipient: creditTeamEmail,
-      subject: alert.subject,
-      body: alert.body,
-    }, deliveryProviders);
+      await deliverMessage({
+        channel: "email",
+        recipient: creditTeamEmail,
+        subject: alert.subject,
+        body: alert.body,
+      }, deliveryProviders);
 
-    // Insert to agent_messages for audit trail
-    await supabaseClient.from("agent_messages").insert({
-      agent_name: "cia-agent",
-      customer_id: custId,
-      channel: "email",
-      template_type: "credit_limit_action",
-      recipient_type: "credit_committee",
-      recipient_name: "Credit Risk Team",
-      recipient_email: creditTeamEmail,
-      subject: alert.subject,
-      body: alert.body,
-      status: "draft",
-      is_demo: DEMO_MODE,
-      run_id: runId,
-    });
+      // Insert to agent_messages for audit trail
+      await supabaseClient.from("agent_messages").insert({
+        agent_name: "cia-agent",
+        customer_id: custId,
+        channel: "email",
+        template_type: "credit_limit_action",
+        recipient_type: "credit_committee",
+        recipient_name: "Credit Risk Team",
+        recipient_email: creditTeamEmail,
+        subject: alert.subject,
+        body: alert.body,
+        status: "draft",
+        is_demo: DEMO_MODE,
+        run_id: runId,
+      });
+    }
   }
 
   if (pendingActions.length > 0) {
@@ -1871,7 +1860,7 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one sentence statin
 
   return jsonRes({
     run_id: runId,
-    demo: false,
+    demo: DEMO_MODE,
     briefing,
     events_processed: events.length,
     composite_risks_detected: assessmentEvents.filter(e => e.event_type !== "DAILY_BRIEFING").length,
