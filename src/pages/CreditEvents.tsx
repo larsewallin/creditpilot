@@ -68,6 +68,10 @@ export default function CreditEvents() {
         .from("credit_events")
         .select("*, customers(company_name)")
         .eq("is_demo", true)
+        // Portfolio-wide briefings aren't a per-event signal and render poorly
+        // in this unified feed (no customer, long free-text body). Excluded
+        // here pending a dedicated surface for them.
+        .neq("event_type", "DAILY_BRIEFING")
         .order("created_at", { ascending: false })
         .limit(100);
 
