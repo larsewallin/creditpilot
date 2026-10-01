@@ -251,10 +251,10 @@ Customer's payment behavior is trending worse.
 - **Severity:** medium to critical (5–10 day swing → medium, 10–20 → high, 20+ → critical)
 - **Payload:**
   - `severity_score`: 0–100
-  - `current_avg_days_to_pay`: number (avg `days_early_late` over the current 30-day window — field name predates the agent; kept as-is, see deferred backlog)
-  - `prior_avg_days_to_pay`: number (same, prior 30-day window)
+  - `current_avg_days_to_pay`: number (avg `days_early_late` over the current 90-day window — field name predates the agent; kept as-is, see deferred backlog)
+  - `prior_avg_days_to_pay`: number (same, prior 90-day window)
   - `trend_direction`: 'worsening' | 'sharply_worsening'
-  - `observation_window_days`: integer (length of each window, 30)
+  - `observation_window_days`: integer (length of each window, 90)
   - `summary`: string
 
 #### `PAYMENT_IMPROVEMENT`
@@ -275,7 +275,7 @@ Customer's payment timing is becoming unpredictable (high variance).
 - **Severity:** high to critical (fires only once stddev >= 10 days, so the floor is "high"; 10–20 → high, 20+ → critical)
 - **Payload:**
   - `severity_score`: 0–100
-  - `standard_deviation_days`: number (population stddev of `days_early_late` over the current 30-day window)
+  - `standard_deviation_days`: number (population stddev of `days_early_late` over the current 90-day window)
   - `observation_window_days`: integer
   - `summary`: string
 
@@ -355,7 +355,7 @@ An industry sector is showing material weakness.
   - `sector`: enum from `customers.sector` (Aerospace & Defense, Energy, Industrial Manufacturing, Materials, Transportation, Mining, Other)
   - `indicator`: 'production_output' | 'producer_prices' | 'employment' | 'commodity_price' | 'capacity_utilization' — controlled enum, not free text
   - `change_percent`: number — sign is normalized to the sector's exposure direction (producer vs consumer of the underlying indicator), not the raw unsigned market move; negative always means deterioration for that sector. See the sector exposure-direction table in the Industry Risk Monitor agent.
-  - `period_days`: integer — pinned at 365 (year-over-year), matching how government economic series (FRED/BLS) are actually reported; not a rolling daily window like Payment Behaviour's 30-day windows.
+  - `period_days`: integer — pinned at 365 (year-over-year), matching how government economic series (FRED/BLS) are actually reported; not a rolling daily window like Payment Behaviour's 90-day windows.
   - `source_series`: string, optional — the originating series ID for traceability (e.g. "FRED:IPMAN")
   - `summary`: string
 

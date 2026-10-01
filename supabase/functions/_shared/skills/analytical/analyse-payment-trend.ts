@@ -1,8 +1,8 @@
 /**
  * @skill analyse-payment-trend
  * @type analytical
- * @description Compares a customer's payment timing over two adjacent 30-day windows
- *   (current: last 30 days from the reference date; prior: the 30 days before that) and
+ * @description Compares a customer's payment timing over two adjacent 90-day windows
+ *   (current: last 90 days from the reference date; prior: the 90 days before that) and
  *   detects three independent conditions from `days_early_late` (negative = paid early,
  *   positive = paid late):
  *
@@ -75,7 +75,12 @@ export interface EvaluatedResult {
 /** Discriminated on has_sufficient_data — narrow before reading the averages/signals. */
 export type PaymentTrendResult = InsufficientDataResult | EvaluatedResult;
 
-export const OBSERVATION_WINDOW_DAYS = 30;
+// Widened from 30 to 90 days: demo (and much real) payment data arrives
+// roughly monthly, so a 30-day window usually captured exactly one
+// transaction per side, making volatility (stddev of n=1) and on-time
+// rate (binary at n=1) degenerate. 90 days gives most customers 2-3
+// payments per window, which is what these stats need to mean anything.
+export const OBSERVATION_WINDOW_DAYS = 90;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 function mean(values: number[]): number {

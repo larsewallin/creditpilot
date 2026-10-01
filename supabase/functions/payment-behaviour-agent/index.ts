@@ -15,8 +15,8 @@
  *
  * Logic, per customer with current_exposure > 0 (see analyse-payment-trend.ts skill
  * for the full window/threshold spec):
- *   - Split payment_transactions into two 30-day windows: current (last 30 days from
- *     now) and prior (the 30 days before that). Skip the customer if either window
+ *   - Split payment_transactions into two 90-day windows: current (last 90 days from
+ *     now) and prior (the 90 days before that). Skip the customer if either window
  *     has zero qualifying transactions.
  *   - PAYMENT_DETERIORATION: current_avg_days_late − prior_avg_days_late >= 5 AND
  *     current_avg_days_late > 0.

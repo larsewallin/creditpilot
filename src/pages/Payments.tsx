@@ -88,7 +88,7 @@ export default function Payments() {
       <div>
         <h1 className="text-xl font-semibold text-foreground">Payment Behaviour</h1>
         <p className="text-xs text-muted-foreground mt-1">
-          Per-customer payment-timing trend — the last 30 days compared against the 30 days before that.
+          Per-customer payment-timing trend — the last 90 days compared against the 90 days before that.
           Open one from a Credit Events card for context, or browse below.
         </p>
       </div>

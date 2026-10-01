@@ -241,7 +241,7 @@ function generatePaymentHistory(
 
   for (let i = 0; i < count; i++) {
     // Oldest transaction ~ (count-1) months back, most recent ~5 days ago —
-    // spaced so both the last-30-days and prior-30-days windows a payment
+    // spaced so both the current (0-90d) and prior (91-180d) windows a payment
     // trend agent would use have real data.
     const monthsBack = count - 1 - i;
     const paymentDate = new Date(now.getTime() - (monthsBack * 30 + 5) * MS_PER_DAY);

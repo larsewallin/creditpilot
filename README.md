@@ -35,7 +35,7 @@ AR Aging Agent       → reads invoices → writes OVERDUE_AR, UTILIZATION_THRES
 News Agent           → fetches + classifies news → writes NEWS_EVENT credit_events
 SEC Agent            → fetches EDGAR filings → writes GOING_CONCERN, SEC_OTHER credit_events
 (SEC agent automatically skips private companies with no CIK)
-Payment Behaviour Agent → compares 30-day payment-timing windows → writes PAYMENT_DETERIORATION, PAYMENT_IMPROVEMENT, PAYMENT_VOLATILITY credit_events
+Payment Behaviour Agent → compares 90-day payment-timing windows → writes PAYMENT_DETERIORATION, PAYMENT_IMPROVEMENT, PAYMENT_VOLATILITY credit_events
 Industry Risk Agent  → FRED/BLS econ data + GDELT news, per sector present in the portfolio → writes INDUSTRY_DOWNTURN, INDUSTRY_DISRUPTION credit_events (scope='industry', the only agent not scoped to a single customer)
 
 CIA SYNTHESISES
@@ -115,7 +115,7 @@ Fetches live news via the Tavily API, classifies severity using Claude Haiku wit
 Fetches live filings from the SEC EDGAR API (free, no API key required). Detects risk signals via keyword matching across 10 signal types. Deduplicates by accession number. Composes email alerts to the credit analysis team via `deliver-message.ts`.
 
 ### Payment Behaviour Monitor Agent (`payment-behaviour-agent`)
-Pure signal agent — no external API calls. For each customer with positive exposure, compares two 30-day windows of payment-timing history (`payment_transactions.days_early_late`) and writes `credit_events` only: PAYMENT_DETERIORATION, PAYMENT_IMPROVEMENT, PAYMENT_VOLATILITY. Does not touch `customers.payment_health`/`payment_trend` — that write-back stays with the AR Aging Agent.
+Pure signal agent — no external API calls. For each customer with positive exposure, compares two 90-day windows of payment-timing history (`payment_transactions.days_early_late`) and writes `credit_events` only: PAYMENT_DETERIORATION, PAYMENT_IMPROVEMENT, PAYMENT_VOLATILITY. Does not touch `customers.payment_health`/`payment_trend` — that write-back stays with the AR Aging Agent.
 
 ### Industry Risk Monitor Agent (`industry-risk-agent`)
 The first sector-scoped agent (`scope='industry'`, not tied to one customer). Only checks sectors actually present in the portfolio. Two independent sources, each toggled on by whether its dependency is available: FRED/BLS economic data (needs a free `FRED_API_KEY`) feeds INDUSTRY_DOWNTURN; GDELT news (public API, no key needed) feeds INDUSTRY_DISRUPTION. Normalizes each economic signal's sign to the sector's producer/consumer exposure direction before applying a firing threshold — e.g. a falling oil price is a downturn signal for Energy (a producer) but not for Transportation (a consumer of fuel), from the same raw market move.

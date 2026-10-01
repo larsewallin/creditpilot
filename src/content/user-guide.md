@@ -34,7 +34,7 @@ CreditPilot is open source, so the "team of analysts" doesn't have to stay a met
 
 The analysts are independent programs, called agents, not one big AI. Each one is a small, focused service, technically a Supabase Edge Function, that does exactly one job. More analysts can and will be "hired" to continue growing this credit-management orchestration.
 
-The AR Aging Agent watches accounts receivable: overdue balances broken into age buckets, credit utilization, and payment-behavior trends. The News Monitor Agent searches for and classifies negative news about every customer in a portfolio. The SEC Filing Monitor Agent pulls filings directly from the SEC's EDGAR system for public customers and scans them for risk language. The Payment Behaviour Monitor Agent compares a customer's payment timing across two 30-day windows to catch a deteriorating trend, an improving one, or growing unpredictability. The Industry Risk Monitor Agent watches sector-level economic data and news — the only one of the five that isn't tied to a single customer, watching an industry sector as a whole instead, and adjusting for whether that sector buys or sells the thing a given price move affects. The Credit Intelligence Agent, the CIA, is the synthesis layer. It doesn't watch anything on its own. It reads what the other four have written and answers questions in plain English, with sources.
+The AR Aging Agent watches accounts receivable: overdue balances broken into age buckets, credit utilization, and payment-behavior trends. The News Monitor Agent searches for and classifies negative news about every customer in a portfolio. The SEC Filing Monitor Agent pulls filings directly from the SEC's EDGAR system for public customers and scans them for risk language. The Payment Behaviour Monitor Agent compares a customer's payment timing across two 90-day windows to catch a deteriorating trend, an improving one, or growing unpredictability. The Industry Risk Monitor Agent watches sector-level economic data and news — the only one of the five that isn't tied to a single customer, watching an industry sector as a whole instead, and adjusting for whether that sector buys or sells the thing a given price move affects. The Credit Intelligence Agent, the CIA, is the synthesis layer. It doesn't watch anything on its own. It reads what the other four have written and answers questions in plain English, with sources.
 
 The agents don't call each other directly. Each monitoring agent writes its findings into one shared table of events, and the CIA reads that table. This keeps every agent simple and independently testable. An agent's only job is to watch its one thing and write down what it finds, in a standard format. Nothing more.
 
@@ -64,7 +64,7 @@ AR Aging shows accounts receivable broken down by age bucket, credit utilization
 
 News Monitor, SEC Filings, and Customers are filtered views into the underlying data each analyst produces.
 
-Payment Behaviour shows every customer's payment timing — the last 30 days against the 30 days before that — sorted worst-first, and opens up to the individual payments behind each figure.
+Payment Behaviour shows every customer's payment timing — the last 90 days against the 90 days before that — sorted worst-first, and opens up to the individual payments behind each figure.
 
 Industry Risk is the one page that isn't organized by customer. It lists the sectors your portfolio is actually exposed to, and what each analyst found about them: the economic series being watched, and the news that moved them.
 
