@@ -21,6 +21,18 @@ function formatChange(pct: number | null): string {
   return `${n > 0 ? "+" : ""}${n.toFixed(1)}%`;
 }
 
+// Mirrors severityToScore in supabase/functions/_shared/event_schemas.ts —
+// used only to rank a sector's events and surface the single worst one at
+// the sector header, never to relabel an individual event's own severity.
+const SEVERITY_RANK: Record<string, number> = { critical: 92, high: 75, medium: 52, low: 27, info: 7 };
+function worstSeverity(events: { severity: string }[]): string | null {
+  if (events.length === 0) return null;
+  return events.reduce((worst, e) =>
+    (SEVERITY_RANK[e.severity] ?? 0) > (SEVERITY_RANK[worst] ?? 0) ? e.severity : worst,
+    events[0].severity
+  );
+}
+
 export default function IndustryRisk() {
   const [searchParams] = useSearchParams();
   const highlightedSector = searchParams.get("sector");
@@ -145,9 +157,12 @@ export default function IndustryRisk() {
                     {sectorEvents.length === 0 ? (
                       <Badge variant="secondary" className="text-[10px] h-5">No active signals</Badge>
                     ) : (
-                      sectorEvents.map((e: any) => (
-                        <SeverityBadge key={e.id} severity={e.severity} />
-                      ))
+                      <>
+                        <span className="text-[10px] text-muted-foreground">
+                          Highest active signal{sectorEvents.length > 1 ? ` (of ${sectorEvents.length})` : ""}:
+                        </span>
+                        <SeverityBadge severity={worstSeverity(sectorEvents)} />
+                      </>
                     )}
                   </div>
                 </div>
@@ -165,9 +180,10 @@ export default function IndustryRisk() {
                           <div key={e.id} className="flex items-start gap-2 bg-agent-industry/5 rounded-lg p-2.5">
                             <TrendingDown className="h-3.5 w-3.5 text-agent-industry mt-0.5 shrink-0" />
                             <div className="min-w-0 flex-1">
-                              <p className="text-xs font-medium text-foreground">
+                              <p className="text-xs font-medium text-foreground flex items-center gap-1.5 flex-wrap">
                                 {String(p.indicator ?? "").replace(/_/g, " ")}{" "}
                                 <span className="font-mono text-severity-critical">{formatChange(p.change_percent)}</span>
+                                <SeverityBadge severity={e.severity} />
                               </p>
                               <p className="text-[11px] text-muted-foreground mt-0.5">{e.summary}</p>
                               <p className="text-[10px] text-muted-foreground/70 mt-1 font-mono">
@@ -197,8 +213,9 @@ export default function IndustryRisk() {
                             <AlertTriangle className="h-3.5 w-3.5 text-agent-industry mt-0.5 shrink-0" />
                             <div className="min-w-0 flex-1">
                               <div className="flex items-start justify-between gap-2">
-                                <p className="text-xs font-medium text-foreground">
+                                <p className="text-xs font-medium text-foreground flex items-center gap-1.5 flex-wrap">
                                   {matchingNews?.headline ?? e.title}
+                                  <SeverityBadge severity={e.severity} />
                                 </p>
                                 {p.evidence_url && (
                                   <a
