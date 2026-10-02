@@ -9,6 +9,7 @@ import { useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { ExternalLink, TrendingDown, AlertTriangle } from "lucide-react";
 import { DemoDataNotice } from "@/components/DemoDataNotice";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 // change_percent on INDUSTRY_DOWNTURN payloads is already sign-normalized to
 // the sector's producer/consumer exposure direction by the agent
@@ -218,14 +219,44 @@ export default function IndustryRisk() {
                                   <SeverityBadge severity={e.severity} />
                                 </p>
                                 {p.evidence_url && (
-                                  <a
-                                    href={p.evidence_url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
-                                  >
-                                    <ExternalLink className="h-3 w-3" />
-                                  </a>
+                                  (() => {
+                                    // Demo mode seeds fabricated headlines against placeholder
+                                    // example.com URLs (DemoDataNotice above already says the
+                                    // headlines are fabricated) -- an example.com link isn't a
+                                    // real article, so don't send the user to a dead link.
+                                    // Production's real GDELT-sourced evidence_url still renders
+                                    // as a normal clickable link.
+                                    let isPlaceholder = false;
+                                    try {
+                                      isPlaceholder = new URL(p.evidence_url).hostname === "example.com";
+                                    } catch {
+                                      isPlaceholder = false;
+                                    }
+                                    if (isPlaceholder) {
+                                      return (
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <span className="text-muted-foreground/40 shrink-0 cursor-help">
+                                              <ExternalLink className="h-3 w-3" />
+                                            </span>
+                                          </TooltipTrigger>
+                                          <TooltipContent>
+                                            Demo data -- no live article to link to.
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      );
+                                    }
+                                    return (
+                                      <a
+                                        href={p.evidence_url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                                      >
+                                        <ExternalLink className="h-3 w-3" />
+                                      </a>
+                                    );
+                                  })()
                                 )}
                               </div>
                               {matchingNews?.summary && (
