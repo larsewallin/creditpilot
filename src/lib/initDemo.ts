@@ -110,7 +110,13 @@ export async function initDemo() {
     supabase.functions.invoke("payment-behaviour-agent", { body: { triggered_by: "auto" } }),
     supabase.functions.invoke("industry-risk-agent", { body: { triggered_by: "auto" } }),
   ]);
-  await supabase.functions.invoke("cia-agent", { body: {} });
+  // skip_briefing: true -- a reset's cia-agent call has no need to spend real
+  // Anthropic tokens on the DAILY_BRIEFING text, which has no UI surface
+  // (CreditEvents.tsx excludes it) and feeds nothing the Actions/Credit
+  // Events pages actually display -- composite-risk events and
+  // pending_actions are computed independent of it. See CIARequest's
+  // skip_briefing doc comment in cia-agent/index.ts (2026-10-02).
+  await supabase.functions.invoke("cia-agent", { body: { skip_briefing: true } });
 
   // ── 3. Mark demo as initialized ───────────────────────────────────────────
 

@@ -24,7 +24,7 @@
  *   Calls Claude Haiku (live) or returns DEMO_SUGGESTIONS (demo).
  *
  * Request body: { mode?: "briefing"|"question"|"suggestions", question?: string,
- *                 force_refresh?: boolean, customer_id?: string }
+ *                 force_refresh?: boolean, customer_id?: string, skip_briefing?: boolean }
  * Response (briefing): { run_id, briefing, events_processed, stale_agents, messages }
  * Response (question): { answer, sources[], confidence, confidence_reason }
  * Response (suggestions): { suggestions: string[] }
@@ -98,6 +98,13 @@ interface CIARequest {
   question?: string;
   force_refresh?: boolean;
   customer_id?: string;
+  /** Skip the Anthropic briefing call entirely (used by initDemo.ts on reset
+   *  -- see 2026-10-02 notes below). DAILY_BRIEFING's text is never surfaced
+   *  anywhere in the UI (CreditEvents.tsx explicitly excludes it, pending a
+   *  dedicated surface), so a reset-triggered run has no need to spend real
+   *  Anthropic tokens generating it; the actual useful output (composite-risk
+   *  events + pending_actions) is pure computation, independent of this call. */
+  skip_briefing?: boolean;
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -954,7 +961,7 @@ serve(async (req: Request) => {
     // empty body is fine
   }
 
-  const { mode = "briefing", question, force_refresh = false, customer_id } = body;
+  const { mode = "briefing", question, force_refresh = false, customer_id, skip_briefing = false } = body;
 
   // ── SUGGESTIONS mode ──────────────────────────────────────────────────────
   if (mode === "suggestions") {
@@ -1595,23 +1602,58 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one sentence statin
     }
   }
 
-  // 4. Call Claude
-  const anthropic = new Anthropic({ apiKey: Deno.env.get("ANTHROPIC_API_KEY")! });
-  const systemPrompt = buildSystemPrompt(customers ?? []);
-  const userPrompt = buildUserPrompt(events as CreditEvent[], customers ?? [], question);
-
+  // 4. Call Claude -- skipped entirely when skip_briefing is set (initDemo.ts
+  //    passes this on every reset-triggered call, see CIARequest.skip_briefing
+  //    above for why: the briefing text has no UI surface, and everything
+  //    reset actually needs -- composite-risk events, pending_actions -- is
+  //    computed below independent of this call's output).
+  //
+  //    When skip_briefing is NOT set (a direct/manual briefing call), this is
+  //    the only place real Anthropic tokens get spent on this path, so it's
+  //    rate-limited the same way question mode already is (2026-09-13) --
+  //    same per-IP-per-day pattern, separate counter table/RPC so the two
+  //    limits don't share a budget.
   let briefing = "";
-  try {
-    const message = await anthropic.messages.create({
-      model: DEMO_MODE ? "claude-haiku-4-5" : "claude-opus-4-5",
-      max_tokens: 2000,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userPrompt }],
-    });
-    briefing = extractText(message);
-  } catch (err) {
-    console.error("Anthropic API error:", err);
-    return jsonRes({ error: "Failed to generate briefing" }, 500);
+  if (!skip_briefing) {
+    const DEMO_RESET_LIMIT = 10;
+    if (DEMO_MODE) {
+      const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+      let demoResetCount: number | null = null;
+      try {
+        const { data: count, error: rateLimitError } = await supabaseClient.rpc(
+          "fn_increment_ip_reset_count",
+          { p_ip_address: ip }
+        );
+        if (rateLimitError) throw rateLimitError;
+        demoResetCount = count as number;
+      } catch (err) {
+        // Fail open -- a rate-limit DB hiccup shouldn't take down the demo.
+        console.error("Briefing rate limit check failed, allowing request:", err);
+      }
+
+      if (demoResetCount !== null && demoResetCount > DEMO_RESET_LIMIT) {
+        return jsonRes({
+          error: `Demo daily limit of ${DEMO_RESET_LIMIT} full briefings per visitor reached. This runs on real Anthropic API tokens. Deploy your own instance to lift this limit -- see the GitHub repo.`,
+        }, 429);
+      }
+    }
+
+    const anthropic = new Anthropic({ apiKey: Deno.env.get("ANTHROPIC_API_KEY")! });
+    const systemPrompt = buildSystemPrompt(customers ?? []);
+    const userPrompt = buildUserPrompt(events as CreditEvent[], customers ?? [], question);
+
+    try {
+      const message = await anthropic.messages.create({
+        model: DEMO_MODE ? "claude-haiku-4-5" : "claude-opus-4-5",
+        max_tokens: 2000,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userPrompt }],
+      });
+      briefing = extractText(message);
+    } catch (err) {
+      console.error("Anthropic API error:", err);
+      return jsonRes({ error: "Failed to generate briefing" }, 500);
+    }
   }
 
   // 5. Create agent_runs record
@@ -1633,25 +1675,31 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one sentence statin
   const groupedEvents = groupEventsByCustomer(events as CreditEvent[]);
   const assessmentEvents = [];
 
-  assessmentEvents.push({
-    scope: "portfolio",
-    customer_id: null,
-    event_type: "DAILY_BRIEFING",
-    source_agent: "cia-agent",
-    severity: "info" as const,
-    title: "Daily Credit Intelligence Briefing",
-    description: briefing.slice(0, 500),
-    payload: {
-      full_briefing: briefing,
-      events_synthesised: events.length,
-      question: question ?? null,
-      stale_agents: staleAgents,
-    },
-    action_required: false,
-    is_demo: DEMO_MODE,
-    cia_processed: true,
-    run_id: runId,
-  });
+  // Only write the DAILY_BRIEFING row when a briefing was actually generated
+  // (skip_briefing=false) -- an empty/placeholder briefing row would just be
+  // noise, and this event type has no UI surface anyway (see skip_briefing's
+  // doc comment on CIARequest above).
+  if (!skip_briefing) {
+    assessmentEvents.push({
+      scope: "portfolio",
+      customer_id: null,
+      event_type: "DAILY_BRIEFING",
+      source_agent: "cia-agent",
+      severity: "info" as const,
+      title: "Daily Credit Intelligence Briefing",
+      description: briefing.slice(0, 500),
+      payload: {
+        full_briefing: briefing,
+        events_synthesised: events.length,
+        question: question ?? null,
+        stale_agents: staleAgents,
+      },
+      action_required: false,
+      is_demo: DEMO_MODE,
+      cia_processed: true,
+      run_id: runId,
+    });
+  }
 
   for (const [custId, custEvents] of Object.entries(groupedEvents)) {
     if (custId === "__portfolio__") continue;
