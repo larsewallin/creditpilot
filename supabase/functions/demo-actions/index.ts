@@ -149,10 +149,23 @@ Deno.serve(async (req) => {
         .update({ reviewed: false, reviewed_by: null, reviewed_at: null })
         .eq("is_demo", true);
 
+      // Excludes source_agent = 'cia-agent': those rows are cia-agent's OWN
+      // synthesis output (DAILY_BRIEFING, COMPOSITE_RISK_CRITICAL/ELEVATED),
+      // not a sensing-agent signal. Un-marking them as unprocessed here fed
+      // cia-agent's own prior output back into its next run as if it were a
+      // fresh signal from a new agent -- a self-reinforcing feedback loop
+      // (confirmed live 2026-10-02: Ironwood Machine Works picked up
+      // "cia-agent" itself as a 3rd flagging agent, escalating severity, and
+      // pending-action counts grew 14 -> 20 -> 20 across repeated resets
+      // instead of stabilizing). Only the 5 real sensing agents' events
+      // (ar_aging_agent, news_monitor_agent, sec_monitor_agent,
+      // payment_behaviour_agent, industry_risk_agent) should be marked
+      // unprocessed for cia-agent to pick up fresh each reset.
       await supabase
         .from("credit_events")
         .update({ cia_processed: false, cia_processed_at: null })
-        .eq("is_demo", true);
+        .eq("is_demo", true)
+        .neq("source_agent", "cia-agent");
 
       const { error: invoiceDateError } = await supabase.rpc("fn_reset_demo_invoice_dates");
       if (invoiceDateError) {

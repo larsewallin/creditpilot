@@ -1553,11 +1553,21 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one sentence statin
     .map(([agent]) => agent);
 
   // 2. Read unprocessed credit_events
+  // Excludes cia-agent's own prior output (source_agent = 'cia-agent':
+  // DAILY_BRIEFING, COMPOSITE_RISK_CRITICAL/ELEVATED) as defense-in-depth --
+  // this function must never re-ingest its own synthesis as if it were a
+  // fresh sensing-agent signal, regardless of what any caller's reset logic
+  // does to cia_processed elsewhere. See demo-actions/index.ts's reset
+  // handler (2026-10-02) for the bug this guards against: un-marking these
+  // rows there fed cia-agent's own output back into itself as a phantom
+  // "agent," inflating agents_flagging counts and pending_actions severity
+  // across repeated resets (14 -> 20 -> 20, not stabilizing).
   let eventsQuery = supabaseClient
     .from("credit_events")
     .select("*")
     .eq("cia_processed", false)
     .eq("is_demo", DEMO_MODE)
+    .neq("source_agent", "cia-agent")
     .order("created_at", { ascending: false })
     .limit(100);
 
