@@ -1812,6 +1812,25 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one sentence statin
   }
 
   if (pendingActions.length > 0) {
+    // F5 (2026-10-01, see CreditPilot_Deferred_Backlog.md): before inserting fresh
+    // proposals, expire any existing 'pending' row for the same customer_id +
+    // action_type (scoped to this run's is_demo value, so a demo run can never touch a
+    // real/prod row and vice versa). Without this, a demo reset that flips old rows back
+    // to 'pending' (see demo-actions/index.ts) could leave a stale row sitting alongside
+    // a freshly-derived one for the same customer/action, or a stale row surviving even
+    // when current data would no longer actually trigger that action. 'expired' is an
+    // existing value in pending_actions_status_check — this is its first real use.
+    for (const action of pendingActions) {
+      const { error: expireError } = await supabaseClient
+        .from("pending_actions")
+        .update({ status: "expired" })
+        .eq("customer_id", action.customer_id)
+        .eq("action_type", action.action_type)
+        .eq("is_demo", action.is_demo)
+        .eq("status", "pending");
+      if (expireError) console.error("pending_actions expire error:", expireError);
+    }
+
     const { error: paError } = await supabaseClient
       .from("pending_actions")
       .insert(pendingActions);

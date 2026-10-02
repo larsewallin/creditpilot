@@ -122,10 +122,21 @@ Deno.serve(async (req) => {
     }
 
     if (action === "reset") {
+      // F5 (2026-10-01, see CreditPilot_Deferred_Backlog.md): previously flipped every
+      // demo pending_actions row back to 'pending', regardless of status — which could
+      // resurrect a stale, no-longer-applicable row (or leave it masking the fact that
+      // current data wouldn't actually re-trigger it) alongside whatever cia-agent
+      // inserts fresh later in the same reset sequence (initDemo.ts runs this reset
+      // first, then the sensing agents, then cia-agent last). Expiring them here instead
+      // clears the review queue without resurrecting anything; cia-agent's own dedup
+      // (added alongside this fix) then regenerates whatever the refreshed demo data
+      // actually warrants. Approved/rejected history is left alone on purpose — this only
+      // clears rows a user might otherwise still see sitting in "pending".
       await supabase
         .from("pending_actions")
-        .update({ status: "pending", reviewed_by: null, reviewed_at: null, review_note: null })
-        .eq("is_demo", true);
+        .update({ status: "expired", reviewed_by: null, reviewed_at: null, review_note: null })
+        .eq("is_demo", true)
+        .eq("status", "pending");
 
       await supabase.from("agent_messages").update({ status: "pending" }).eq("is_demo", true);
 
