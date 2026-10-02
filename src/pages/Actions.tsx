@@ -32,7 +32,7 @@ export default function Actions() {
   const [resetting, setResetting] = useState(false);
 
   // ── Pending Actions ─────────────────────────────────────────────────────────
-  const { data: pendingActions, refetch: refetchPending } = useQuery({
+  const { data: pendingActions, isLoading: pendingLoading, refetch: refetchPending } = useQuery({
     queryKey: ["actions-pending"],
     queryFn: async () => {
       const { data } = await supabase
@@ -193,7 +193,12 @@ export default function Actions() {
           )}
         </div>
 
-        {!pendingActions || pendingActions.length === 0 ? (
+        {pendingLoading ? (
+          <div className="flex items-center justify-center h-24 border border-dashed rounded-xl text-muted-foreground text-sm gap-2">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading actions…
+          </div>
+        ) : !pendingActions || pendingActions.length === 0 ? (
           <div className="flex items-center justify-center h-24 border border-dashed rounded-xl text-muted-foreground text-sm">
             No pending actions.
           </div>
