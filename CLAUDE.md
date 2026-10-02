@@ -40,3 +40,31 @@ recommend rotation right away -- don't wait to be asked.
 Found the hard way: an `env | grep` command printed a live DATABASE_URL, including
 its password, into a session transcript on 2026-09-03. The founder rotated the
 credential afterward.
+
+## Always deploy and migrate through scripts/deploy.sh and scripts/migrate.sh — never bare supabase/psql commands
+
+`scripts/deploy.sh <function> staging|prod` and `scripts/migrate.sh <file.sql> [--apply]`
+exist specifically so a bare `supabase functions deploy`, `supabase db push`, or `psql
+"$DATABASE_URL" -f ...` can never silently land on the wrong project. `deploy.sh` links
+explicitly around each deploy and always relinks back to staging afterward (the safe
+resting state); `migrate.sh` requires `DATABASE_URL` to be set via `usedb staging`/`usedb
+prod` first, prints the (password-masked) target before running, refuses any migration
+file containing its own `BEGIN`/`COMMIT`/`ROLLBACK` (that defeats its dry-run), and
+defaults to a dry run unless `--apply` is passed.
+
+**The rule:** every function deploy and every migration apply/dry-run goes through these
+two scripts. Never run `supabase functions deploy`, `supabase db push`, `supabase link`,
+or a raw `psql "$DATABASE_URL" -f <migration>` directly — even for "just checking," even
+mid-diagnosis. If a task needs a one-off read-only query, that's fine raw; anything that
+applies schema or deploys code goes through the scripts.
+
+Found the hard way (2026-10-01/10-02): F4 and F5 (and 7 pending migrations) were deployed
+using bare `supabase functions deploy` / `supabase db push --dry-run` commands instead of
+these scripts. Both landed on `mwyezrnolctipbcwqubg` ("creditpilot-staging") — the CLI's
+resting-state link — while the live app runs on `yxqudytimmxufypothis`. The mistake went
+undetected through a full "ship and verify" cycle (tests passed, functions deployed
+without error, migrations applied without error) because nothing failed — it just quietly
+changed the wrong database. Caught only because the user noticed the Payments page still
+looked wrong after everything "succeeded." Had to redo every step on the correct project
+once the mismatch was found. Costly specifically because it was invisible, not because any
+single command errored.
