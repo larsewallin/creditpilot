@@ -129,8 +129,8 @@ export default function Payments() {
               <tr className="text-muted-foreground">
                 <th className="text-left p-3 font-medium w-8" />
                 <th className="text-left p-3 font-medium whitespace-nowrap">Customer</th>
-                <th className="text-right p-3 font-medium whitespace-nowrap">Last 30d avg</th>
-                <th className="text-right p-3 font-medium whitespace-nowrap">Prior 30d avg</th>
+                <th className="text-right p-3 font-medium whitespace-nowrap">Last 90d avg</th>
+                <th className="text-right p-3 font-medium whitespace-nowrap">Prior 90d avg</th>
                 <th className="text-right p-3 font-medium whitespace-nowrap">Change</th>
                 <th className="text-right p-3 font-medium whitespace-nowrap">Volatility</th>
                 <th className="text-right p-3 font-medium whitespace-nowrap">On-time</th>
