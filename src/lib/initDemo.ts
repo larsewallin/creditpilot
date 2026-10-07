@@ -109,6 +109,7 @@ export async function initDemo() {
     // self-reset their own prior demo credit_events each run (see A5/A6).
     supabase.functions.invoke("payment-behaviour-agent", { body: { triggered_by: "auto" } }),
     supabase.functions.invoke("industry-risk-agent", { body: { triggered_by: "auto" } }),
+    supabase.functions.invoke("credit-rating-agent", { body: { triggered_by: "auto" } }),
   ]);
   // skip_briefing: true -- a reset's cia-agent call has no need to spend real
   // Anthropic tokens on the DAILY_BRIEFING text, which has no UI surface
@@ -131,6 +132,7 @@ export async function initDemo() {
       "sec_monitor_agent",
       "payment_behaviour_agent",
       "industry_risk_agent",
+      "credit_rating_agent",
     ])
   );
 }

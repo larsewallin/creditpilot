@@ -21,6 +21,7 @@ const AGENT_TABS = [
   { value: "sec_monitor_agent", label: "SEC" },
   { value: "payment_behaviour_agent", label: "Payment" },
   { value: "industry_risk_agent", label: "Industry" },
+  { value: "credit_rating_agent", label: "Rating" },
 ];
 
 function getEventDestination(evt: any): string | null {

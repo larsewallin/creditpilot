@@ -318,6 +318,24 @@ export const CurrencyVolatilityPayload = z.object({
   summary: z.string(),
 });
 
+// ----------------------------------------------------------------------------
+// Credit rating change (A7) — emitted by credit-rating-agent from
+// customers.credit_rating_previous_score -> credit_rating_score (0-100 scale).
+// ----------------------------------------------------------------------------
+
+export const CreditRatingDowngradePayload = z.object({
+  severity_score: SeverityScore,
+  previous_score: z.number().min(0).max(100),
+  current_score: z.number().min(0).max(100),
+  delta: z.number(),            // negative for a downgrade
+  action_required: z.boolean(), // true when |delta| >= 10
+  current_rating: z.string().nullable(),   // raw agency rating, e.g. "CCC+"
+  rating_source: z.string().nullable(),    // e.g. "sp"
+  summary: z.string(),
+});
+
+export const CreditRatingUpgradePayload = CreditRatingDowngradePayload;
+
 // ============================================================================
 // Event type registry
 // ============================================================================
@@ -352,6 +370,8 @@ export const EVENT_TYPES = [
   "FX_EXPOSURE_FLAG",
   "FX_HEDGING_NEEDED",
   "CURRENCY_VOLATILITY",
+  "CREDIT_RATING_DOWNGRADE",
+  "CREDIT_RATING_UPGRADE",
 ] as const;
 
 export type EventType = typeof EVENT_TYPES[number];
@@ -388,6 +408,8 @@ const payloadSchemas: Record<EventType, z.ZodTypeAny> = {
   FX_EXPOSURE_FLAG: FxExposureFlagPayload,
   FX_HEDGING_NEEDED: FxHedgingNeededPayload,
   CURRENCY_VOLATILITY: CurrencyVolatilityPayload,
+  CREDIT_RATING_DOWNGRADE: CreditRatingDowngradePayload,
+  CREDIT_RATING_UPGRADE: CreditRatingUpgradePayload,
 };
 
 export function getPayloadSchema(eventType: string): z.ZodTypeAny {

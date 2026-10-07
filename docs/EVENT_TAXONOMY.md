@@ -242,6 +242,16 @@ Customer's credit utilization crossed an attention threshold. Single event type 
   - `threshold_crossed`: number
   - `overage_usd`: number (nullable; populated only when utilization > 100%)
 
+#### `CREDIT_RATING_DOWNGRADE` / `CREDIT_RATING_UPGRADE`
+Customer's normalised credit rating score (0-100) changed vs the previous stored score.
+
+- **Producer:** Credit Rating Change Monitor (`credit-rating-agent`)
+- **Consumers:** CIA (decisioning also derives a synthetic downgrade from the same columns), Risk Agent
+- **Scope:** customer
+- **Severity:** downgrade by absolute delta: >=30 critical, >=20 high, >=10 medium, >=5 low; upgrades are always info; changes under 5 points emit nothing (`detectRatingChange` skill)
+- **Payload:** `severity_score`, `previous_score`, `current_score`, `delta` (negative = downgrade), `action_required` (downgrade with |delta| >= 10), `current_rating` (raw agency rating, nullable), `rating_source` (nullable), `summary`
+- **Dedup:** one event per customer per rating change (skipped if an event of the same type already exists at/after `customers.credit_rating_updated_at`)
+
 #### `PAYMENT_DETERIORATION`
 Customer's payment behavior is trending worse.
 
@@ -564,7 +574,7 @@ When the producer agent is built, the event type's full payload schema is added 
 
 ### Database constraints
 
-- `event_type` column has a CHECK constraint limiting it to the documented V1 event types (`NEWS_EVENT`, `COVENANT_WAIVER`, `CEO_DEPARTURE`, `REVENUE_MISS`, `GOING_CONCERN`, `SEC_OTHER`, `OVERDUE_INVOICE`, `UTILIZATION_THRESHOLD_BREACH`, `PAYMENT_DETERIORATION`, `PAYMENT_IMPROVEMENT`, `PAYMENT_VOLATILITY`, `COUNTRY_RATING_CHANGE`, `COUNTRY_POLITICAL_RISK`, `COUNTRY_ECONOMIC_SHOCK`, `INTEREST_RATE_CHANGE`, `INDUSTRY_DOWNTURN`, `INDUSTRY_DISRUPTION`, `REGULATORY_CHANGE`, `TARIFF_CHANGE`, `RISK_CHANGE`, `CONCENTRATION_THRESHOLD_BREACH`, `PORTFOLIO_INSIGHT`, `CONCENTRATION_WARNING`, `EXPANSION_OPPORTUNITY`, `EMERGING_RISK_SIGNAL`, `MACRO_TREND_WARNING`, `FX_EXPOSURE_FLAG`, `FX_HEDGING_NEEDED`, `CURRENCY_VOLATILITY`).
+- `event_type` column has a CHECK constraint limiting it to the documented V1 event types (`NEWS_EVENT`, `COVENANT_WAIVER`, `CEO_DEPARTURE`, `REVENUE_MISS`, `GOING_CONCERN`, `SEC_OTHER`, `OVERDUE_INVOICE`, `UTILIZATION_THRESHOLD_BREACH`, `PAYMENT_DETERIORATION`, `PAYMENT_IMPROVEMENT`, `PAYMENT_VOLATILITY`, `COUNTRY_RATING_CHANGE`, `COUNTRY_POLITICAL_RISK`, `COUNTRY_ECONOMIC_SHOCK`, `INTEREST_RATE_CHANGE`, `INDUSTRY_DOWNTURN`, `INDUSTRY_DISRUPTION`, `REGULATORY_CHANGE`, `TARIFF_CHANGE`, `RISK_CHANGE`, `CONCENTRATION_THRESHOLD_BREACH`, `PORTFOLIO_INSIGHT`, `CONCENTRATION_WARNING`, `EXPANSION_OPPORTUNITY`, `EMERGING_RISK_SIGNAL`, `MACRO_TREND_WARNING`, `FX_EXPOSURE_FLAG`, `FX_HEDGING_NEEDED`, `CURRENCY_VOLATILITY`, `CREDIT_RATING_DOWNGRADE`, `CREDIT_RATING_UPGRADE`).
 - `severity` column has a CHECK constraint limiting it to `critical | high | medium | low | info`.
 - `scope` column has a CHECK constraint limiting it to `customer | country | industry | currency | portfolio`.
 - `customer_id` is NOT NULL when scope = 'customer', else NULL (enforced by trigger or CHECK constraint with conditional logic).

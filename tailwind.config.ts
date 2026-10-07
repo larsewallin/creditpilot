@@ -69,6 +69,7 @@ export default {
           seed: "hsl(var(--agent-seed))",
           payment: "hsl(var(--agent-payment))",
           industry: "hsl(var(--agent-industry))",
+          rating: "hsl(var(--agent-rating))",
         },
         severity: {
           critical: "hsl(var(--severity-critical))",

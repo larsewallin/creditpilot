@@ -41,6 +41,14 @@ export const AGENT_CONFIG = {
     textClass: "text-agent-industry",
     dotClass: "bg-agent-industry",
   },
+  credit_rating_agent: {
+    label: "Credit Rating",
+    colorClass: "agent-rating",
+    borderClass: "border-l-agent-rating",
+    bgClass: "bg-agent-rating/10",
+    textClass: "text-agent-rating",
+    dotClass: "bg-agent-rating",
+  },
 } as const;
 
 export type AgentName = keyof typeof AGENT_CONFIG;
