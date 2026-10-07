@@ -133,7 +133,8 @@ export default function Payments() {
                 <th className="text-right p-3 font-medium whitespace-nowrap">Prior 90d avg</th>
                 <th className="text-right p-3 font-medium whitespace-nowrap">Change</th>
                 <th className="text-right p-3 font-medium whitespace-nowrap">Volatility</th>
-                <th className="text-right p-3 font-medium whitespace-nowrap">On-time</th>
+                <th className="text-right p-3 font-medium whitespace-nowrap">On-time (90d)</th>
+                <th className="text-right p-3 font-medium whitespace-nowrap">On-time (all)</th>
                 <th className="text-left p-3 font-medium whitespace-nowrap">Signal</th>
               </tr>
             </thead>
@@ -175,9 +176,12 @@ export default function Payments() {
                           <td className="p-3 text-right font-mono tabular-nums text-muted-foreground">
                             {r.current_on_time_rate === null ? "—" : `${(Number(r.current_on_time_rate) * 100).toFixed(0)}%`}
                           </td>
+                          <td className="p-3 text-right font-mono tabular-nums text-muted-foreground">
+                            {(r as any).all_time_on_time_rate == null ? "—" : `${(Number((r as any).all_time_on_time_rate) * 100).toFixed(0)}%`}
+                          </td>
                         </>
                       ) : (
-                        <td className="p-3 text-muted-foreground italic" colSpan={5}>
+                        <td className="p-3 text-muted-foreground italic" colSpan={6}>
                           Not enough payment history in both windows to compare
                         </td>
                       )}
@@ -204,7 +208,7 @@ export default function Payments() {
 
                     {isExpanded && (
                       <tr className="bg-secondary/20">
-                        <td colSpan={8} className="p-4">
+                        <td colSpan={9} className="p-4">
                           <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground mb-2">
                             Payment history — {r.company_name}
                             {r.payment_terms_days ? ` · net ${r.payment_terms_days} terms` : ""}
