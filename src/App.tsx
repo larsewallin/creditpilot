@@ -18,6 +18,7 @@ import ArAging from "@/pages/ArAging";
 import SecFilings from "@/pages/SecFilings";
 import Payments from "@/pages/Payments";
 import IndustryRisk from "@/pages/IndustryRisk";
+import CountryRisk from "@/pages/CountryRisk";
 import Customers from "@/pages/Customers";
 import Actions from "@/pages/Actions";
 import CIA from "@/pages/CIA";
@@ -93,6 +94,7 @@ const App = () => (
             <Route path="/sec" element={<SecFilings />} />
             <Route path="/payments" element={<Payments />} />
             <Route path="/industry" element={<IndustryRisk />} />
+            <Route path="/country" element={<CountryRisk />} />
             <Route path="/customers" element={<Customers />} />
             <Route path="/cia" element={<CIA />} />
             <Route path="/about" element={<About />} />

@@ -40,6 +40,12 @@ function getEventDestination(evt: any): string | null {
   if (evt.source_agent === "industry_risk_agent" && evt.payload?.sector) {
     return `/industry?sector=${encodeURIComponent(evt.payload.sector)}`;
   }
+  // Country events are scope='country' with customer_id null — route by the
+  // country code in the payload (tariffs carry origin_country instead).
+  if (evt.source_agent === "country_risk_agent") {
+    const code = evt.payload?.country_code ?? evt.payload?.origin_country;
+    if (code) return `/country?country=${encodeURIComponent(code)}`;
+  }
   return null;
 }
 
@@ -185,6 +191,8 @@ export default function CreditEvents() {
                       <span className="font-semibold text-foreground">{evt.customers.company_name}</span>
                     ) : evt.payload?.sector ? (
                       <span className="italic text-muted-foreground">{evt.payload.sector} sector</span>
+                    ) : (evt.payload?.country_code ?? evt.payload?.origin_country) ? (
+                      <span className="italic text-muted-foreground">{evt.payload.country_code ?? evt.payload.origin_country} country</span>
                     ) : (
                       <span className="font-semibold text-foreground">—</span>
                     )}
