@@ -43,6 +43,7 @@
     --agent-payment: 180 70% 40%;
     --agent-industry: 330 75% 55%;
   --agent-rating: 265 70% 58%;
+  --agent-country: 205 85% 48%;
 
     /* Severity colors */
     --severity-critical: 0 84% 60%;

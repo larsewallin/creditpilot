@@ -70,6 +70,7 @@ export default {
           payment: "hsl(var(--agent-payment))",
           industry: "hsl(var(--agent-industry))",
           rating: "hsl(var(--agent-rating))",
+        country: "hsl(var(--agent-country))",
         },
         severity: {
           critical: "hsl(var(--severity-critical))",

@@ -110,6 +110,7 @@ export async function initDemo() {
     supabase.functions.invoke("payment-behaviour-agent", { body: { triggered_by: "auto" } }),
     supabase.functions.invoke("industry-risk-agent", { body: { triggered_by: "auto" } }),
     supabase.functions.invoke("credit-rating-agent", { body: { triggered_by: "auto" } }),
+    supabase.functions.invoke("country-risk-agent", { body: { triggered_by: "auto" } }),
   ]);
   // skip_briefing: true -- a reset's cia-agent call has no need to spend real
   // Anthropic tokens on the DAILY_BRIEFING text, which has no UI surface
@@ -133,6 +134,7 @@ export async function initDemo() {
       "payment_behaviour_agent",
       "industry_risk_agent",
       "credit_rating_agent",
+      "country_risk_agent",
     ])
   );
 }

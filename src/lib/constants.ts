@@ -49,6 +49,14 @@ export const AGENT_CONFIG = {
     textClass: "text-agent-rating",
     dotClass: "bg-agent-rating",
   },
+  country_risk_agent: {
+    label: "Country Risk",
+    colorClass: "agent-country",
+    borderClass: "border-l-agent-country",
+    bgClass: "bg-agent-country/10",
+    textClass: "text-agent-country",
+    dotClass: "bg-agent-country",
+  },
 } as const;
 
 export type AgentName = keyof typeof AGENT_CONFIG;

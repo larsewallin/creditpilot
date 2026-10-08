@@ -662,3 +662,11 @@ If an agent needs to record something for itself or for users that isn't a credi
 
 - Muted/suppressed flag for events the user has explicitly dismissed — revisit once real user feedback indicates demand
 - Backpressure handling for high-volume monitor events — V1 sidesteps this by emitting at the right scope (environment events rather than per-customer fan-outs); revisit if needed
+
+#### Country Risk Monitor (`country-risk-agent`)
+Producer of `COUNTRY_RATING_CHANGE`, `COUNTRY_POLITICAL_RISK`, `COUNTRY_ECONOMIC_SHOCK`, `INTEREST_RATE_CHANGE`, `TARIFF_CHANGE`. All `scope='country'`, `customer_id` null; only countries with portfolio exposure (`customers.country_code`, `current_exposure > 0`) are evaluated (tariffs also if an affected country is in the portfolio).
+
+- **Rules:** rating differs from previous (downgrade + negative/watch outlook → high, downgrade otherwise → medium, upgrade → info); political / economic score drop >= 10 (medium), >= 20 (high), >= 30 (critical); policy rate move >= 25 bp (25 → low, >= 50 medium, >= 100 high); tariff change >= 25% high, >= 10% medium, else low.
+- **Payload extras:** `exposure_usd` (portfolio exposure in the country); tariff events carry `origin_country`.
+- **Data:** DEMO_MODE reads `seed_country_risk`; live fetch is a stub (`fetchLiveCountryRisk`) until a licensed source is chosen.
+- **Consumers:** UI (Country tab), future Risk Agent. CIA ignores customer-less events.

@@ -155,6 +155,8 @@ export const PaymentVolatilityPayload = z.object({
 // ============================================================================
 
 export const CountryRatingChangePayload = z.object({
+  exposure_usd: z.number().optional(),
+  summary: z.string().optional(),
   severity_score: SeverityScore,
   country_code: z.string().length(2),
   country_name: z.string(),
@@ -166,6 +168,7 @@ export const CountryRatingChangePayload = z.object({
 });
 
 export const CountryPoliticalRiskPayload = z.object({
+  exposure_usd: z.number().optional(),
   severity_score: SeverityScore,
   country_code: z.string().length(2),
   risk_type: z.enum(["election", "unrest", "sanctions", "capital_controls", "other"]),
@@ -174,6 +177,7 @@ export const CountryPoliticalRiskPayload = z.object({
 });
 
 export const CountryEconomicShockPayload = z.object({
+  exposure_usd: z.number().optional(),
   severity_score: SeverityScore,
   country_code: z.string().length(2),
   shock_type: z.enum(["currency_crisis", "recession", "inflation", "banking_crisis", "other"]),
@@ -182,6 +186,8 @@ export const CountryEconomicShockPayload = z.object({
 });
 
 export const InterestRateChangePayload = z.object({
+  exposure_usd: z.number().optional(),
+  summary: z.string().optional(),
   severity_score: SeverityScore,
   country_code: z.string().length(2),
   central_bank: z.string(),
@@ -226,6 +232,8 @@ export const RegulatoryChangePayload = z.object({
 });
 
 export const TariffChangePayload = z.object({
+  exposure_usd: z.number().optional(),
+  origin_country: z.string().length(2).optional(),
   severity_score: SeverityScore,
   tariff_change_percent: z.number(),
   affected_countries: z.array(z.string().length(2)),
