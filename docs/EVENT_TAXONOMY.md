@@ -527,6 +527,8 @@ FX Risk Agent has flagged portfolio currency exposure that warrants attention.
   - `total_exposure_usd`: number
   - `customers_affected`: integer
   - `reason`: string
+  - optional (FX Risk Agent): `summary`, `unhedged_exposure_usd`, `hedged_exposure_usd`, `share_of_portfolio_pct`, `fx_delta_usd`, `sensitivity_10pct_usd`, `avg_window_days`, `adverse_move_pct`, `policy_breach`, `top_customers[]`
+- **Note:** fires on large UNHEDGED non-USD exposure; adverse move and long window escalate severity. CreditPilot does not recommend hedges.
 
 #### `FX_HEDGING_NEEDED`
 FX Risk Agent recommends hedging a particular currency exposure.
@@ -549,6 +551,7 @@ A currency has shown material volatility recently.
   - `currency_code`: string
   - `volatility_percent`: number
   - `period_days`: integer
+  - optional (FX Risk Agent): `direction` (adverse|favourable), `change_30d_pct`, `exposure_usd`, `summary`
 
 ---
 

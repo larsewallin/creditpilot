@@ -1,4 +1,4 @@
-import { Zap, Newspaper, BarChart2, FileSearch, Users, Wrench, Info, Github, CreditCard, Factory, Globe } from "lucide-react";
+import { Zap, Newspaper, BarChart2, FileSearch, Users, Wrench, Info, Github, CreditCard, Factory, Globe, Coins } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -13,6 +13,7 @@ const navItems = [
   { title: "Payment Behaviour", path: "/payments", icon: CreditCard },
   { title: "Industry Risk", path: "/industry", icon: Factory },
   { title: "Country Risk", path: "/country", icon: Globe },
+  { title: "FX Risk", path: "/fx", icon: Coins },
   { title: "Customers", path: "/customers", icon: Users },
 ];
 

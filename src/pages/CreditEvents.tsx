@@ -23,6 +23,7 @@ const AGENT_TABS = [
   { value: "industry_risk_agent", label: "Industry" },
   { value: "credit_rating_agent", label: "Rating" },
   { value: "country_risk_agent", label: "Country" },
+  { value: "fx_risk_agent", label: "FX" },
 ];
 
 function getEventDestination(evt: any): string | null {
@@ -45,6 +46,9 @@ function getEventDestination(evt: any): string | null {
   if (evt.source_agent === "country_risk_agent") {
     const code = evt.payload?.country_code ?? evt.payload?.origin_country;
     if (code) return `/country?country=${encodeURIComponent(code)}`;
+  }
+  if (evt.source_agent === "fx_risk_agent" && evt.payload?.currency_code) {
+    return `/fx?currency=${encodeURIComponent(evt.payload.currency_code)}`;
   }
   return null;
 }
@@ -193,6 +197,8 @@ export default function CreditEvents() {
                       <span className="italic text-muted-foreground">{evt.payload.sector} sector</span>
                     ) : (evt.payload?.country_code ?? evt.payload?.origin_country) ? (
                       <span className="italic text-muted-foreground">{evt.payload.country_code ?? evt.payload.origin_country} country</span>
+                    ) : evt.payload?.currency_code ? (
+                      <span className="italic text-muted-foreground">{evt.payload.currency_code} currency</span>
                     ) : (
                       <span className="font-semibold text-foreground">—</span>
                     )}

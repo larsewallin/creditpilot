@@ -57,6 +57,14 @@ export const AGENT_CONFIG = {
     textClass: "text-agent-country",
     dotClass: "bg-agent-country",
   },
+  fx_risk_agent: {
+    label: "FX Risk",
+    colorClass: "agent-fx",
+    borderClass: "border-l-agent-fx",
+    bgClass: "bg-agent-fx/10",
+    textClass: "text-agent-fx",
+    dotClass: "bg-agent-fx",
+  },
 } as const;
 
 export type AgentName = keyof typeof AGENT_CONFIG;

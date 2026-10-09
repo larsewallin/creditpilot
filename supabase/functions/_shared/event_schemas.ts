@@ -312,6 +312,20 @@ export const FxExposureFlagPayload = z.object({
   total_exposure_usd: z.number(),
   customers_affected: z.number().int(),
   reason: z.string(),
+  summary: z.string().optional(),
+  unhedged_exposure_usd: z.number().optional(),
+  hedged_exposure_usd: z.number().optional(),
+  share_of_portfolio_pct: z.number().optional(),
+  fx_delta_usd: z.number().optional(),
+  sensitivity_10pct_usd: z.number().optional(),
+  avg_window_days: z.number().optional(),
+  adverse_move_pct: z.number().optional(),
+  policy_breach: z.boolean().optional(),
+  top_customers: z.array(z.object({
+    customer_id: z.string(),
+    company_name: z.string(),
+    unhedged_usd: z.number(),
+  })).optional(),
 });
 
 export const FxHedgingNeededPayload = FxExposureFlagPayload.extend({
@@ -324,6 +338,9 @@ export const CurrencyVolatilityPayload = z.object({
   volatility_percent: z.number(),
   period_days: z.number().int(),
   summary: z.string(),
+  direction: z.enum(["adverse", "favourable"]).optional(),
+  change_30d_pct: z.number().optional(),
+  exposure_usd: z.number().optional(),
 });
 
 // ----------------------------------------------------------------------------
