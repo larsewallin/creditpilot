@@ -24,6 +24,7 @@ const AGENT_TABS = [
   { value: "credit_rating_agent", label: "Rating" },
   { value: "country_risk_agent", label: "Country" },
   { value: "fx_risk_agent", label: "FX" },
+  { value: "risk_agent", label: "Risk" },
 ];
 
 function getEventDestination(evt: any): string | null {
@@ -46,6 +47,11 @@ function getEventDestination(evt: any): string | null {
   if (evt.source_agent === "country_risk_agent") {
     const code = evt.payload?.country_code ?? evt.payload?.origin_country;
     if (code) return `/country?country=${encodeURIComponent(code)}`;
+  }
+  if (evt.source_agent === "risk_agent") {
+    const cc = evt.payload?.affected_countries?.[0];
+    if (evt.event_type === "MACRO_TREND_WARNING" && cc) return `/country?country=${encodeURIComponent(cc)}`;
+    if (evt.customer_id) return `/customers?customer_id=${evt.customer_id}`;
   }
   if (evt.source_agent === "fx_risk_agent" && evt.payload?.currency_code) {
     return `/fx?currency=${encodeURIComponent(evt.payload.currency_code)}`;
@@ -197,6 +203,8 @@ export default function CreditEvents() {
                       <span className="italic text-muted-foreground">{evt.payload.sector} sector</span>
                     ) : (evt.payload?.country_code ?? evt.payload?.origin_country) ? (
                       <span className="italic text-muted-foreground">{evt.payload.country_code ?? evt.payload.origin_country} country</span>
+                    ) : evt.payload?.theme ? (
+                      <span className="italic text-muted-foreground">{evt.payload.theme}</span>
                     ) : evt.payload?.currency_code ? (
                       <span className="italic text-muted-foreground">{evt.payload.currency_code} currency</span>
                     ) : (

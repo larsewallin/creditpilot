@@ -72,6 +72,7 @@ export default {
           rating: "hsl(var(--agent-rating))",
         country: "hsl(var(--agent-country))",
           fx: "hsl(var(--agent-fx))",
+          risk: "hsl(var(--agent-risk))",
         },
         severity: {
           critical: "hsl(var(--severity-critical))",

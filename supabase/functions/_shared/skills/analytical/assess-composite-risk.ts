@@ -14,6 +14,7 @@
  *     COVENANT_WAIVER                                −12pp
  *     CEO_DEPARTURE                                  −5pp
  *     CREDIT_RATING_DOWNGRADE                        −10pp
+ *     RISK_CHANGE (macro convergence, Risk Agent)    −5pp (2 dimensions) / −10pp (3+)
  *     credit_score < 20 (distress)                   −15pp
  *     credit_score 20–40 (concern)                   −5pp
  *   Payment behaviour adjustments (applied after signal delta):
@@ -50,6 +51,8 @@ export interface CompositeRiskInput {
   agents_flagging: string[];
   /** Payment on-time rate 0–1; adjusts threshold downward for poor payers */
   on_time_rate?: number;
+  /** Distinct macro dimensions (country / industry / currency) converging on this customer, from a RISK_CHANGE event */
+  macro_dimension_count?: number;
 }
 
 export interface CompositeRiskResult {
@@ -71,6 +74,7 @@ export function assessCompositeRisk(input: CompositeRiskInput): CompositeRiskRes
     active_signal_severities,
     agents_flagging,
     on_time_rate,
+    macro_dimension_count,
   } = input;
 
   const adjustments: string[] = [];
@@ -103,6 +107,12 @@ export function assessCompositeRisk(input: CompositeRiskInput): CompositeRiskRes
   if (active_event_types.includes("CREDIT_RATING_DOWNGRADE")) {
     delta += 10;
     adjustments.push("CREDIT_RATING_DOWNGRADE (−10pp)");
+  }
+
+  if (active_event_types.includes("RISK_CHANGE")) {
+    const heavy = (macro_dimension_count ?? 2) >= 3;
+    delta += heavy ? 10 : 5;
+    adjustments.push(`MACRO_CONVERGENCE (−${heavy ? 10 : 5}pp)`);
   }
 
   // Credit score threshold adjustments

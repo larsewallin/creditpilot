@@ -1790,6 +1790,9 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one sentence statin
     const currentExposure: number = customer.current_exposure ?? 0;
 
     const onTimeRate: number | undefined = (customer as any)?.payment_on_time_rate ?? undefined;
+    const macroDims = custEvents
+      .filter((e: any) => e.event_type === "RISK_CHANGE")
+      .reduce((m: number, e: any) => Math.max(m, Number(e.payload?.dimension_count) || 0), 0);
 
     const riskAssessment = assessCompositeRisk({
       utilization_pct: utilizationPct,
@@ -1798,6 +1801,7 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one sentence statin
       active_signal_severities: activeSignalSeverities,
       agents_flagging: agentsSeen,
       on_time_rate: onTimeRate,
+      macro_dimension_count: macroDims || undefined,
     });
 
     if (!riskAssessment.recommend_action) continue;

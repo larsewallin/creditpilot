@@ -431,6 +431,9 @@ The Risk Agent has determined a customer's overall risk profile has changed. Sin
   - `prior_risk_score`: number
   - `new_risk_score`: number
   - `reasoning`: string (AI-generated rationale)
+  - optional (Risk Agent): `summary`, `dimension_count`, `dimensions[]`, `exposure_usd`
+- **Risk Agent usage (V1):** emitted when adverse macro signals (Country, Industry, FX events) converge across 2+ dimensions on a customer. `change_type` is always `escalation`, `prior_risk_score` 0, `new_risk_score` = top component score + 10 per extra dimension. CIA lowers the utilization threshold 5pp (2 dimensions) or 10pp (3+).
+- **MACRO_TREND_WARNING (Risk Agent, V1):** one per country cluster of converging customers; scope portfolio; optional payload `exposure_usd`, `customers_affected`, `dimensions[]`, `top_customers[]`. EMERGING_RISK_SIGNAL stays reserved for speculative signals with no evidence.
 
 #### `CONCENTRATION_THRESHOLD_BREACH`
 Portfolio concentration to a single customer, sector, country, or currency has crossed an attention threshold.

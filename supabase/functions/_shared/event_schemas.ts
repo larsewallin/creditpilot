@@ -257,6 +257,10 @@ export const RiskChangePayload = z.object({
   prior_risk_score: z.number(),
   new_risk_score: z.number(),
   reasoning: z.string(),
+  summary: z.string().optional(),
+  dimension_count: z.number().int().optional(),
+  dimensions: z.array(z.string()).optional(),
+  exposure_usd: z.number().optional(),
 });
 
 export const ConcentrationDimensionEnum = z.enum(["customer", "sector", "country", "currency"]);
@@ -302,6 +306,14 @@ export const EmergingRiskSignalPayload = z.object({
   affected_sectors: z.array(z.string()),
   affected_countries: z.array(z.string().length(2)),
   summary: z.string(),
+  exposure_usd: z.number().optional(),
+  customers_affected: z.number().int().optional(),
+  dimensions: z.array(z.string()).optional(),
+  top_customers: z.array(z.object({
+    customer_id: z.string(),
+    company_name: z.string(),
+    exposure_usd: z.number(),
+  })).optional(),
 });
 
 export const MacroTrendWarningPayload = EmergingRiskSignalPayload;

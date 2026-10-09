@@ -57,6 +57,14 @@ export const AGENT_CONFIG = {
     textClass: "text-agent-country",
     dotClass: "bg-agent-country",
   },
+  risk_agent: {
+    label: "Risk",
+    colorClass: "agent-risk",
+    borderClass: "border-l-agent-risk",
+    bgClass: "bg-agent-risk/10",
+    textClass: "text-agent-risk",
+    dotClass: "bg-agent-risk",
+  },
   fx_risk_agent: {
     label: "FX Risk",
     colorClass: "agent-fx",

@@ -180,4 +180,43 @@ describe("assessCompositeRisk", () => {
     // Raw delta: 10+15+12+5+15 = 57pp → 75-57 = 18, but floor is 40
     expect(result.adjusted_threshold).toBe(40);
   });
+
+  // ── Macro convergence (Risk Agent RISK_CHANGE) ──────────────────────────────
+
+  it("RISK_CHANGE with 2 dimensions lowers the threshold by 5pp", () => {
+    const result = assessCompositeRisk({
+      utilization_pct: 50,
+      credit_score: 70,
+      active_event_types: ["RISK_CHANGE"],
+      active_signal_severities: ["medium"],
+      agents_flagging: ["risk_agent"],
+      macro_dimension_count: 2,
+    });
+    expect(result.adjusted_threshold).toBe(70);
+    expect(result.adjustments).toContain("MACRO_CONVERGENCE (−5pp)");
+  });
+
+  it("RISK_CHANGE with 3 dimensions lowers the threshold by 10pp", () => {
+    const result = assessCompositeRisk({
+      utilization_pct: 50,
+      credit_score: 70,
+      active_event_types: ["RISK_CHANGE"],
+      active_signal_severities: ["high"],
+      agents_flagging: ["risk_agent"],
+      macro_dimension_count: 3,
+    });
+    expect(result.adjusted_threshold).toBe(65);
+  });
+
+  it("macro convergence plus a payment signal reaches high severity (2 agents)", () => {
+    const result = assessCompositeRisk({
+      utilization_pct: 50,
+      credit_score: 70,
+      active_event_types: ["RISK_CHANGE", "PAYMENT_DETERIORATION"],
+      active_signal_severities: ["medium", "medium"],
+      agents_flagging: ["risk_agent", "payment_behaviour_agent"],
+      macro_dimension_count: 2,
+    });
+    expect(result.severity).toBe("high");
+  });
 });

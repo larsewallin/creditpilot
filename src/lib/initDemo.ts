@@ -113,6 +113,9 @@ export async function initDemo() {
     supabase.functions.invoke("country-risk-agent", { body: { triggered_by: "auto" } }),
     supabase.functions.invoke("fx-risk-agent", { body: { triggered_by: "auto" } }),
   ]);
+  // The Risk Agent maps the Country/Industry/FX macro events onto customers, so it must run
+  // after those three finish and before cia-agent reads the events.
+  await supabase.functions.invoke("risk-agent", { body: { triggered_by: "auto" } });
   // skip_briefing: true -- a reset's cia-agent call has no need to spend real
   // Anthropic tokens on the DAILY_BRIEFING text, which has no UI surface
   // (CreditEvents.tsx excludes it) and feeds nothing the Actions/Credit
@@ -137,6 +140,7 @@ export async function initDemo() {
       "credit_rating_agent",
       "country_risk_agent",
       "fx_risk_agent",
+      "risk_agent",
     ])
   );
 }

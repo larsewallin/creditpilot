@@ -58,6 +58,10 @@ or a raw `psql "$DATABASE_URL" -f <migration>` directly — even for "just check
 mid-diagnosis. If a task needs a one-off read-only query, that's fine raw; anything that
 applies schema or deploys code goes through the scripts.
 
+## Staging must match production
+
+Every migration is applied to staging AND prod, in the same session, before the work is called done. After any migration, run `scripts/diff-schema.sh` (read-only; compares columns, constraints, indexes, policies, views, functions and triggers on both). Any difference is a defect to fix, not to note. Origin: 2026-10-09, the F6 `pending_actions` columns existed on prod but not on staging.
+
 Found the hard way (2026-10-01/10-02): F4 and F5 (and 7 pending migrations) were deployed
 using bare `supabase functions deploy` / `supabase db push --dry-run` commands instead of
 these scripts. Both landed on `mwyezrnolctipbcwqubg` ("creditpilot-staging") — the CLI's
