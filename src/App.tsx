@@ -24,6 +24,8 @@ import Customers from "@/pages/Customers";
 import Actions from "@/pages/Actions";
 import CIA from "@/pages/CIA";
 import About from "@/pages/About";
+import Login from "@/pages/Login";
+import { AuthProvider } from "@/lib/auth";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -84,7 +86,9 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
+        <AuthProvider>
         <Routes>
+          <Route path="/login" element={<Login />} />
           <Route element={<SidebarLayout />}>
             <Route path="/" element={<Navigate to="/events" replace />} />
             <Route path="/events" element={<CreditEvents />} />
@@ -103,6 +107,7 @@ const App = () => (
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

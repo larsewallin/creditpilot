@@ -1,8 +1,9 @@
-import { Zap, Newspaper, BarChart2, FileSearch, Users, Wrench, Info, Github, CreditCard, Factory, Globe, Coins } from "lucide-react";
+import { Zap, Newspaper, BarChart2, FileSearch, Users, Wrench, Info, Github, CreditCard, Factory, Globe, Coins, LogIn, LogOut } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+import { useAuth, ROLE_LABEL } from "@/lib/auth";
 
 const navItems = [
   { title: "Credit Events", path: "/events", icon: Zap },
@@ -18,6 +19,7 @@ const navItems = [
 ];
 
 export function AppSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
+  const { appUser, signOut } = useAuth();
   const { data: company } = useQuery({
     queryKey: ["company"],
     queryFn: async () => {
@@ -72,6 +74,28 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
           <Github className="h-4 w-4 shrink-0" />
           <span className="flex-1 text-left">GitHub</span>
         </a>
+        {appUser ? (
+          <div className="px-3 py-2 space-y-1">
+            <p className="text-sidebar-foreground text-sm truncate">{appUser.display_name}</p>
+            <p className="text-sidebar-muted text-xs">{ROLE_LABEL[appUser.role]}{appUser.is_demo ? " · demo" : ""}</p>
+            <button
+              type="button"
+              onClick={() => { signOut(); onNavigate?.(); }}
+              className="flex items-center gap-2 text-xs text-sidebar-muted hover:text-sidebar-foreground transition-colors"
+            >
+              <LogOut className="h-3.5 w-3.5" /> Sign out
+            </button>
+          </div>
+        ) : (
+          <NavLink
+            to="/login"
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-sidebar-muted hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-colors w-full"
+            onClick={onNavigate}
+          >
+            <LogIn className="h-4 w-4 shrink-0" />
+            <span className="flex-1 text-left">Sign in</span>
+          </NavLink>
+        )}
         <p className="text-sidebar-muted text-xs px-3">{company?.name ?? "Loading..."}</p>
       </div>
     </aside>
