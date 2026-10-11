@@ -1,0 +1,118 @@
+{
+  "id": "G03",
+  "title": "Request above what the balance sheet supports",
+  "why": "needs = 150,000 x 2 x 1.15 = 345,000. Caps: WC 150,000; NW 250,000 -> 150,000 x band B 0.75 = 112,500. Recommended = min(345,000, 112,500) -> 110,000. Request 500,000 > 110,000 -> counteroffer 110,000, working capital binds.",
+  "application": {
+    "application_id": "G03",
+    "submitted_by": "credit_team",
+    "legal_name": "Prairie Steel Fabricators Inc.",
+    "entity_type": "corporation",
+    "country_code": "US",
+    "tax_id": "46-2208713",
+    "website": "prairiesteelfab.example",
+    "sector": "Metal fabrication",
+    "is_public": false,
+    "date_established": "2009-03-01",
+    "billing_address": {
+      "line1": "100 Commerce Dr",
+      "city": "Columbus",
+      "region": "OH",
+      "postal_code": "43215",
+      "country_code": "US"
+    },
+    "address_type": "commercial",
+    "ap_contact_email": "ap@prairiesteelfab.example",
+    "people": [
+      {
+        "name": "Douglas Venn",
+        "role": "officer"
+      }
+    ],
+    "credit_request": {
+      "amount_usd": 500000,
+      "terms_days": 60,
+      "monthly_purchases_usd": 150000,
+      "invoicing_currency": "USD"
+    },
+    "trade_references": [
+      {
+        "company_name": "Ref Supplier One"
+      },
+      {
+        "company_name": "Ref Supplier Two"
+      },
+      {
+        "company_name": "Ref Supplier Three"
+      }
+    ],
+    "financial_statements": [
+      {
+        "period_end": "2025-12-31",
+        "statement_quality": "reviewed",
+        "currency": "USD",
+        "revenue": 10000000,
+        "current_assets": 3000000,
+        "current_liabilities": 1500000,
+        "total_assets": 5000000,
+        "total_liabilities": 2500000,
+        "equity": 2500000
+      }
+    ],
+    "signatures": {
+      "terms": true,
+      "credit_check_consent": true
+    }
+  },
+  "sources": {
+    "registry": {
+      "source": "state_registry",
+      "found": true,
+      "status": "active",
+      "legal_name": "Prairie Steel Fabricators Inc.",
+      "formation_date": "2009-03-01",
+      "officers": [
+        {
+          "name": "Douglas Venn",
+          "role": "officer"
+        }
+      ],
+      "owners": []
+    },
+    "tax_id_check": {
+      "source": "ein_format",
+      "valid": true
+    },
+    "domain_age_months": 180,
+    "public_financials": {
+      "error": "not_found"
+    },
+    "file_score": {
+      "provider": "file",
+      "score": 84
+    }
+  },
+  "expect": {
+    "stopped_at": "decision",
+    "events": [
+      "APPLICATION_SUBMITTED",
+      "SCREENING_PASS",
+      "CREDIT_ANALYSIS_COMPLETE"
+    ],
+    "analysis": {
+      "band": "B"
+    },
+    "proposal": {
+      "decision": "counteroffer",
+      "requested_usd": 500000,
+      "recommended_usd": 110000,
+      "supportable_usd": 110000,
+      "proposed_usd": 110000,
+      "binding_method": "working_capital",
+      "higher_limit_note": false,
+      "reason_codes_include": [
+        "LIMIT_CAPPED_WORKING_CAPITAL"
+      ]
+    }
+  },
+  "as_of": "2026-10-10"
+}

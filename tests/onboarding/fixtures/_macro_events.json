@@ -1,0 +1,26 @@
+{
+  "_note": "Current high-level signals from the existing Country / Industry / FX agents, keyed by country, sector or currency.",
+  "events": [
+    {
+      "source_agent": "country_risk_agent",
+      "event_type": "COUNTRY_RATING_CHANGE",
+      "severity": "high",
+      "key": "DE",
+      "title": "Germany outlook cut to negative"
+    },
+    {
+      "source_agent": "fx_risk_agent",
+      "event_type": "CURRENCY_VOLATILITY",
+      "severity": "high",
+      "key": "EUR",
+      "title": "EUR down 4% vs USD over 30 days"
+    },
+    {
+      "source_agent": "industry_risk_agent",
+      "event_type": "INDUSTRY_DOWNTURN",
+      "severity": "medium",
+      "key": "Electrical equipment",
+      "title": "Copper input costs up"
+    }
+  ]
+}

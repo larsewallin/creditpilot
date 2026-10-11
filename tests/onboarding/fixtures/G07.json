@@ -1,0 +1,107 @@
+{
+  "id": "G07",
+  "title": "Brand-new company, new website, virtual office, large request",
+  "why": "Formed 4 months ago and asking 150,000 (> 100,000), website registered 2 months ago, virtual-office address: 3 fraud flags >= 2 -> Screening review. Guarantee was signed (required for entities under 24 months), so the application is complete.",
+  "application": {
+    "application_id": "G07",
+    "submitted_by": "credit_team",
+    "legal_name": "Vantage Peak Trading Group LLC",
+    "entity_type": "llc",
+    "country_code": "US",
+    "tax_id": "92-6618830",
+    "website": "vantagepeaktrading.example",
+    "sector": "Wholesale distribution",
+    "is_public": false,
+    "date_established": "2026-06-02",
+    "billing_address": {
+      "line1": "100 Commerce Dr",
+      "city": "Columbus",
+      "region": "OH",
+      "postal_code": "43215",
+      "country_code": "US"
+    },
+    "address_type": "virtual",
+    "ap_contact_email": "info@vantagepeaktrading.example",
+    "people": [
+      {
+        "name": "Jordan Ellery",
+        "role": "owner",
+        "ownership_pct": 100
+      }
+    ],
+    "credit_request": {
+      "amount_usd": 150000,
+      "terms_days": 30,
+      "monthly_purchases_usd": 140000,
+      "invoicing_currency": "USD"
+    },
+    "trade_references": [
+      {
+        "company_name": "Ref Supplier One"
+      },
+      {
+        "company_name": "Ref Supplier Two"
+      },
+      {
+        "company_name": "Ref Supplier Three"
+      }
+    ],
+    "financial_statements": [],
+    "signatures": {
+      "terms": true,
+      "credit_check_consent": true,
+      "personal_guarantee": true
+    }
+  },
+  "sources": {
+    "registry": {
+      "source": "state_registry",
+      "found": true,
+      "status": "active",
+      "legal_name": "Vantage Peak Trading Group LLC",
+      "formation_date": "2026-06-02",
+      "officers": [
+        {
+          "name": "Jordan Ellery",
+          "role": "officer"
+        }
+      ],
+      "owners": []
+    },
+    "tax_id_check": {
+      "source": "ein_format",
+      "valid": true
+    },
+    "domain_age_months": 2,
+    "public_financials": {
+      "error": "not_found"
+    },
+    "file_score": {
+      "error": "insufficient_data"
+    }
+  },
+  "expect": {
+    "stopped_at": "screening",
+    "events": [
+      "APPLICATION_SUBMITTED",
+      "SCREENING_REVIEW"
+    ],
+    "completeness": {
+      "status": "complete"
+    },
+    "screening": {
+      "status": "review",
+      "hits": [],
+      "fraud_flags_include": [
+        "YOUNG_ENTITY_LARGE_REQUEST",
+        "NEW_DOMAIN",
+        "ADDRESS_RISK"
+      ]
+    },
+    "absent": [
+      "analysis",
+      "proposal"
+    ]
+  },
+  "as_of": "2026-10-10"
+}

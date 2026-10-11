@@ -1,0 +1,113 @@
+{
+  "id": "G14",
+  "title": "Only compiled (unreviewed) statements",
+  "why": "Compiled statements carry no accountant assurance -> 50% haircut on balance-sheet caps. WC 100,000 -> 50,000; NW 160,000 -> 80,000 -> 50,000 x A. needs = 50,000 x 1.5 x 1.15 = 86,250. Recommended 50,000. Request 75,000 -> counteroffer 50,000.",
+  "application": {
+    "application_id": "G14",
+    "submitted_by": "credit_team",
+    "legal_name": "Redwood Valley Foods Inc.",
+    "entity_type": "corporation",
+    "country_code": "US",
+    "tax_id": "94-1187206",
+    "website": "redwoodvalleyfoods.example",
+    "sector": "Food distribution",
+    "is_public": false,
+    "date_established": "2009-03-01",
+    "billing_address": {
+      "line1": "100 Commerce Dr",
+      "city": "Columbus",
+      "region": "OH",
+      "postal_code": "43215",
+      "country_code": "US"
+    },
+    "address_type": "commercial",
+    "ap_contact_email": "ap@redwoodvalleyfoods.example",
+    "people": [
+      {
+        "name": "Carla Mendes",
+        "role": "officer"
+      }
+    ],
+    "credit_request": {
+      "amount_usd": 75000,
+      "terms_days": 45,
+      "monthly_purchases_usd": 50000,
+      "invoicing_currency": "USD"
+    },
+    "trade_references": [
+      {
+        "company_name": "Ref Supplier One"
+      },
+      {
+        "company_name": "Ref Supplier Two"
+      },
+      {
+        "company_name": "Ref Supplier Three"
+      }
+    ],
+    "financial_statements": [
+      {
+        "period_end": "2025-12-31",
+        "statement_quality": "compiled",
+        "currency": "USD",
+        "revenue": 6400000,
+        "current_assets": 2000000,
+        "current_liabilities": 1000000,
+        "total_assets": 3200000,
+        "total_liabilities": 1600000,
+        "equity": 1600000
+      }
+    ],
+    "signatures": {
+      "terms": true,
+      "credit_check_consent": true
+    }
+  },
+  "sources": {
+    "registry": {
+      "source": "state_registry",
+      "found": true,
+      "status": "active",
+      "legal_name": "Redwood Valley Foods Inc.",
+      "formation_date": "2009-03-01",
+      "officers": [],
+      "owners": []
+    },
+    "tax_id_check": {
+      "source": "ein_format",
+      "valid": true
+    },
+    "domain_age_months": 180,
+    "public_financials": {
+      "error": "not_found"
+    },
+    "file_score": {
+      "provider": "file",
+      "score": 93
+    }
+  },
+  "expect": {
+    "stopped_at": "decision",
+    "events": [
+      "APPLICATION_SUBMITTED",
+      "SCREENING_PASS",
+      "CREDIT_ANALYSIS_COMPLETE"
+    ],
+    "analysis": {
+      "statement_quality": "compiled",
+      "band": "A"
+    },
+    "proposal": {
+      "decision": "counteroffer",
+      "requested_usd": 75000,
+      "recommended_usd": 50000,
+      "supportable_usd": 50000,
+      "proposed_usd": 50000,
+      "binding_method": "working_capital",
+      "reason_codes_include": [
+        "STATEMENT_QUALITY_COMPILED"
+      ]
+    }
+  },
+  "as_of": "2026-10-10"
+}

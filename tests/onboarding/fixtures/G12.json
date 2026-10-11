@@ -1,0 +1,103 @@
+{
+  "id": "G12",
+  "title": "Applicant is already a customer",
+  "why": "Tax ID matches an existing customer -> no duplicate record; routed to a limit-increase review on the existing customer. Nothing else runs.",
+  "application": {
+    "application_id": "G12",
+    "submitted_by": "credit_team",
+    "legal_name": "Granite Ridge Supply Company",
+    "entity_type": "corporation",
+    "country_code": "US",
+    "tax_id": "84-3311207",
+    "website": "graniteridgesupply.example",
+    "sector": "Wholesale distribution",
+    "is_public": false,
+    "date_established": "2009-03-01",
+    "billing_address": {
+      "line1": "100 Commerce Dr",
+      "city": "Columbus",
+      "region": "OH",
+      "postal_code": "43215",
+      "country_code": "US"
+    },
+    "address_type": "commercial",
+    "ap_contact_email": "ap@graniteridgesupply.example",
+    "people": [
+      {
+        "name": "Bill Thornquist",
+        "role": "officer"
+      }
+    ],
+    "credit_request": {
+      "amount_usd": 250000,
+      "terms_days": 30,
+      "monthly_purchases_usd": 200000,
+      "invoicing_currency": "USD"
+    },
+    "trade_references": [
+      {
+        "company_name": "Ref Supplier One"
+      },
+      {
+        "company_name": "Ref Supplier Two"
+      },
+      {
+        "company_name": "Ref Supplier Three"
+      }
+    ],
+    "financial_statements": [
+      {
+        "period_end": "2025-12-31",
+        "statement_quality": "reviewed",
+        "currency": "USD",
+        "revenue": 10400000,
+        "current_assets": 4000000,
+        "current_liabilities": 2000000,
+        "total_assets": 5200000,
+        "total_liabilities": 2600000,
+        "equity": 2600000
+      }
+    ],
+    "signatures": {
+      "terms": true,
+      "credit_check_consent": true
+    }
+  },
+  "sources": {
+    "registry": {
+      "source": "state_registry",
+      "found": true,
+      "status": "active",
+      "legal_name": "Granite Ridge Supply Company",
+      "formation_date": "2009-03-01",
+      "officers": [],
+      "owners": []
+    },
+    "tax_id_check": {
+      "source": "ein_format",
+      "valid": true
+    },
+    "domain_age_months": 180,
+    "public_financials": {
+      "error": "not_found"
+    },
+    "file_score": {
+      "provider": "file",
+      "score": 88
+    }
+  },
+  "expect": {
+    "stopped_at": "completeness",
+    "route": "existing_customer_limit_review",
+    "duplicate_of": "demo-existing-001",
+    "events": [
+      "APPLICATION_SUBMITTED"
+    ],
+    "absent": [
+      "screening",
+      "analysis",
+      "proposal"
+    ]
+  },
+  "as_of": "2026-10-10"
+}

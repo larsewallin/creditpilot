@@ -1,0 +1,114 @@
+{
+  "id": "G05",
+  "title": "Director name close to a sanctions-list person",
+  "why": "Director 'Dmitry Andreyevich Volkhovsky' is a transliteration variant of a listed person. Similarity falls between the review (0.85) and hit (0.97) thresholds -> Screening review, hit stays open until a person disposes of it. No analysis or proposal.",
+  "application": {
+    "application_id": "G05",
+    "submitted_by": "credit_team",
+    "legal_name": "Harbor Point Marine Services LLC",
+    "entity_type": "llc",
+    "country_code": "US",
+    "tax_id": "59-7710342",
+    "website": "harborpointmarine.example",
+    "sector": "Marine services",
+    "is_public": false,
+    "date_established": "2009-03-01",
+    "billing_address": {
+      "line1": "100 Commerce Dr",
+      "city": "Columbus",
+      "region": "OH",
+      "postal_code": "43215",
+      "country_code": "US"
+    },
+    "address_type": "commercial",
+    "ap_contact_email": "ap@harborpointmarine.example",
+    "people": [
+      {
+        "name": "Dmitry Andreyevich Volkhovsky",
+        "role": "director",
+        "country_code": "CY"
+      },
+      {
+        "name": "Laura Kessler",
+        "role": "officer"
+      }
+    ],
+    "credit_request": {
+      "amount_usd": 60000,
+      "terms_days": 30,
+      "monthly_purchases_usd": 50000,
+      "invoicing_currency": "USD"
+    },
+    "trade_references": [
+      {
+        "company_name": "Ref Supplier One"
+      },
+      {
+        "company_name": "Ref Supplier Two"
+      },
+      {
+        "company_name": "Ref Supplier Three"
+      }
+    ],
+    "financial_statements": [
+      {
+        "period_end": "2025-12-31",
+        "statement_quality": "reviewed",
+        "currency": "USD",
+        "revenue": 3600000,
+        "current_assets": 1400000,
+        "current_liabilities": 700000,
+        "total_assets": 1800000,
+        "total_liabilities": 900000,
+        "equity": 900000
+      }
+    ],
+    "signatures": {
+      "terms": true,
+      "credit_check_consent": true
+    }
+  },
+  "sources": {
+    "registry": {
+      "source": "state_registry",
+      "found": true,
+      "status": "active",
+      "legal_name": "Harbor Point Marine Services LLC",
+      "formation_date": "2009-03-01",
+      "officers": [],
+      "owners": []
+    },
+    "tax_id_check": {
+      "source": "ein_format",
+      "valid": true
+    },
+    "domain_age_months": 180,
+    "public_financials": {
+      "error": "not_found"
+    },
+    "file_score": {
+      "provider": "file",
+      "score": 88
+    }
+  },
+  "expect": {
+    "stopped_at": "screening",
+    "events": [
+      "APPLICATION_SUBMITTED",
+      "SCREENING_REVIEW"
+    ],
+    "screening": {
+      "status": "review",
+      "hits_count": 1,
+      "hit": {
+        "subject_type": "person",
+        "status": "open"
+      }
+    },
+    "absent": [
+      "analysis",
+      "proposal"
+    ]
+  },
+  "as_of": "2026-10-10"
+}

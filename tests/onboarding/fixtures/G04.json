@@ -1,0 +1,95 @@
+{
+  "id": "G04",
+  "title": "Large private request with statements and a trade reference missing",
+  "why": "Private company asking 400,000 > 250,000 statement threshold, no statements uploaded; only 2 of 3 trade references. Stops at Completeness, starts the Reg B 30-day clock, and names exactly what is missing.",
+  "application": {
+    "application_id": "G04",
+    "submitted_by": "credit_team",
+    "legal_name": "Ostrava Components USA Corp.",
+    "entity_type": "corporation",
+    "country_code": "US",
+    "tax_id": "88-1029374",
+    "website": "ostravacomponents.example",
+    "sector": "Industrial machinery",
+    "is_public": false,
+    "date_established": "2009-03-01",
+    "billing_address": {
+      "line1": "100 Commerce Dr",
+      "city": "Columbus",
+      "region": "OH",
+      "postal_code": "43215",
+      "country_code": "US"
+    },
+    "address_type": "commercial",
+    "ap_contact_email": "ap@ostravacomponents.example",
+    "people": [
+      {
+        "name": "Pavel Novak",
+        "role": "officer"
+      }
+    ],
+    "credit_request": {
+      "amount_usd": 400000,
+      "terms_days": 60,
+      "monthly_purchases_usd": 120000,
+      "invoicing_currency": "USD"
+    },
+    "trade_references": [
+      {
+        "company_name": "Ref Supplier One"
+      },
+      {
+        "company_name": "Ref Supplier Two"
+      }
+    ],
+    "financial_statements": [],
+    "signatures": {
+      "terms": true,
+      "credit_check_consent": true
+    }
+  },
+  "sources": {
+    "registry": {
+      "source": "state_registry",
+      "found": true,
+      "status": "active",
+      "legal_name": "Ostrava Components USA Corp.",
+      "formation_date": "2009-03-01",
+      "officers": [],
+      "owners": []
+    },
+    "tax_id_check": {
+      "source": "ein_format",
+      "valid": true
+    },
+    "domain_age_months": 180,
+    "public_financials": {
+      "error": "not_found"
+    },
+    "file_score": {
+      "provider": "file",
+      "score": 80
+    }
+  },
+  "expect": {
+    "stopped_at": "completeness",
+    "events": [
+      "APPLICATION_SUBMITTED",
+      "APPLICATION_INCOMPLETE"
+    ],
+    "completeness": {
+      "status": "incomplete",
+      "missing_include": [
+        "financial_statements",
+        "trade_references"
+      ],
+      "reg_b_clock_days": 30
+    },
+    "absent": [
+      "screening",
+      "analysis",
+      "proposal"
+    ]
+  },
+  "as_of": "2026-10-10"
+}

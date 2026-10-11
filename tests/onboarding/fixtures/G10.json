@@ -1,0 +1,131 @@
+{
+  "id": "G10",
+  "title": "German company invoicing in EUR during a DE downgrade and EUR weakness",
+  "why": "Country agent has a high DE signal and FX agent a high EUR signal -> 20% macro haircut (applied once). Caps: WC 250,000; NW 400,000 -> 250,000 x A x 0.80 = 200,000. needs = 100,000 x 2 x 1.15 = 230,000. Recommended 200,000 (working capital after haircut binds). Request 220,000 -> counteroffer 200,000. Without the macro context it would have been approved.",
+  "application": {
+    "application_id": "G10",
+    "submitted_by": "credit_team",
+    "legal_name": "Rheinfeld Spezialchemie GmbH",
+    "entity_type": "gmbh",
+    "country_code": "DE",
+    "tax_id": "DE298114562",
+    "website": "rheinfeld-chemie.example",
+    "sector": "Chemicals",
+    "is_public": false,
+    "date_established": "1998-04-01",
+    "billing_address": {
+      "line1": "Industriestrasse 12",
+      "city": "Duisburg",
+      "postal_code": "47053",
+      "country_code": "DE"
+    },
+    "address_type": "commercial",
+    "ap_contact_email": "kreditoren@rheinfeld-chemie.example",
+    "people": [
+      {
+        "name": "Johanna Albrecht",
+        "role": "director"
+      },
+      {
+        "name": "Stefan Krieger",
+        "role": "owner",
+        "ownership_pct": 70
+      }
+    ],
+    "credit_request": {
+      "amount_usd": 220000,
+      "terms_days": 60,
+      "monthly_purchases_usd": 100000,
+      "invoicing_currency": "EUR"
+    },
+    "trade_references": [
+      {
+        "company_name": "Ref Supplier One"
+      },
+      {
+        "company_name": "Ref Supplier Two"
+      },
+      {
+        "company_name": "Ref Supplier Three"
+      }
+    ],
+    "financial_statements": [
+      {
+        "period_end": "2025-12-31",
+        "statement_quality": "audited",
+        "currency": "USD",
+        "revenue": 16000000,
+        "current_assets": 5000000,
+        "current_liabilities": 2500000,
+        "total_assets": 8000000,
+        "total_liabilities": 4000000,
+        "equity": 4000000
+      }
+    ],
+    "signatures": {
+      "terms": true,
+      "credit_check_consent": true
+    }
+  },
+  "sources": {
+    "registry": {
+      "source": "gleif",
+      "found": true,
+      "status": "active",
+      "legal_name": "Rheinfeld Spezialchemie GmbH",
+      "formation_date": "1998-04-01",
+      "officers": [
+        {
+          "name": "Johanna Albrecht",
+          "role": "director"
+        }
+      ],
+      "owners": []
+    },
+    "tax_id_check": {
+      "source": "vies",
+      "valid": true
+    },
+    "domain_age_months": 180,
+    "public_financials": {
+      "error": "not_found"
+    },
+    "file_score": {
+      "provider": "file",
+      "score": 91
+    }
+  },
+  "expect": {
+    "stopped_at": "decision",
+    "events": [
+      "APPLICATION_SUBMITTED",
+      "SCREENING_PASS",
+      "CREDIT_ANALYSIS_COMPLETE"
+    ],
+    "screening": {
+      "status": "pass",
+      "checks_include": [
+        "tax_id:vies"
+      ]
+    },
+    "analysis": {
+      "band": "A",
+      "macro_context_count": 2
+    },
+    "proposal": {
+      "decision": "counteroffer",
+      "requested_usd": 220000,
+      "recommended_usd": 200000,
+      "supportable_usd": 200000,
+      "proposed_usd": 200000,
+      "binding_method": "working_capital",
+      "macro_haircut_applied": true,
+      "higher_limit_note": false,
+      "reason_codes_include": [
+        "MACRO_COUNTRY_RISK",
+        "MACRO_FX_RISK"
+      ]
+    }
+  },
+  "as_of": "2026-10-10"
+}

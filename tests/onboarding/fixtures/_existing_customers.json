@@ -1,0 +1,11 @@
+{
+  "_note": "Customers already in CreditPilot, matched on DUNS / tax ID / registration no.",
+  "customers": [
+    {
+      "customer_id": "demo-existing-001",
+      "company_name": "Granite Ridge Supply Co.",
+      "tax_id": "84-3311207",
+      "duns": "078412233"
+    }
+  ]
+}

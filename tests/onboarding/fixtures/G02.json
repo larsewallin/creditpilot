@@ -1,0 +1,124 @@
+{
+  "id": "G02",
+  "title": "Strong private US, evidence supports far more than requested",
+  "why": "needs = 50,000 x 1.5 x 1.15 = 86,250. Caps: WC 200,000; NW 300,000 -> 200,000 x A = 200,000. Recommended 86,250 -> 85,000. Request 80,000 -> approve as requested. Supportable 200,000 >= 1.2 x 80,000 = 96,000 -> higher-limit note.",
+  "application": {
+    "application_id": "G02",
+    "submitted_by": "credit_team",
+    "legal_name": "Summit Ridge Electrical Distributors LLC",
+    "entity_type": "llc",
+    "country_code": "US",
+    "tax_id": "27-9031184",
+    "website": "summitridgeelectric.example",
+    "sector": "Electrical equipment",
+    "is_public": false,
+    "date_established": "2009-03-01",
+    "billing_address": {
+      "line1": "100 Commerce Dr",
+      "city": "Columbus",
+      "region": "OH",
+      "postal_code": "43215",
+      "country_code": "US"
+    },
+    "address_type": "commercial",
+    "ap_contact_email": "ap@summitridgeelectric.example",
+    "people": [
+      {
+        "name": "Marcus Oyelaran",
+        "role": "officer"
+      },
+      {
+        "name": "Elena Fairbanks",
+        "role": "owner",
+        "ownership_pct": 100
+      }
+    ],
+    "credit_request": {
+      "amount_usd": 80000,
+      "terms_days": 45,
+      "monthly_purchases_usd": 50000,
+      "invoicing_currency": "USD"
+    },
+    "trade_references": [
+      {
+        "company_name": "Ref Supplier One"
+      },
+      {
+        "company_name": "Ref Supplier Two"
+      },
+      {
+        "company_name": "Ref Supplier Three"
+      }
+    ],
+    "financial_statements": [
+      {
+        "period_end": "2025-12-31",
+        "statement_quality": "audited",
+        "currency": "USD",
+        "revenue": 12000000,
+        "current_assets": 4000000,
+        "current_liabilities": 2000000,
+        "total_assets": 6000000,
+        "total_liabilities": 3000000,
+        "equity": 3000000
+      }
+    ],
+    "signatures": {
+      "terms": true,
+      "credit_check_consent": true
+    }
+  },
+  "sources": {
+    "registry": {
+      "source": "state_registry",
+      "found": true,
+      "status": "active",
+      "legal_name": "Summit Ridge Electrical Distributors LLC",
+      "formation_date": "2009-03-01",
+      "officers": [
+        {
+          "name": "Marcus Oyelaran",
+          "role": "officer"
+        }
+      ],
+      "owners": []
+    },
+    "tax_id_check": {
+      "source": "ein_format",
+      "valid": true
+    },
+    "domain_age_months": 180,
+    "public_financials": {
+      "error": "not_found"
+    },
+    "file_score": {
+      "provider": "file",
+      "score": 95
+    }
+  },
+  "expect": {
+    "stopped_at": "decision",
+    "events": [
+      "APPLICATION_SUBMITTED",
+      "SCREENING_PASS",
+      "CREDIT_ANALYSIS_COMPLETE"
+    ],
+    "analysis": {
+      "score_source": "file",
+      "band": "A"
+    },
+    "proposal": {
+      "decision": "approve_as_requested",
+      "requested_usd": 80000,
+      "recommended_usd": 85000,
+      "supportable_usd": 200000,
+      "proposed_usd": 80000,
+      "binding_method": "needs_based",
+      "higher_limit_note": true,
+      "reason_codes_include": [
+        "HIGHER_LIMIT_SUPPORTABLE"
+      ]
+    }
+  },
+  "as_of": "2026-10-10"
+}

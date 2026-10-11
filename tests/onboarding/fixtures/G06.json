@@ -1,0 +1,110 @@
+{
+  "id": "G06",
+  "title": "Applicant entity is on a sanctions list",
+  "why": "Legal name and country match a listed entity exactly -> Screening fail, SANCTIONS_HIT. A decline is proposed only for a person to make; never automatic.",
+  "application": {
+    "application_id": "G06",
+    "submitted_by": "credit_team",
+    "legal_name": "Kestrel Petrochem Trading FZE",
+    "entity_type": "other",
+    "country_code": "AE",
+    "tax_id": "100223344500003",
+    "website": "kestrelpetrochem.example",
+    "sector": "Petroleum products",
+    "is_public": false,
+    "date_established": "2009-03-01",
+    "billing_address": {
+      "line1": "Jebel Ali Free Zone, LOB 14",
+      "city": "Dubai",
+      "postal_code": "00000",
+      "country_code": "AE"
+    },
+    "address_type": "commercial",
+    "ap_contact_email": "finance@kestrelpetrochem.example",
+    "people": [
+      {
+        "name": "Omar Haddad",
+        "role": "director"
+      }
+    ],
+    "credit_request": {
+      "amount_usd": 300000,
+      "terms_days": 60,
+      "monthly_purchases_usd": 120000,
+      "invoicing_currency": "USD"
+    },
+    "trade_references": [
+      {
+        "company_name": "Ref Supplier One"
+      },
+      {
+        "company_name": "Ref Supplier Two"
+      },
+      {
+        "company_name": "Ref Supplier Three"
+      }
+    ],
+    "financial_statements": [
+      {
+        "period_end": "2025-12-31",
+        "statement_quality": "management",
+        "currency": "USD",
+        "revenue": 6000000,
+        "current_assets": 1800000,
+        "current_liabilities": 900000,
+        "total_assets": 3000000,
+        "total_liabilities": 1500000,
+        "equity": 1500000
+      }
+    ],
+    "signatures": {
+      "terms": true,
+      "credit_check_consent": true
+    }
+  },
+  "sources": {
+    "registry": {
+      "source": "national_registry",
+      "found": true,
+      "status": "active",
+      "legal_name": "Kestrel Petrochem Trading FZE",
+      "formation_date": "2017-05-01",
+      "officers": [],
+      "owners": []
+    },
+    "tax_id_check": null,
+    "domain_age_months": 180,
+    "public_financials": {
+      "error": "not_found"
+    },
+    "file_score": {
+      "provider": "file",
+      "score": 70
+    }
+  },
+  "expect": {
+    "stopped_at": "screening",
+    "events": [
+      "APPLICATION_SUBMITTED",
+      "SANCTIONS_HIT"
+    ],
+    "screening": {
+      "status": "fail",
+      "hits_count": 1,
+      "hit": {
+        "subject_type": "entity"
+      }
+    },
+    "proposal": {
+      "decision": "decline_review",
+      "human_required": true,
+      "reason_codes_include": [
+        "SANCTIONS_MATCH"
+      ]
+    },
+    "absent": [
+      "analysis"
+    ]
+  },
+  "as_of": "2026-10-10"
+}

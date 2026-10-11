@@ -1,0 +1,29 @@
+{
+  "_note": "FICTIONAL test entries only. The real-data smoke run uses the real OFAC/EU/UK/UN lists.",
+  "entries": [
+    {
+      "list": "OFAC_SDN",
+      "name": "KESTREL PETROCHEM TRADING FZE",
+      "type": "entity",
+      "country_code": "AE"
+    },
+    {
+      "list": "UK",
+      "name": "Dmitri Andreevich Volkhovsky",
+      "type": "person",
+      "country_code": "RU"
+    },
+    {
+      "list": "EU",
+      "name": "Baltic Amber Logistics OOO",
+      "type": "entity",
+      "country_code": "RU"
+    },
+    {
+      "list": "UN",
+      "name": "Rahim Golzari Tehrani",
+      "type": "person",
+      "country_code": "IR"
+    }
+  ]
+}

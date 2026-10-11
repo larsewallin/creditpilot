@@ -1,0 +1,142 @@
+{
+  "id": "G11",
+  "title": "UK limited company",
+  "why": "Companies House match; people screened = 2 directors + 1 extra PSC owner (one PSC owner is also a director, de-duplicated) = 3; UK VAT checked with HMRC (not VIES). needs = 90,000 x 1 x 1.15 = 103,500 -> 100,000. Caps: WC 180,000 x band B 0.75 = 135,000. Request 100,000 -> approve; 135,000 >= 120,000 -> higher-limit note.",
+  "application": {
+    "application_id": "G11",
+    "submitted_by": "credit_team",
+    "legal_name": "Pinewood Tooling Ltd",
+    "entity_type": "ltd",
+    "country_code": "GB",
+    "tax_id": "GB284519377",
+    "website": "pinewoodtooling.example",
+    "sector": "Industrial machinery",
+    "is_public": false,
+    "date_established": "2013-11-20",
+    "billing_address": {
+      "line1": "Unit 4, Brookside Park",
+      "city": "Sheffield",
+      "postal_code": "S9 2RX",
+      "country_code": "GB"
+    },
+    "address_type": "commercial",
+    "ap_contact_email": "accounts@pinewoodtooling.example",
+    "people": [
+      {
+        "name": "Gareth Pryce",
+        "role": "director"
+      },
+      {
+        "name": "Siobhan Doyle",
+        "role": "director"
+      }
+    ],
+    "credit_request": {
+      "amount_usd": 100000,
+      "terms_days": 30,
+      "monthly_purchases_usd": 90000,
+      "invoicing_currency": "GBP"
+    },
+    "trade_references": [
+      {
+        "company_name": "Ref Supplier One"
+      },
+      {
+        "company_name": "Ref Supplier Two"
+      },
+      {
+        "company_name": "Ref Supplier Three"
+      }
+    ],
+    "financial_statements": [
+      {
+        "period_end": "2025-12-31",
+        "statement_quality": "audited",
+        "currency": "USD",
+        "revenue": 8000000,
+        "current_assets": 3600000,
+        "current_liabilities": 1800000,
+        "total_assets": 4000000,
+        "total_liabilities": 2000000,
+        "equity": 2000000
+      }
+    ],
+    "signatures": {
+      "terms": true,
+      "credit_check_consent": true
+    },
+    "registration_no": "08812345"
+  },
+  "sources": {
+    "registry": {
+      "source": "companies_house",
+      "found": true,
+      "status": "active",
+      "legal_name": "PINEWOOD TOOLING LTD",
+      "formation_date": "2013-11-20",
+      "officers": [
+        {
+          "name": "Gareth Pryce",
+          "role": "director"
+        },
+        {
+          "name": "Siobhan Doyle",
+          "role": "director"
+        }
+      ],
+      "owners": [
+        {
+          "name": "GARETH PRYCE",
+          "role": "owner",
+          "ownership_pct": 50
+        },
+        {
+          "name": "Alistair Munro",
+          "role": "owner",
+          "ownership_pct": 50
+        }
+      ]
+    },
+    "tax_id_check": {
+      "source": "hmrc_vat",
+      "valid": true
+    },
+    "domain_age_months": 180,
+    "public_financials": {
+      "error": "not_found"
+    },
+    "file_score": {
+      "provider": "file",
+      "score": 86
+    }
+  },
+  "expect": {
+    "stopped_at": "decision",
+    "events": [
+      "APPLICATION_SUBMITTED",
+      "SCREENING_PASS",
+      "CREDIT_ANALYSIS_COMPLETE"
+    ],
+    "screening": {
+      "status": "pass",
+      "people_screened": 3,
+      "checks_include": [
+        "registry:companies_house",
+        "tax_id:hmrc_vat",
+        "sanctions_people"
+      ]
+    },
+    "analysis": {
+      "band": "B"
+    },
+    "proposal": {
+      "decision": "approve_as_requested",
+      "recommended_usd": 100000,
+      "supportable_usd": 135000,
+      "proposed_usd": 100000,
+      "binding_method": "needs_based",
+      "higher_limit_note": true
+    }
+  },
+  "as_of": "2026-10-10"
+}

@@ -1,0 +1,126 @@
+{
+  "id": "G13",
+  "title": "File scoring app times out",
+  "why": "File times out -> falls back to the uploaded bureau report score 88 (band B), and the memo says so. Caps: WC 90,000; NW 120,000; bureau 150,000 -> 90,000 x 0.75 = 67,500 -> supportable 65,000. needs = 45,000 x 1 x 1.15 = 51,750 -> recommended 50,000. Request 50,000 -> approve; 65,000 >= 60,000 -> higher-limit note.",
+  "application": {
+    "application_id": "G13",
+    "submitted_by": "credit_team",
+    "legal_name": "Bluewater Packaging Solutions Inc.",
+    "entity_type": "corporation",
+    "country_code": "US",
+    "tax_id": "38-2297715",
+    "website": "bluewaterpackaging.example",
+    "sector": "Packaging",
+    "is_public": false,
+    "date_established": "2009-03-01",
+    "billing_address": {
+      "line1": "100 Commerce Dr",
+      "city": "Columbus",
+      "region": "OH",
+      "postal_code": "43215",
+      "country_code": "US"
+    },
+    "address_type": "commercial",
+    "ap_contact_email": "ap@bluewaterpackaging.example",
+    "people": [
+      {
+        "name": "Nadia Romero",
+        "role": "officer"
+      }
+    ],
+    "credit_request": {
+      "amount_usd": 50000,
+      "terms_days": 30,
+      "monthly_purchases_usd": 45000,
+      "invoicing_currency": "USD"
+    },
+    "trade_references": [
+      {
+        "company_name": "Ref Supplier One"
+      },
+      {
+        "company_name": "Ref Supplier Two"
+      },
+      {
+        "company_name": "Ref Supplier Three"
+      }
+    ],
+    "financial_statements": [
+      {
+        "period_end": "2025-12-31",
+        "statement_quality": "reviewed",
+        "currency": "USD",
+        "revenue": 4800000,
+        "current_assets": 1800000,
+        "current_liabilities": 900000,
+        "total_assets": 2400000,
+        "total_liabilities": 1200000,
+        "equity": 1200000
+      }
+    ],
+    "signatures": {
+      "terms": true,
+      "credit_check_consent": true
+    },
+    "bureau_report": {
+      "bureau": "Creditsafe",
+      "score_normalized": 88,
+      "max_credit_recommendation_usd": 150000,
+      "avg_days_beyond_terms": 1,
+      "liens_or_judgments": 0
+    }
+  },
+  "sources": {
+    "registry": {
+      "source": "state_registry",
+      "found": true,
+      "status": "active",
+      "legal_name": "Bluewater Packaging Solutions Inc.",
+      "formation_date": "2009-03-01",
+      "officers": [],
+      "owners": []
+    },
+    "tax_id_check": {
+      "source": "ein_format",
+      "valid": true
+    },
+    "domain_age_months": 180,
+    "public_financials": {
+      "error": "not_found"
+    },
+    "file_score": {
+      "error": "timeout"
+    }
+  },
+  "expect": {
+    "stopped_at": "decision",
+    "events": [
+      "APPLICATION_SUBMITTED",
+      "SCREENING_PASS",
+      "CREDIT_ANALYSIS_COMPLETE"
+    ],
+    "analysis": {
+      "financials_source": "uploaded_statements",
+      "score_source": "bureau_report",
+      "band": "B",
+      "fallbacks": [
+        {
+          "provider": "file",
+          "reason": "timeout"
+        }
+      ]
+    },
+    "proposal": {
+      "decision": "approve_as_requested",
+      "recommended_usd": 50000,
+      "supportable_usd": 65000,
+      "proposed_usd": 50000,
+      "binding_method": "needs_based",
+      "higher_limit_note": true,
+      "reason_codes_include": [
+        "SCORE_FALLBACK"
+      ]
+    }
+  },
+  "as_of": "2026-10-10"
+}

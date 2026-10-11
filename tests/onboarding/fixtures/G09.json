@@ -1,0 +1,116 @@
+{
+  "id": "G09",
+  "title": "Public US company, financials from SEC filings",
+  "why": "Public: financials from SEC EDGAR (audited), not uploads. needs = 450,000 x 1.5 x 1.15 = 776,250 -> 775,000. Caps: WC 4,000,000; NW 9,000,000 -> 4,000,000 x A. Request 750,000 -> approve; supportable 4,000,000 -> higher-limit note.",
+  "application": {
+    "application_id": "G09",
+    "submitted_by": "credit_team",
+    "legal_name": "Meridian Building Products Corp.",
+    "entity_type": "corporation",
+    "country_code": "US",
+    "tax_id": "13-5502817",
+    "website": "meridianbuilding.example",
+    "sector": "Building materials",
+    "is_public": true,
+    "date_established": "1987-01-15",
+    "billing_address": {
+      "line1": "100 Commerce Dr",
+      "city": "Columbus",
+      "region": "OH",
+      "postal_code": "43215",
+      "country_code": "US"
+    },
+    "address_type": "commercial",
+    "ap_contact_email": "ap@meridianbuilding.example",
+    "people": [
+      {
+        "name": "Gregory Hale",
+        "role": "officer"
+      },
+      {
+        "name": "Priya Raman",
+        "role": "officer"
+      }
+    ],
+    "credit_request": {
+      "amount_usd": 750000,
+      "terms_days": 45,
+      "monthly_purchases_usd": 450000,
+      "invoicing_currency": "USD"
+    },
+    "trade_references": [
+      {
+        "company_name": "Ref Supplier One"
+      },
+      {
+        "company_name": "Ref Supplier Two"
+      },
+      {
+        "company_name": "Ref Supplier Three"
+      }
+    ],
+    "financial_statements": [],
+    "signatures": {
+      "terms": true,
+      "credit_check_consent": true
+    },
+    "ticker": "MBPX",
+    "cik": "0001999001"
+  },
+  "sources": {
+    "registry": {
+      "source": "sec_edgar",
+      "found": true,
+      "status": "active",
+      "legal_name": "Meridian Building Products Corp.",
+      "formation_date": "1987-01-15",
+      "officers": [],
+      "owners": []
+    },
+    "tax_id_check": {
+      "source": "ein_format",
+      "valid": true
+    },
+    "domain_age_months": 180,
+    "public_financials": [
+      {
+        "period_end": "2025-12-31",
+        "statement_quality": "audited",
+        "currency": "USD",
+        "revenue": 360000000,
+        "current_assets": 80000000,
+        "current_liabilities": 40000000,
+        "total_assets": 180000000,
+        "total_liabilities": 90000000,
+        "equity": 90000000
+      }
+    ],
+    "file_score": {
+      "provider": "file",
+      "score": 90
+    }
+  },
+  "expect": {
+    "stopped_at": "decision",
+    "events": [
+      "APPLICATION_SUBMITTED",
+      "SCREENING_PASS",
+      "CREDIT_ANALYSIS_COMPLETE"
+    ],
+    "analysis": {
+      "financials_source": "sec_edgar",
+      "statement_quality": "audited",
+      "score_source": "file",
+      "band": "A"
+    },
+    "proposal": {
+      "decision": "approve_as_requested",
+      "recommended_usd": 775000,
+      "supportable_usd": 4000000,
+      "proposed_usd": 750000,
+      "binding_method": "needs_based",
+      "higher_limit_note": true
+    }
+  },
+  "as_of": "2026-10-10"
+}

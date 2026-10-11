@@ -1,0 +1,131 @@
+{
+  "id": "G01",
+  "title": "Clean private US distributor, request within needs",
+  "why": "needs = 32,000 x 1 month x 1.15 = 36,800. Caps: 10% WC 38,000; 10% NW 60,000 -> 38,000 x band A 1.00 = 38,000. Recommended = min(36,800, 38,000) -> 35,000 (rounded down to 5k). Supportable 35,000. Request 35,000 <= 35,000 -> approve. 35,000 < 1.2 x 35,000 -> no higher-limit note.",
+  "application": {
+    "application_id": "G01",
+    "submitted_by": "credit_team",
+    "legal_name": "Lakeshore Industrial Supply Inc.",
+    "entity_type": "corporation",
+    "country_code": "US",
+    "tax_id": "31-4482910",
+    "website": "lakeshoreindustrial.example",
+    "sector": "Wholesale distribution",
+    "is_public": false,
+    "date_established": "2009-03-01",
+    "billing_address": {
+      "line1": "100 Commerce Dr",
+      "city": "Columbus",
+      "region": "OH",
+      "postal_code": "43215",
+      "country_code": "US"
+    },
+    "address_type": "commercial",
+    "ap_contact_email": "ap@lakeshoreindustrial.example",
+    "people": [
+      {
+        "name": "Karen Whitfield",
+        "role": "officer"
+      },
+      {
+        "name": "Tom Brezinski",
+        "role": "owner",
+        "ownership_pct": 60
+      }
+    ],
+    "credit_request": {
+      "amount_usd": 35000,
+      "terms_days": 30,
+      "monthly_purchases_usd": 32000,
+      "invoicing_currency": "USD"
+    },
+    "trade_references": [
+      {
+        "company_name": "Ref Supplier One"
+      },
+      {
+        "company_name": "Ref Supplier Two"
+      },
+      {
+        "company_name": "Ref Supplier Three"
+      }
+    ],
+    "financial_statements": [
+      {
+        "period_end": "2025-12-31",
+        "statement_quality": "reviewed",
+        "currency": "USD",
+        "revenue": 2400000,
+        "current_assets": 760000,
+        "current_liabilities": 380000,
+        "total_assets": 1200000,
+        "total_liabilities": 600000,
+        "equity": 600000
+      }
+    ],
+    "signatures": {
+      "terms": true,
+      "credit_check_consent": true
+    }
+  },
+  "sources": {
+    "registry": {
+      "source": "state_registry",
+      "found": true,
+      "status": "active",
+      "legal_name": "Lakeshore Industrial Supply Inc.",
+      "formation_date": "2009-03-01",
+      "officers": [
+        {
+          "name": "Karen Whitfield",
+          "role": "officer"
+        }
+      ],
+      "owners": []
+    },
+    "tax_id_check": {
+      "source": "ein_format",
+      "valid": true
+    },
+    "domain_age_months": 180,
+    "public_financials": {
+      "error": "not_found"
+    },
+    "file_score": {
+      "provider": "file",
+      "score": 92
+    }
+  },
+  "expect": {
+    "stopped_at": "decision",
+    "route": "new_customer",
+    "events": [
+      "APPLICATION_SUBMITTED",
+      "SCREENING_PASS",
+      "CREDIT_ANALYSIS_COMPLETE"
+    ],
+    "screening": {
+      "status": "pass",
+      "hits": [],
+      "fraud_flags": []
+    },
+    "analysis": {
+      "financials_source": "uploaded_statements",
+      "statement_quality": "reviewed",
+      "score_source": "file",
+      "band": "A",
+      "fallbacks": []
+    },
+    "proposal": {
+      "decision": "approve_as_requested",
+      "requested_usd": 35000,
+      "recommended_usd": 35000,
+      "supportable_usd": 35000,
+      "proposed_usd": 35000,
+      "binding_method": "needs_based",
+      "higher_limit_note": false,
+      "macro_haircut_applied": false
+    }
+  },
+  "as_of": "2026-10-10"
+}
