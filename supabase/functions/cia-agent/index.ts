@@ -613,6 +613,7 @@ async function fetchRelevantData(
         const { data: named, error: namedErr } = await supabase
           .from("customers")
           .select(selectFields)
+          .eq("lifecycle_status", "active")
           .or(nameFilter)
           .order("company_name")
           .limit(20);
@@ -636,6 +637,7 @@ async function fetchRelevantData(
         const { data, error } = await supabase
           .from('customers')
           .select(selectFields)
+          .eq('lifecycle_status', 'active')
           .eq('sector', sector)
           .order('credit_limit', { ascending: false })
           .limit(50);
@@ -674,6 +676,7 @@ async function fetchRelevantData(
         const { data: matched, error: matchedErr } = await supabase
           .from("customers")
           .select("id")
+          .eq("lifecycle_status", "active")
           .or(nameFilter);
         if (matchedErr) console.error("customers matched error:", matchedErr.message);
         custIds = (matched ?? []).map((c: any) => c.id);
@@ -685,6 +688,7 @@ async function fetchRelevantData(
         const { data: sectorMatched, error: sectorMatchedErr } = await supabase
           .from("customers")
           .select("id")
+          .eq("lifecycle_status", "active")
           .eq("sector", sector);
         if (sectorMatchedErr) console.error("customers sector-match error:", sectorMatchedErr.message);
         custIds = (sectorMatched ?? []).map((c: any) => c.id);
@@ -784,6 +788,7 @@ async function fetchRelevantData(
         const { data: matched, error: matchedErr } = await supabase
           .from("customers")
           .select("id")
+          .eq("lifecycle_status", "active")
           .or(nameFilter);
         if (matchedErr) console.error("customers matched error:", matchedErr.message);
         custIds = (matched ?? []).map((c: any) => c.id);
@@ -795,6 +800,7 @@ async function fetchRelevantData(
         const { data: sectorMatched, error: sectorMatchedErr } = await supabase
           .from("customers")
           .select("id")
+          .eq("lifecycle_status", "active")
           .eq("sector", sector);
         if (sectorMatchedErr) console.error("customers sector-match error:", sectorMatchedErr.message);
         custIds = (sectorMatched ?? []).map((c: any) => c.id);

@@ -26,6 +26,7 @@ export default function Customers() {
       const { data } = await supabase
         .from("customers")
         .select("*")
+        .filter("lifecycle_status", "eq", "active")
         .order("company_name");
       return data ?? [];
     },

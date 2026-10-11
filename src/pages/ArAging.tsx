@@ -79,7 +79,8 @@ export default function ArAging() {
     queryFn: async () => {
       const { data } = await supabase
         .from("customers")
-        .select("id, company_name, scenario, credit_limit, current_exposure, credit_rating_score, credit_rating_source, risk_tags, risk_tags_updated_at, notes, account_manager, payment_terms_days");
+        .select("id, company_name, scenario, credit_limit, current_exposure, credit_rating_score, credit_rating_source, risk_tags, risk_tags_updated_at, notes, account_manager, payment_terms_days")
+        .filter("lifecycle_status", "eq", "active");
       return data ?? [];
     },
   });

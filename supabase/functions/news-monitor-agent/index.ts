@@ -133,7 +133,8 @@ Deno.serve(async (req) => {
     // existing behaviour: the first MAX_CUSTOMERS customers.
     let customerQuery = supabase
       .from("customers")
-      .select("id, company_name");
+      .select("id, company_name")
+      .eq("lifecycle_status", "active");
 
     if (DEMO_MODE) {
       const { data: seedCustomers, error: seedCustError } = await supabase
