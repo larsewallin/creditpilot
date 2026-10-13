@@ -95,6 +95,12 @@ export interface CreditApplication {
 export interface RegistryRecord {
   source: "companies_house" | "sec_edgar" | "gleif" | "state_registry" | "national_registry";
   found: boolean;
+  /** No registry could be checked (no free source for this country, or the source failed).
+   *  Recorded as a gap, never as a fraud flag. */
+  unavailable?: boolean;
+  /** Why the registry could not be checked (shown in the audit trail). */
+  unavailable_reason?: string;
+  registration_no?: string;
   status?: "active" | "dissolved" | "dormant";
   legal_name?: string;
   formation_date?: string;
@@ -105,13 +111,17 @@ export interface RegistryRecord {
 export interface TaxIdCheck {
   source: "vies" | "hmrc_vat" | "ein_format";
   valid: boolean;
+  registered_name?: string;
 }
 
 export interface SanctionsEntry {
-  list: "OFAC_SDN" | "EU" | "UK" | "UN";
+  list: "OFAC_SDN" | "OFAC_CONS" | "EU" | "UK" | "UN";
   name: string;
   type: "entity" | "person";
+  aliases?: string[];
   country_code?: string;
+  date_of_birth?: string;
+  list_id?: string;          // the list's own reference, for the audit trail
 }
 
 export interface ScoreResult {
@@ -152,9 +162,12 @@ export interface OnboardingProviders {
   lookupRegistry(app: CreditApplication): Promise<RegistryRecord>;
   checkTaxId(app: CreditApplication): Promise<TaxIdCheck | null>;
   domainAgeMonths(website: string): Promise<number | null>;
-  sanctionsList(): Promise<SanctionsEntry[]>;
+  /** Sanctions entries to compare against. `subjects` lets a live adapter pre-filter
+   *  the full lists (tens of thousands of names) down to plausible candidates. */
+  sanctionsList(subjects?: string[]): Promise<SanctionsEntry[]>;
   publicFinancials(app: CreditApplication): Promise<FinancialStatement[] | ProviderError>;
-  fileScore(app: CreditApplication): Promise<ScoreResult | ProviderError>;
+  /** `financials`: what analysis found (SEC filings or uploads), so File scores on the same figures. */
+  fileScore(app: CreditApplication, financials?: FinancialStatement[]): Promise<ScoreResult | ProviderError>;
   macroContext(country_code: string | undefined, sector: string | undefined, currency: string | undefined): Promise<MacroContextEvent[]>;
 }
 
@@ -204,7 +217,13 @@ export interface ScreeningHit {
   list_entry: string;
   list: string;
   similarity: number;
-  status: "open" | "confirmed";  // a person disposes; agent never clears
+  status: "open" | "confirmed" | "cleared";  // a person disposes; the agent never clears
+  /** What the reviewer needs to decide: the listed party's country and date of birth,
+   *  and whether they agree with the applicant's. */
+  list_country?: string;
+  list_dob?: string;
+  country_match?: boolean;
+  dob_match?: boolean;
 }
 
 export interface OnboardingOutcome {

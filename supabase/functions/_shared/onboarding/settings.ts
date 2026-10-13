@@ -14,7 +14,7 @@ export const ONBOARDING_DEFAULTS: OnboardingSettings = {
   },
   screening: {
     name_match_review_threshold: 0.85,
-    name_match_hit_threshold: 0.97,
+    name_match_hit_threshold: 0.99,   // Jaro-Winkler scale: near-exact after normalization
     fraud_flags_for_review: 2,
     young_entity_months: 24,
     young_entity_large_request_usd: 100_000,

@@ -15,15 +15,22 @@
  */
 import type {
   CreditApplication, FinancialStatement, FraudFlag, MacroContextEvent, OnboardingOutcome,
-  OnboardingProviders, OnboardingSettings, Person, ScreeningHit, SanctionsEntry,
+  OnboardingProviders, OnboardingSettings, Person, ScreeningHit,
 } from "./types.ts";
 import { ONBOARDING_DEFAULTS } from "./settings.ts";
 import { calculateOnboardingLimit, scoreToBand } from "../skills/analytical/calculate-onboarding-limit.ts";
+import { matchSanctionsName, normalize, prepareSanctionsList, type PreparedEntry } from "../skills/analytical/match-sanctions-name.ts";
 
 export interface RunOptions {
   settings?: OnboardingSettings;
   /** ISO date used for entity age, domain age and clocks. Defaults to today. */
   asOf?: string;
+  /** Decisions a person already made at Screening, so a re-run does not raise them again.
+   *  The agent never fills this; only a disposition by a signed-in user does. */
+  cleared?: {
+    hits?: { subject: string; list_entry: string }[];
+    fraud_flags_accepted?: boolean;
+  };
 }
 
 const REG_B_INCOMPLETE_DAYS = 30;
@@ -63,7 +70,7 @@ export async function runOnboarding(
 
   // ─── 3. Screening ──────────────────────────────────────────────────────────
   out.stopped_at = "screening";
-  const screening = await screen(app, providers, settings, asOf);
+  const screening = await screen(app, providers, settings, asOf, opts.cleared);
   out.screening = screening;
   if (screening.status === "fail") {
     out.events.push("SANCTIONS_HIT");
@@ -109,7 +116,7 @@ export async function runOnboarding(
   const maxCredit: number[] = [];
   for (const source of settings.sources.score_order) {
     if (source === "file") {
-      const r = await providers.fileScore(app);
+      const r = await providers.fileScore(app, statement ? [statement] : app.financial_statements);
       if ("error" in r) { fallbacks.push({ provider: "file", reason: r.error }); continue; }
       score = r.score; score_source = "file";
       if (r.max_credit_recommendation_usd !== undefined) maxCredit.push(r.max_credit_recommendation_usd);
@@ -193,13 +200,14 @@ function completenessGaps(app: CreditApplication, s: OnboardingSettings, asOf: s
 
 // ─── Screening ───────────────────────────────────────────────────────────────
 
-async function screen(app: CreditApplication, providers: OnboardingProviders, s: OnboardingSettings, asOf: string) {
+async function screen(app: CreditApplication, providers: OnboardingProviders, s: OnboardingSettings, asOf: string, cleared?: RunOptions["cleared"]) {
   const checks: string[] = [];
   const fraud_flags: FraudFlag[] = [];
 
   const registry = await providers.lookupRegistry(app);
   checks.push(`registry:${registry.source}`);
-  if (!registry.found) fraud_flags.push("REGISTRY_NOT_FOUND");
+  if (registry.unavailable) checks.push(registry.unavailable_reason ? `registry_unavailable:${registry.unavailable_reason}` : "registry_unavailable");
+  else if (!registry.found) fraud_flags.push("REGISTRY_NOT_FOUND");
   if (registry.found && registry.status && registry.status !== "active") fraud_flags.push("REGISTRY_INACTIVE");
 
   const tax = await providers.checkTaxId(app);
@@ -222,60 +230,74 @@ async function screen(app: CreditApplication, providers: OnboardingProviders, s:
   if (app.address_type && app.address_type !== "commercial") fraud_flags.push("ADDRESS_RISK");
 
   // Sanctions: entity names, then every person from the application and registry.
-  const list = await providers.sanctionsList();
+  const people = dedupePeople([...app.people, ...(registry.officers ?? []), ...(registry.owners ?? [])]);
+  const entityNames = [app.legal_name, app.trade_name, registry.legal_name].filter(Boolean) as string[];
+  const list = prepareSanctionsList(await providers.sanctionsList([...entityNames, ...people.map((p) => p.name)]));
   const hits: (ScreeningHit & { country_match: boolean })[] = [];
 
   checks.push("sanctions_entity");
-  for (const name of [app.legal_name, app.trade_name].filter(Boolean) as string[]) {
+  const seenEntity = new Set<string>();
+  for (const name of entityNames) {
+    const key = normalize(name, "entity").join(" ");
+    if (seenEntity.has(key)) continue;
+    seenEntity.add(key);
     const h = bestMatch(name, "entity", app.country_code, list, s);
     if (h) hits.push(h);
   }
 
   checks.push("sanctions_people");
-  const people = dedupePeople([...app.people, ...(registry.officers ?? []), ...(registry.owners ?? [])]);
   for (const p of people) {
-    const h = bestMatch(p.name, "person", p.country_code, list, s);
+    const h = bestMatch(p.name, "person", p.country_code, list, s, p.date_of_birth);
     if (h) hits.push(h);
   }
 
-  const hardHit = hits.some((h) => h.similarity >= s.screening.name_match_hit_threshold && h.country_match);
-  const forceReview = fraud_flags.includes("REGISTRY_INACTIVE");
+  const isCleared = (h: ScreeningHit) => (cleared?.hits ?? []).some((c) => c.subject === h.subject && c.list_entry === h.list_entry);
+  const open = hits.filter((h) => !isCleared(h));
+  const flagsOpen = !cleared?.fraud_flags_accepted;
+  // A hit (fail) needs a near-exact name AND a second identifier: the country for an
+  // entity; for a person, country and year of birth. Anything less is a review.
+  const hardHit = open.some((h) => h.similarity >= s.screening.name_match_hit_threshold && h.country_match &&
+    (h.subject_type === "entity" || h.dob_match === true));
+  const forceReview = flagsOpen && fraud_flags.includes("REGISTRY_INACTIVE");
   const status: "pass" | "review" | "fail" = hardHit ? "fail"
-    : hits.length || forceReview || fraud_flags.length >= s.screening.fraud_flags_for_review ? "review"
+    : open.length || forceReview || (flagsOpen && fraud_flags.length >= s.screening.fraud_flags_for_review) ? "review"
     : "pass";
 
   return {
     status,
     checks,
     people_screened: people.length,
-    hits: hits.map(({ country_match: _c, ...h }) => h),
+    hits: hits.map(({ country_match: _c, ...h }) => (isCleared(h) ? { ...h, status: "cleared" as const } : h)),
     fraud_flags,
   };
 }
 
 function bestMatch(
   subject: string, type: "entity" | "person", country: string | undefined,
-  list: SanctionsEntry[], s: OnboardingSettings,
+  list: PreparedEntry[], s: OnboardingSettings, dob?: string,
 ): (ScreeningHit & { country_match: boolean }) | null {
-  let best: { e: SanctionsEntry; sim: number } | null = null;
-  for (const e of list) {
-    if (e.type !== type) continue;
-    const sim = nameSimilarity(subject, e.name);
-    if (sim >= s.screening.name_match_review_threshold && (!best || sim > best.sim)) best = { e, sim };
-  }
-  if (!best) return null;
+  const m = matchSanctionsName(subject, type, list, s.screening.name_match_review_threshold);
+  if (!m) return null;
+  const country_match = !!country && !!m.entry.country_code && country.toUpperCase() === m.entry.country_code.toUpperCase();
   return {
-    subject, subject_type: type, list_entry: best.e.name, list: best.e.list,
-    similarity: Math.round(best.sim * 1000) / 1000,
+    subject, subject_type: type, list_entry: m.entry.name, list: m.entry.list,
+    similarity: Math.round(m.score * 1000) / 1000,
     status: "open",
-    country_match: !!country && !!best.e.country_code && country.toUpperCase() === best.e.country_code.toUpperCase(),
+    list_country: m.entry.country_code, list_dob: m.entry.date_of_birth,
+    country_match, dob_match: type === "person" ? yearsAgree(dob, m.entry.date_of_birth) : undefined,
   };
+}
+
+/** True when both dates of birth are known and share a year (lists often give only a year). */
+function yearsAgree(a?: string, b?: string): boolean {
+  const ya = new Set(a?.match(/\b(19|20)\d{2}\b/g) ?? []);
+  return (b?.match(/\b(19|20)\d{2}\b/g) ?? []).some((y) => ya.has(y));
 }
 
 function dedupePeople(people: Person[]): Person[] {
   const seen = new Map<string, Person>();
   for (const p of people) {
-    const k = normalizeName(p.name);
+    const k = personKey(p.name);
     if (!k) continue;
     const prev = seen.get(k);
     if (!prev) seen.set(k, { ...p });
@@ -286,35 +308,8 @@ function dedupePeople(people: Person[]): Person[] {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-export function normalizeName(name: string): string {
-  return name.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
-}
-
-/** 1 − edit distance ÷ longer length, on normalized names; also tries sorted word order. */
-export function nameSimilarity(a: string, b: string): number {
-  const x = normalizeName(a), y = normalizeName(b);
-  if (!x || !y) return 0;
-  const sorted = (t: string) => t.split(" ").sort().join(" ");
-  return Math.max(ratio(x, y), ratio(sorted(x), sorted(y)));
-}
-
-function ratio(a: string, b: string): number {
-  return 1 - levenshtein(a, b) / Math.max(a.length, b.length);
-}
-
-function levenshtein(a: string, b: string): number {
-  const prev = Array.from({ length: b.length + 1 }, (_, j) => j);
-  for (let i = 1; i <= a.length; i++) {
-    let diag = prev[0];
-    prev[0] = i;
-    for (let j = 1; j <= b.length; j++) {
-      const tmp = prev[j];
-      prev[j] = Math.min(prev[j] + 1, prev[j - 1] + 1, diag + (a[i - 1] === b[j - 1] ? 0 : 1));
-      diag = tmp;
-    }
-  }
-  return prev[b.length];
+function personKey(name: string): string {
+  return normalize(name, "person").join(" ");
 }
 
 function monthsBetween(from: string, to: string): number {

@@ -50,7 +50,7 @@ company in Settings › Onboarding.
 
 **Screening**
 - Entity plus every officer, director, owner and guarantor (application + registry, de-duplicated, case-insensitive) is screened against the OFAC, EU, UK and UN lists.
-- Name similarity ≥ 0.97 with matching country → hit → fail. Between 0.85 and 0.97 → review. A person must dispose of every hit; the agent never clears one.
+- Name similarity (Jaro-Winkler and Soundex, best over the list name and every alias, as OFAC Sanctions List Search does) ≥ 0.99 plus a second identifier (country for an entity; country and year of birth for a person) → hit → fail. Every word of the applicant name must have a counterpart in the list name. From 0.85 up, or a near-exact name without the second identifier → review. Weak aliases ("low quality" on the UK and UN lists) are not screened. A person must dispose of every hit; the agent never clears one.
 - Fraud flags: young entity (< 24 months) asking > $100,000; website domain < 12 months old; virtual/residential/PO-box address; registry formation date ≠ stated date; not found in registry. Two or more flags → review.
 
 **Limit**

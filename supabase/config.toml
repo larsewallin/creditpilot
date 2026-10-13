@@ -8,3 +8,11 @@ verify_jwt = false
 
 [functions.sec-monitor-agent]
 verify_jwt = false
+
+# Called by the daily scheduler (pg_cron) with x-sync-secret, or by a signed-in admin; auth is checked in code.
+[functions.sanctions-sync]
+verify_jwt = false
+
+# Stand-in for the File scoring API; authenticated in code with FILE_API_KEY.
+[functions.file-mock]
+verify_jwt = false

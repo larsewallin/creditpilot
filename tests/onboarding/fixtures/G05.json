@@ -1,7 +1,7 @@
 {
   "id": "G05",
   "title": "Director name close to a sanctions-list person",
-  "why": "Director 'Dmitry Andreyevich Volkhovsky' is a transliteration variant of a listed person. Similarity falls between the review (0.85) and hit (0.97) thresholds -> Screening review, hit stays open until a person disposes of it. No analysis or proposal.",
+  "why": "Director 'Dmitry Andreyevich Volkhovsky' is a transliteration variant of a listed person (similarity about 0.98). That is above the review threshold (0.85), and the hit threshold (0.99) is not met, and the countries differ (CY vs RU) -> Screening review; the hit stays open until a person disposes of it. No analysis or proposal.",
   "application": {
     "application_id": "G05",
     "submitted_by": "credit_team",
