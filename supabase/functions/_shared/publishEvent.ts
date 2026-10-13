@@ -36,6 +36,9 @@ export interface PublishEventInput {
   payload: Record<string, unknown>;
   is_demo?: boolean;
   run_id?: string | null;
+  // Onboarding events about prospects are published already processed so the
+  // monitoring briefing never reads them. Defaults to false (unchanged).
+  cia_processed?: boolean;
 }
 
 export interface PublishEventResult {
@@ -136,6 +139,7 @@ export async function publishEvent(input: PublishEventInput): Promise<PublishEve
     payload: validatedPayload,
     is_demo: input.is_demo ?? false,
     run_id: input.run_id ?? null,
+    ...(input.cia_processed ? { cia_processed: true, cia_processed_at: new Date().toISOString() } : {}),
   });
 
   if (error) {

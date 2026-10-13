@@ -558,6 +558,23 @@ A currency has shown material volatility recently.
 
 ---
 
+### Onboarding events (New Customer Onboarding)
+
+Published for prospects (`customers.lifecycle_status = 'prospect'`) by the onboarding pipeline through `publishEvent` with `cia_processed: true`, so the monitoring briefing and CIA's event loop never read them. All are scope `customer`; `customer_id` is the prospect. Every payload includes `severity_score` and `application_id`. Added by migration `20261011040000_onboarding_event_types.sql` (CHECK 34 -> 42 values).
+
+| Event type | Severity | Producer | Extra payload fields |
+|---|---|---|---|
+| `APPLICATION_SUBMITTED` | info | Application intake | `requested_limit_usd`, `requested_terms_days`, `submitted_via` (staff, sales, buyer_link), `country_code` |
+| `APPLICATION_INCOMPLETE` | low | Intake agent | `missing_items[]`, `clock_started_at`, `response_due_at` (Reg B 30-day clock) |
+| `SCREENING_PASS` | info | Compliance agent | `screening_run_id`, `subjects_screened` |
+| `SCREENING_REVIEW` | medium | Compliance agent | `screening_run_id`, `open_hits`, `fraud_flags[]`, `summary` (a person must dispose each hit) |
+| `SANCTIONS_HIT` | critical | Compliance agent | `screening_run_id`, `subject_name`, `list_name`, `matched_name`, `similarity`, `summary` |
+| `CREDIT_ANALYSIS_COMPLETE` | info | Credit analysis agent | `score_provider`, `score`, `band`, `requested_limit_usd`, `recommended_limit_usd`, `supportable_limit_usd`, `macro_haircut_applied`, `reason_codes[]`, `summary` |
+| `CREDIT_DECISION` | info | Approval step | `decision` (approve_as_requested, counteroffer, decline_review), `requested_limit_usd`, `approved_limit_usd`, `reason_codes[]`, `decided_by`, `summary` |
+| `CUSTOMER_ACTIVATED` | info | Activation step | `approved_limit_usd`, `payment_terms_days`, `baseline_id` |
+
+Severity scores to use: info 7, low 27, medium 52, critical 92 (matching `severityToScore`).
+
 ### Future event types (V2+ — placeholder, no payload schema yet)
 
 These are documented in the catalog but their full payload definitions are deferred to when their producer agents are built:
@@ -580,7 +597,7 @@ When the producer agent is built, the event type's full payload schema is added 
 
 ### Database constraints
 
-- `event_type` column has a CHECK constraint limiting it to the documented V1 event types (`NEWS_EVENT`, `COVENANT_WAIVER`, `CEO_DEPARTURE`, `REVENUE_MISS`, `GOING_CONCERN`, `SEC_OTHER`, `OVERDUE_INVOICE`, `UTILIZATION_THRESHOLD_BREACH`, `PAYMENT_DETERIORATION`, `PAYMENT_IMPROVEMENT`, `PAYMENT_VOLATILITY`, `COUNTRY_RATING_CHANGE`, `COUNTRY_POLITICAL_RISK`, `COUNTRY_ECONOMIC_SHOCK`, `INTEREST_RATE_CHANGE`, `INDUSTRY_DOWNTURN`, `INDUSTRY_DISRUPTION`, `REGULATORY_CHANGE`, `TARIFF_CHANGE`, `RISK_CHANGE`, `CONCENTRATION_THRESHOLD_BREACH`, `PORTFOLIO_INSIGHT`, `CONCENTRATION_WARNING`, `EXPANSION_OPPORTUNITY`, `EMERGING_RISK_SIGNAL`, `MACRO_TREND_WARNING`, `FX_EXPOSURE_FLAG`, `FX_HEDGING_NEEDED`, `CURRENCY_VOLATILITY`, `CREDIT_RATING_DOWNGRADE`, `CREDIT_RATING_UPGRADE`).
+- `event_type` column has a CHECK constraint limiting it to the documented V1 event types (`NEWS_EVENT`, `COVENANT_WAIVER`, `CEO_DEPARTURE`, `REVENUE_MISS`, `GOING_CONCERN`, `SEC_OTHER`, `OVERDUE_INVOICE`, `UTILIZATION_THRESHOLD_BREACH`, `PAYMENT_DETERIORATION`, `PAYMENT_IMPROVEMENT`, `PAYMENT_VOLATILITY`, `COUNTRY_RATING_CHANGE`, `COUNTRY_POLITICAL_RISK`, `COUNTRY_ECONOMIC_SHOCK`, `INTEREST_RATE_CHANGE`, `INDUSTRY_DOWNTURN`, `INDUSTRY_DISRUPTION`, `REGULATORY_CHANGE`, `TARIFF_CHANGE`, `RISK_CHANGE`, `CONCENTRATION_THRESHOLD_BREACH`, `PORTFOLIO_INSIGHT`, `CONCENTRATION_WARNING`, `EXPANSION_OPPORTUNITY`, `EMERGING_RISK_SIGNAL`, `MACRO_TREND_WARNING`, `FX_EXPOSURE_FLAG`, `FX_HEDGING_NEEDED`, `CURRENCY_VOLATILITY`, `CREDIT_RATING_DOWNGRADE`, `CREDIT_RATING_UPGRADE`, plus the synthesis types and the eight onboarding types listed under "Onboarding events").
 - `severity` column has a CHECK constraint limiting it to `critical | high | medium | low | info`.
 - `scope` column has a CHECK constraint limiting it to `customer | country | industry | currency | portfolio`.
 - `customer_id` is NOT NULL when scope = 'customer', else NULL (enforced by trigger or CHECK constraint with conditional logic).

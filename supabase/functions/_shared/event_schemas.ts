@@ -377,6 +377,95 @@ export const CreditRatingUpgradePayload = CreditRatingDowngradePayload;
 // Event type registry
 // ============================================================================
 
+// ============================================================================
+// Onboarding event payloads (New Customer Onboarding pipeline)
+// Published for prospects (customers.lifecycle_status = 'prospect') with
+// cia_processed = true, so they never enter the monitoring briefing.
+// ============================================================================
+
+export const OnboardingDecisionEnum = z.enum(["approve_as_requested", "counteroffer", "decline_review"]);
+
+export const ApplicationSubmittedPayload = z.object({
+  severity_score: SeverityScore,
+  application_id: z.string().uuid(),
+  requested_limit_usd: z.number().nonnegative(),
+  requested_terms_days: z.number().int().nonnegative(),
+  submitted_via: z.enum(["staff", "sales", "buyer_link"]),
+  country_code: z.string().length(2),
+  summary: z.string().optional(),
+});
+
+export const ApplicationIncompletePayload = z.object({
+  severity_score: SeverityScore,
+  application_id: z.string().uuid(),
+  missing_items: z.array(z.string()).min(1),
+  clock_started_at: z.string().datetime(),
+  response_due_at: z.string().datetime(),
+  summary: z.string().optional(),
+});
+
+export const ScreeningPassPayload = z.object({
+  severity_score: SeverityScore,
+  application_id: z.string().uuid(),
+  screening_run_id: z.string().uuid(),
+  subjects_screened: z.number().int().nonnegative(),
+  summary: z.string().optional(),
+});
+
+export const ScreeningReviewPayload = z.object({
+  severity_score: SeverityScore,
+  application_id: z.string().uuid(),
+  screening_run_id: z.string().uuid(),
+  open_hits: z.number().int().nonnegative(),
+  fraud_flags: z.array(z.string()),
+  summary: z.string(),
+});
+
+export const SanctionsHitPayload = z.object({
+  severity_score: SeverityScore,
+  application_id: z.string().uuid(),
+  screening_run_id: z.string().uuid(),
+  subject_name: z.string(),
+  list_name: z.string(),
+  matched_name: z.string(),
+  similarity: z.number().min(0).max(1),
+  summary: z.string(),
+});
+
+export const CreditAnalysisCompletePayload = z.object({
+  severity_score: SeverityScore,
+  application_id: z.string().uuid(),
+  score_provider: z.string().nullable(),
+  score: z.number().nullable(),
+  band: z.string().nullable(),
+  requested_limit_usd: z.number().nonnegative(),
+  recommended_limit_usd: z.number().nonnegative(),
+  supportable_limit_usd: z.number().nonnegative(),
+  macro_haircut_applied: z.boolean(),
+  reason_codes: z.array(z.string()),
+  summary: z.string(),
+});
+
+export const CreditDecisionPayload = z.object({
+  severity_score: SeverityScore,
+  application_id: z.string().uuid(),
+  decision: OnboardingDecisionEnum,
+  requested_limit_usd: z.number().nonnegative(),
+  approved_limit_usd: z.number().nonnegative().nullable(),
+  reason_codes: z.array(z.string()),
+  decided_by: z.string().uuid().nullable(),
+  summary: z.string(),
+});
+
+export const CustomerActivatedPayload = z.object({
+  severity_score: SeverityScore,
+  application_id: z.string().uuid(),
+  approved_limit_usd: z.number().nonnegative(),
+  payment_terms_days: z.number().int().nonnegative(),
+  baseline_id: z.string().uuid(),
+  summary: z.string().optional(),
+});
+
 export const EVENT_TYPES = [
   "NEWS_EVENT",
   "COVENANT_WAIVER",
@@ -409,6 +498,14 @@ export const EVENT_TYPES = [
   "CURRENCY_VOLATILITY",
   "CREDIT_RATING_DOWNGRADE",
   "CREDIT_RATING_UPGRADE",
+  "APPLICATION_SUBMITTED",
+  "APPLICATION_INCOMPLETE",
+  "SCREENING_PASS",
+  "SCREENING_REVIEW",
+  "SANCTIONS_HIT",
+  "CREDIT_ANALYSIS_COMPLETE",
+  "CREDIT_DECISION",
+  "CUSTOMER_ACTIVATED",
 ] as const;
 
 export type EventType = typeof EVENT_TYPES[number];
@@ -447,6 +544,14 @@ const payloadSchemas: Record<EventType, z.ZodTypeAny> = {
   CURRENCY_VOLATILITY: CurrencyVolatilityPayload,
   CREDIT_RATING_DOWNGRADE: CreditRatingDowngradePayload,
   CREDIT_RATING_UPGRADE: CreditRatingUpgradePayload,
+  APPLICATION_SUBMITTED: ApplicationSubmittedPayload,
+  APPLICATION_INCOMPLETE: ApplicationIncompletePayload,
+  SCREENING_PASS: ScreeningPassPayload,
+  SCREENING_REVIEW: ScreeningReviewPayload,
+  SANCTIONS_HIT: SanctionsHitPayload,
+  CREDIT_ANALYSIS_COMPLETE: CreditAnalysisCompletePayload,
+  CREDIT_DECISION: CreditDecisionPayload,
+  CUSTOMER_ACTIVATED: CustomerActivatedPayload,
 };
 
 export function getPayloadSchema(eventType: string): z.ZodTypeAny {
