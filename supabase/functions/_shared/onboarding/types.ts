@@ -193,7 +193,10 @@ export interface OnboardingSettings {
 
 export type Stage = "application" | "completeness" | "screening" | "analysis" | "decision" | "approval" | "conditions" | "active";
 
-export type FraudFlag = "YOUNG_ENTITY_LARGE_REQUEST" | "NEW_DOMAIN" | "ADDRESS_RISK" | "FORMATION_DATE_MISMATCH" | "REGISTRY_NOT_FOUND";
+export type FraudFlag =
+  | "YOUNG_ENTITY_LARGE_REQUEST" | "NEW_DOMAIN" | "ADDRESS_RISK" | "FORMATION_DATE_MISMATCH" | "REGISTRY_NOT_FOUND"
+  | "REGISTRY_INACTIVE"   // dissolved or dormant: always review on its own
+  | "TAX_ID_INVALID";
 
 export interface ScreeningHit {
   subject: string;           // name screened
@@ -242,5 +245,9 @@ export interface OnboardingOutcome {
     higher_limit_note: boolean;
     macro_haircut_applied: boolean;
     reason_codes: string[];
+    /** Working shown in the memo: needs, each cap, cap after band and macro. */
+    needs_usd?: number;
+    caps?: { working_capital?: number; net_worth?: number; bureau_recommendation?: number };
+    risk_adjusted_cap_usd?: number;
   };
 }
