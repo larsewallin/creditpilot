@@ -2,7 +2,11 @@
 set -euo pipefail
 
 if [ -z "${STAGING_DATABASE_URL:-}" ] || [ -z "${PROD_DATABASE_URL:-}" ]; then
-  echo "STAGING_DATABASE_URL and PROD_DATABASE_URL must both be set (see ~/.zshrc)."
+  echo "This script compares staging vs prod schema, but staging was retired"
+  echo "2026-10-14 along with its credentials (see CLAUDE.md, 'Environment"
+  echo "variables'). It has no two-environment target to diff against until"
+  echo "staging comes back; it cannot be made to work by re-exporting these"
+  echo "two vars yourself."
   exit 1
 fi
 
