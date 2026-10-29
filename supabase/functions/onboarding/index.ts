@@ -13,12 +13,19 @@
  *        A person clears or confirms a sanctions match, then the pipeline re-runs.
  *   POST { action: "accept_fraud_flags", application_id, note }  admin, credit_manager
  *        A person accepts the fraud flags after checking them, then the pipeline re-runs.
+ *   POST { action: "decide", pending_action_id, decision: "approve" | "decline", approved_value?, note? }
+ *        admin, credit_manager. Four-eyes: not the person who submitted the application
+ *        (admins excepted). Approve activates the customer (limit, terms, underwriting
+ *        baseline, NEW_CREDIT_LIMIT credit action, CREDIT_DECISION + CUSTOMER_ACTIVATED);
+ *        decline marks the prospect declined. A note is required to decline, to change
+ *        the amount, or to approve a proposal that was not "approve".
+ *
+ * After every run that ends with a proposal, CIA's onboarding mode turns it into a
+ * NEW_CREDIT_LIMIT pending action (CIA stays the only writer of pending_actions).
  *
  * Writes: customers (prospect row only), credit_applications, screening_runs/checks/hits,
  * score_results, and onboarding events via publishEvent (cia_processed = true, so the
- * monitoring briefing never reads prospects). The limit proposal itself becomes a
- * NEW_CREDIT_LIMIT pending action in CIA's onboarding mode (next batch); nothing is
- * approved here.
+ * monitoring briefing never reads prospects).
  */
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.98.0";
 import { AuthError, requireUser, type AuthedUser } from "../_shared/auth.ts";
@@ -28,6 +35,7 @@ import { effectiveSettings } from "../_shared/onboarding/settings_validate.ts";
 import type { CreditApplication, OnboardingOutcome, OnboardingSettings } from "../_shared/onboarding/types.ts";
 import { publishEvent } from "../_shared/publishEvent.ts";
 import { SectorEnum } from "../_shared/event_schemas.ts";
+import { NEW_CREDIT_LIMIT, decisionLabel, underwritingAssumptions } from "../_shared/onboarding/decision.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -51,19 +59,23 @@ Deno.serve(async (req) => {
     switch (body?.action) {
       case "submit": {
         const user = await requireUser(req, [...RUNNERS]);
-        return json(await submit(db, user, body));
+        return json(await submit(db, user, body, req));
       }
       case "run": {
         const user = await requireUser(req, [...RUNNERS]);
-        return json(await run(db, user, String(body.application_id)));
+        return json(await run(db, user, String(body.application_id), req));
       }
       case "dispose_hit": {
         const user = await requireUser(req, [...DISPOSERS]);
-        return json(await disposeHit(db, user, body));
+        return json(await disposeHit(db, user, body, req));
       }
       case "accept_fraud_flags": {
         const user = await requireUser(req, [...DISPOSERS]);
-        return json(await acceptFlags(db, user, body));
+        return json(await acceptFlags(db, user, body, req));
+      }
+      case "decide": {
+        const user = await requireUser(req, [...DISPOSERS]);
+        return json(await decide(db, user, body));
       }
       default:
         return json({ error: "Unknown action" }, 400);
@@ -80,7 +92,7 @@ class UserError extends Error {}
 
 // ─── Actions ──────────────────────────────────────────────────────────────────
 
-async function submit(db: SupabaseClient, user: AuthedUser, body: Record<string, unknown>) {
+async function submit(db: SupabaseClient, user: AuthedUser, body: Record<string, unknown>, req: Request) {
   const app = body.application as Omit<CreditApplication, "application_id"> | undefined;
   if (!app?.legal_name?.trim()) throw new UserError("application.legal_name is required");
   if (!app.country_code || !/^[A-Z]{2}$/.test(app.country_code.toUpperCase())) throw new UserError("application.country_code must be a 2-letter country code");
@@ -128,10 +140,10 @@ async function submit(db: SupabaseClient, user: AuthedUser, body: Record<string,
     submitted_by: user.user_id,
   }).select("id").single();
   if (error) throw new Error(`Could not save application: ${error.message}`);
-  return await run(db, user, row.id as string);
+  return await run(db, user, row.id as string, req);
 }
 
-async function run(db: SupabaseClient, user: AuthedUser, applicationId: string, cleared?: RunOptions["cleared"]) {
+async function run(db: SupabaseClient, user: AuthedUser, applicationId: string, req: Request, cleared?: RunOptions["cleared"]) {
   const { data: row, error } = await db.from("credit_applications").select("*").eq("id", applicationId).maybeSingle();
   if (error) throw new Error(error.message);
   if (!row) throw new UserError("Application not found");
@@ -157,10 +169,35 @@ async function run(db: SupabaseClient, user: AuthedUser, applicationId: string, 
   }
 
   await persist(db, user, row, app, outcome, mergedCleared);
-  return { application_id: row.id, customer_id: row.customer_id, outcome };
+
+  // A finished proposal goes to CIA, which writes the NEW_CREDIT_LIMIT action for a person.
+  let proposal_action: unknown = null;
+  if (outcome.proposal && outcome.route !== "existing_customer_limit_review") {
+    proposal_action = await sendToCia(req, row.id);
+  }
+  return { application_id: row.id, customer_id: row.customer_id, outcome, proposal_action };
 }
 
-async function disposeHit(db: SupabaseClient, user: AuthedUser, body: Record<string, unknown>) {
+async function sendToCia(req: Request, applicationId: string) {
+  try {
+    const r = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/cia-agent`, {
+      method: "POST",
+      headers: {
+        Authorization: req.headers.get("Authorization") ?? "",
+        apikey: Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ mode: "onboarding", application_id: applicationId }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) return { error: (j as { error?: string }).error ?? `CIA returned ${r.status}` };
+    return j;
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+async function disposeHit(db: SupabaseClient, user: AuthedUser, body: Record<string, unknown>, req: Request) {
   const disposition = body.disposition;
   const note = String(body.note ?? "").trim();
   if (disposition !== "cleared" && disposition !== "confirmed") throw new UserError("disposition must be 'cleared' or 'confirmed'");
@@ -177,10 +214,10 @@ async function disposeHit(db: SupabaseClient, user: AuthedUser, body: Record<str
   if (disposition === "confirmed") {
     return { application_id: applicationId, hit_id: hit.id, disposition, next: "A confirmed match stops onboarding; decline from the application page." };
   }
-  return await run(db, user, applicationId, { hits: [{ subject: hit.subject_name, list_entry: hit.matched_name }] });
+  return await run(db, user, applicationId, req, { hits: [{ subject: hit.subject_name, list_entry: hit.matched_name }] });
 }
 
-async function acceptFlags(db: SupabaseClient, user: AuthedUser, body: Record<string, unknown>) {
+async function acceptFlags(db: SupabaseClient, user: AuthedUser, body: Record<string, unknown>, req: Request) {
   const note = String(body.note ?? "").trim();
   if (note.length < 10) throw new UserError("A note explaining the decision is required (at least 10 characters)");
   const applicationId = String(body.application_id);
@@ -192,7 +229,103 @@ async function acceptFlags(db: SupabaseClient, user: AuthedUser, body: Record<st
       detail: { accepted_by: user.user_id, accepted_by_email: user.email, note }, source: "person",
     });
   }
-  return await run(db, user, applicationId, { fraud_flags_accepted: true });
+  return await run(db, user, applicationId, req, { fraud_flags_accepted: true });
+}
+
+async function decide(db: SupabaseClient, user: AuthedUser, body: Record<string, unknown>) {
+  const decision = body.decision;
+  if (decision !== "approve" && decision !== "decline") throw new UserError("decision must be 'approve' or 'decline'");
+  const note = String(body.note ?? "").trim();
+
+  const { data: action, error } = await db.from("pending_actions").select("*").eq("id", String(body.pending_action_id)).maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!action || action.action_type !== NEW_CREDIT_LIMIT) throw new UserError("New-customer proposal not found");
+  if (action.status !== "pending") throw new UserError(`This proposal is already ${action.status}`);
+
+  const { data: row } = await db.from("credit_applications").select("*").eq("id", action.application_id).maybeSingle();
+  if (!row) throw new UserError("Application not found");
+  if (row.submitted_by === user.user_id && user.role !== "admin") {
+    throw new UserError("Four-eyes rule: the person who submitted this application cannot also decide it");
+  }
+  const outcome = row.outcome as OnboardingOutcome;
+  const app = { ...(row.answers as Omit<CreditApplication, "application_id">), application_id: row.id } as CreditApplication;
+  const requested = Number(action.requested_value ?? app.credit_request.amount_usd ?? 0);
+  const now = new Date().toISOString();
+  const isDemo = (Deno.env.get("DEMO_MODE") ?? "false") === "true";
+
+  if (decision === "decline") {
+    if (note.length < 10) throw new UserError("A note explaining the decline is required (at least 10 characters)");
+    await db.from("pending_actions").update({ status: "rejected", reviewed_by: user.email, reviewed_by_user: user.user_id,
+      reviewed_at: now, review_note: note, decided_value: 0 }).eq("id", action.id);
+    await db.from("customers").update({ lifecycle_status: "declined", updated_at: now }).eq("id", row.customer_id).eq("lifecycle_status", "prospect");
+    await db.from("credit_applications").update({ status: "decided", stage: "decision", updated_at: now,
+      outcome: { ...outcome, decision: { decision: "declined", by: user.email, at: now, note } } }).eq("id", row.id);
+    await publishEvent({
+      event_type: "CREDIT_DECISION", scope: "customer", customer_id: row.customer_id, source_agent: "onboarding",
+      title: `Credit declined: ${app.legal_name}`, description: note, summary: `Declined by ${user.display_name}: ${note}`,
+      payload: { application_id: row.id, severity_score: 7, decision: "declined", requested_limit_usd: requested, approved_limit_usd: null,
+        reason_codes: outcome.proposal?.reason_codes ?? [], decided_by: user.user_id, summary: `Declined by ${user.display_name}: ${note}` },
+      is_demo: isDemo, cia_processed: true,
+    });
+    return { application_id: row.id, decision: "declined",
+      next: "Send the applicant a written notice of the decline (Reg B: within 30 days of the completed application)." };
+  }
+
+  // Approve: never over an open or confirmed sanctions match.
+  const { data: runs } = await db.from("screening_runs").select("id").eq("application_id", row.id).order("started_at", { ascending: false }).limit(1);
+  if (runs?.[0]) {
+    const { data: openHits } = await db.from("screening_hits").select("id, disposition").eq("run_id", runs[0].id).in("disposition", ["open", "confirmed"]);
+    if (openHits?.length) throw new UserError("Screening has an open or confirmed sanctions match; it must be cleared at Screening before any approval");
+  }
+  if (outcome.screening && outcome.screening.status !== "pass") throw new UserError("Screening has not passed");
+
+  const approved = Math.round(Number(body.approved_value ?? action.proposed_value));
+  if (!Number.isFinite(approved) || approved <= 0) throw new UserError("approved_value must be a positive amount");
+  const override = approved !== Number(action.proposed_value) || outcome.proposal?.decision === "decline_review";
+  if (override && note.length < 10) throw new UserError("A note is required when the amount differs from the proposal or the proposal was not to approve");
+
+  await db.from("pending_actions").update({ status: "approved", reviewed_by: user.email, reviewed_by_user: user.user_id,
+    reviewed_at: now, review_note: note || null, decided_value: approved }).eq("id", action.id);
+
+  const { data: baseline, error: bErr } = await db.from("underwriting_baseline").insert({
+    customer_id: row.customer_id, application_id: row.id, approved_limit_usd: approved,
+    assumptions: underwritingAssumptions(app, outcome, approved), reason_codes: outcome.proposal?.reason_codes ?? [],
+    memo: action.memo ?? null, approved_by: user.user_id,
+  }).select("id").single();
+  if (bErr) throw new Error(`Could not store the underwriting baseline: ${bErr.message}`);
+
+  const { error: cErr } = await db.from("customers").update({
+    lifecycle_status: "active", credit_limit: approved, payment_terms_days: app.credit_request.terms_days ?? 30,
+    customer_since: now.slice(0, 10), last_reviewed: now.slice(0, 10), updated_at: now,
+  }).eq("id", row.customer_id);
+  if (cErr) throw new Error(`Could not activate the customer: ${cErr.message}`);
+
+  await db.from("credit_actions").insert({
+    customer_id: row.customer_id, action_date: now.slice(0, 10), action_type: NEW_CREDIT_LIMIT,
+    description: `New customer approved at ${approved.toLocaleString("en-US")} USD (requested ${requested.toLocaleString("en-US")}).${note ? " " + note : ""}`,
+    old_limit: 0, new_limit: approved, performed_by: user.email, agent_name: "cia-agent", reviewed_by: user.email, reviewed_at: now,
+  });
+
+  await db.from("credit_applications").update({ status: "decided", stage: "active", updated_at: now,
+    outcome: { ...outcome, decision: { decision: "approved", approved_limit_usd: approved, by: user.email, at: now, note: note || null, baseline_id: baseline.id } },
+  }).eq("id", row.id);
+
+  const label = decisionLabel("approve", approved, requested);
+  const summary = `Approved ${approved.toLocaleString("en-US")} USD (requested ${requested.toLocaleString("en-US")}) by ${user.display_name}.`;
+  await publishEvent({
+    event_type: "CREDIT_DECISION", scope: "customer", customer_id: row.customer_id, source_agent: "onboarding",
+    title: `Credit approved: ${app.legal_name}`, description: summary, summary,
+    payload: { application_id: row.id, severity_score: 7, decision: label, requested_limit_usd: requested, approved_limit_usd: approved,
+      reason_codes: outcome.proposal?.reason_codes ?? [], decided_by: user.user_id, summary },
+    is_demo: isDemo, cia_processed: true,
+  });
+  await publishEvent({
+    event_type: "CUSTOMER_ACTIVATED", scope: "customer", customer_id: row.customer_id, source_agent: "onboarding",
+    title: `Now monitored: ${app.legal_name}`, description: "Activated with an underwriting baseline; monitoring agents now include this customer.",
+    payload: { application_id: row.id, severity_score: 7, approved_limit_usd: approved, payment_terms_days: app.credit_request.terms_days ?? 30, baseline_id: baseline.id },
+    is_demo: isDemo, cia_processed: true,
+  });
+  return { application_id: row.id, decision: "approved", approved_limit_usd: approved, baseline_id: baseline.id, customer_id: row.customer_id };
 }
 
 // ─── Persistence ──────────────────────────────────────────────────────────────

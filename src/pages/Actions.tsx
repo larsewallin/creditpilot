@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { AgentPill } from "@/components/AgentPill";
+import { NewCustomerActionCard } from "@/components/NewCustomerActionCard";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -205,6 +206,9 @@ export default function Actions() {
         ) : (
           <div className="space-y-3">
             {(pendingActions as any[]).map((action) => {
+              if (action.action_type === "NEW_CREDIT_LIMIT") {
+                return <NewCustomerActionCard key={action.id} action={action} />;
+              }
               const cust = action.customers;
               const isApprovingThis = approvingId === action.id;
               const isRejectingThis = rejectingId === action.id;

@@ -52,6 +52,8 @@ import { aggregateCreditScores } from "../_shared/skills/analytical/aggregate-cr
 import { detectRatingChange } from "../_shared/skills/analytical/detect-rating-change.ts";
 import { composeTeamsAlert } from "../_shared/skills/generative/compose-teams-alert.ts";
 import { deliverMessage, EmailProvider, TeamsProvider, SlackProvider, LogProvider } from "../_shared/skills/integration/deliver-message.ts";
+import { createOnboardingAction } from "../_shared/onboarding/decision.ts";
+import { AuthError, requireUser } from "../_shared/auth.ts";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -94,7 +96,9 @@ interface AgentRun {
 }
 
 interface CIARequest {
-  mode?: "briefing" | "question" | "suggestions";
+  mode?: "briefing" | "question" | "suggestions" | "onboarding";
+  /** onboarding mode: the credit application whose proposal becomes a NEW_CREDIT_LIMIT action. */
+  application_id?: string;
   question?: string;
   force_refresh?: boolean;
   customer_id?: string;
@@ -968,6 +972,23 @@ serve(async (req: Request) => {
   }
 
   const { mode = "briefing", question, force_refresh = false, customer_id, skip_briefing = false } = body;
+
+  // ── ONBOARDING mode (New Customer Onboarding) ─────────────────────────────
+  // Turns a finished onboarding proposal into a NEW_CREDIT_LIMIT pending action,
+  // keeping CIA the only writer of pending_actions. Called by the onboarding
+  // function with the signed-in user's token. Separate from the briefing path:
+  // prospects never enter the portfolio briefing (their events are published
+  // already processed) and nothing here grants a limit.
+  if (mode === "onboarding") {
+    try {
+      await requireUser(req, ["admin", "credit_manager", "credit_analyst"]);
+      if (!body.application_id) return jsonRes({ error: "application_id is required" }, 400);
+      return jsonRes(await createOnboardingAction(supabaseClient, body.application_id, { isDemo: DEMO_MODE }));
+    } catch (e) {
+      if (e instanceof AuthError) return jsonRes({ error: e.message }, e.status);
+      return jsonRes({ error: e instanceof Error ? e.message : String(e) }, 400);
+    }
+  }
 
   // ── SUGGESTIONS mode ──────────────────────────────────────────────────────
   if (mode === "suggestions") {

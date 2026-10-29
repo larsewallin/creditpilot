@@ -68,6 +68,9 @@ Deno.serve(async (req) => {
       if (!pending_action_id || !customer_id) {
         return json({ error: "Missing pending_action_id or customer_id" }, 400);
       }
+      if (await isNewCustomerProposal(supabase, pending_action_id)) {
+        return json({ error: "New-customer limits are decided through onboarding (signed-in credit manager)" }, 400);
+      }
 
       const { error: e1 } = await supabase
         .from("pending_actions")
@@ -106,6 +109,9 @@ Deno.serve(async (req) => {
     if (action === "reject") {
       const { pending_action_id, note } = body;
       if (!pending_action_id) return json({ error: "Missing pending_action_id" }, 400);
+      if (await isNewCustomerProposal(supabase, pending_action_id)) {
+        return json({ error: "New-customer limits are decided through onboarding (signed-in credit manager)" }, 400);
+      }
 
       const { error } = await supabase
         .from("pending_actions")
@@ -136,7 +142,8 @@ Deno.serve(async (req) => {
         .from("pending_actions")
         .update({ status: "expired", reviewed_by: null, reviewed_at: null, review_note: null })
         .eq("is_demo", true)
-        .eq("status", "pending");
+        .eq("status", "pending")
+        .neq("action_type", "NEW_CREDIT_LIMIT"); // onboarding proposals are not demo-reset data
 
       await supabase.from("agent_messages").update({ status: "pending" }).eq("is_demo", true);
 
@@ -185,3 +192,11 @@ Deno.serve(async (req) => {
     return json({ error: err instanceof Error ? err.message : String(err) }, 500);
   }
 });
+
+// NEW_CREDIT_LIMIT proposals (New Customer Onboarding) need a signed-in decider,
+// four-eyes and activation; they must never be approved here as "demo_user".
+// deno-lint-ignore no-explicit-any
+async function isNewCustomerProposal(supabase: any, id: string): Promise<boolean> {
+  const { data } = await supabase.from("pending_actions").select("action_type").eq("id", id).maybeSingle();
+  return data?.action_type === "NEW_CREDIT_LIMIT";
+}

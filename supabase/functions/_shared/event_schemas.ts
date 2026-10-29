@@ -383,7 +383,7 @@ export const CreditRatingUpgradePayload = CreditRatingDowngradePayload;
 // cia_processed = true, so they never enter the monitoring briefing.
 // ============================================================================
 
-export const OnboardingDecisionEnum = z.enum(["approve_as_requested", "counteroffer", "decline_review"]);
+export const OnboardingDecisionEnum = z.enum(["approve_as_requested", "counteroffer", "decline_review", "declined"]);
 
 export const ApplicationSubmittedPayload = z.object({
   severity_score: SeverityScore,

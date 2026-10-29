@@ -122,6 +122,13 @@ let failed = 0;
 
 console.log(`\nCIA Regression Test — ${new Date().toISOString()}`);
 console.log(`Endpoint: ${ENDPOINT}`);
+// The 8/8 commit gate is defined against prod's demo data (2026-10-13: a run
+// against staging after switching to it showed 7/8 purely from data differences).
+const PROD_REF = "yxqudytimmxufypothis";
+if (!SUPABASE_URL.includes(PROD_REF)) {
+  console.log("\n⚠️  NOT PROD: this run uses " + SUPABASE_URL + ".");
+  console.log("   The commit gate is 8/8 against prod. Run via: npm run db:prod -- node tests/cia/run.mjs\n");
+}
 console.log(`Running ${questions.length} questions sequentially...\n`);
 
 for (const q of questions) {

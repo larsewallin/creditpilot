@@ -57,4 +57,5 @@ for (const c of cases) {
   if (o.analysis) console.log("  analysis: financials", o.analysis.financials_source, o.analysis.statement_quality ?? "", "| score", o.analysis.score ?? "none", o.analysis.score_source ?? "",
     "| fallbacks:", o.analysis.fallbacks.map((f) => `${f.provider}:${f.reason}`).join(", ") || "none", "| macro:", o.analysis.macro_context.map((m) => `${m.key} ${m.severity}`).join(", ") || "none");
   if (o.proposal) console.log("  proposal:", o.proposal.decision, "| proposed", o.proposal.proposed_usd ?? "-", "| supportable", o.proposal.supportable_usd ?? "-", "| reasons:", o.proposal.reason_codes.join(", "));
+  if (j.proposal_action) console.log("  CIA action:", j.proposal_action.error ? `ERROR ${j.proposal_action.error}` : `${j.proposal_action.severity} | ${j.proposal_action.headline}`);
 }
