@@ -27,6 +27,8 @@ interface Action {
   requested_value: number | null;
   supportable_value: number | null;
   severity: string | null;
+  reason_codes?: string[] | null;
+  application_id?: string | null;
   memo: { headline: string; sections: MemoSection[] } | null;
   customers?: { company_name?: string } | null;
 }
@@ -54,6 +56,14 @@ export function NewCustomerActionCard({ action }: { action: Action }) {
   const [note, setNote] = useState("");
   const canDecide = !!appUser && (appUser.role === "credit_manager" || appUser.role === "admin");
   const isDecline = (action.proposed_value ?? 0) === 0;
+  const sanctions = (action.reason_codes ?? []).includes("SANCTIONS_MATCH");
+  const why = action.supportable_value == null
+    ? (sanctions ? "No credit analysis: onboarding stopped at screening." : "No credit analysis was run.")
+    : action.supportable_value === 0
+      ? ((action.reason_codes ?? []).includes("SCORE_BAND_E") ? "Supportable is $0: the score is in band E (below 60)."
+        : (action.reason_codes ?? []).includes("NO_CAP_BASIS") ? "Supportable is $0: no financials or bureau recommendation to base a limit on."
+        : "Supportable is $0: the evidence supports no unsecured limit.")
+      : null;
 
   const decide = useMutation({
     mutationFn: async (decision: "approve" | "decline") => {
@@ -92,6 +102,7 @@ export function NewCustomerActionCard({ action }: { action: Action }) {
         <div><div className="text-muted-foreground font-sans text-[10px]">Proposed</div>{formatCurrency(action.proposed_value ?? 0)}</div>
         <div><div className="text-muted-foreground font-sans text-[10px]">Supportable</div>{action.supportable_value != null ? formatCurrency(action.supportable_value) : "—"}</div>
       </div>
+      {why && <p className="text-muted-foreground">{why}</p>}
 
       {action.memo && (
         <details className="rounded-lg bg-secondary/40 p-3">
@@ -108,9 +119,35 @@ export function NewCustomerActionCard({ action }: { action: Action }) {
         </details>
       )}
 
-      <p className="text-muted-foreground text-[10px]">Proposed {format(new Date(action.created_at), "MMM d, HH:mm")} by CIA</p>
+      <p className="text-muted-foreground text-[10px]">
+        Proposed {format(new Date(action.created_at), "MMM d, HH:mm")} by CIA
+        {action.application_id && <> · <Link to={`/new-customers/${action.application_id}`} className="underline">Open prospect</Link></>}
+      </p>
 
-      {!canDecide ? (
+      {sanctions ? (
+        <div className="space-y-2">
+          <p className="text-muted-foreground">
+            A sanctions match must be cleared or confirmed on the prospect's Screening tab before any approval.
+          </p>
+          {canDecide && mode !== "decline" && (
+            <Button size="sm" variant="outline" className="h-7 text-xs text-severity-critical border-severity-critical/30" onClick={() => setMode("decline")}>
+              <XCircle className="h-3 w-3 mr-1" />Decline
+            </Button>
+          )}
+          {canDecide && mode === "decline" && (
+            <div className="space-y-2">
+              <Textarea placeholder="Reason for declining (required; it goes into the applicant notice)" value={note}
+                onChange={(e) => setNote(e.target.value)} className="text-xs min-h-[60px]" />
+              <div className="flex gap-2">
+                <Button size="sm" variant="destructive" className="h-7 text-xs" onClick={() => decide.mutate("decline")} disabled={decide.isPending}>
+                  {decide.isPending && <Loader2 className="h-3 w-3 animate-spin mr-1" />}Confirm decline
+                </Button>
+                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setMode("idle")}>Cancel</Button>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : !canDecide ? (
         <p className="text-muted-foreground">
           {appUser ? "Only a credit manager can decide new-customer limits." : <><Link to="/login" className="underline">Sign in</Link> as a credit manager to decide.</>}
         </p>

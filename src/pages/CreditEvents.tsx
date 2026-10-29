@@ -90,6 +90,9 @@ export default function CreditEvents() {
         // in this unified feed (no customer, long free-text body). Excluded
         // here pending a dedicated surface for them.
         .neq("event_type", "DAILY_BRIEFING")
+        // New-customer pipeline events (screening, analysis, decisions) belong to
+        // each prospect's Activity tab, not the monitoring feed.
+        .neq("source_agent", "onboarding")
         .order("created_at", { ascending: false })
         .limit(100);
 

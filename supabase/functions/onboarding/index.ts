@@ -13,6 +13,8 @@
  *        A person clears or confirms a sanctions match, then the pipeline re-runs.
  *   POST { action: "accept_fraud_flags", application_id, note }  admin, credit_manager
  *        A person accepts the fraud flags after checking them, then the pipeline re-runs.
+ *   POST { action: "assign", application_id, credit_assignee?, sales_assignee? }  admin, credit_manager, credit_analyst
+ *        Sets who works the application (user ids; null clears).
  *   POST { action: "decide", pending_action_id, decision: "approve" | "decline", approved_value?, note? }
  *        admin, credit_manager. Four-eyes: not the person who submitted the application
  *        (admins excepted). Approve activates the customer (limit, terms, underwriting
@@ -72,6 +74,10 @@ Deno.serve(async (req) => {
       case "accept_fraud_flags": {
         const user = await requireUser(req, [...DISPOSERS]);
         return json(await acceptFlags(db, user, body, req));
+      }
+      case "assign": {
+        const user = await requireUser(req, [...RUNNERS]);
+        return json(await assign(db, user, body));
       }
       case "decide": {
         const user = await requireUser(req, [...DISPOSERS]);
@@ -138,6 +144,8 @@ async function submit(db: SupabaseClient, user: AuthedUser, body: Record<string,
     requested_terms_days: app.credit_request.terms_days ?? null,
     submitted_via: via,
     submitted_by: user.user_id,
+    credit_assignee: user.role === "sales" ? null : user.user_id,
+    sales_assignee: user.role === "sales" ? user.user_id : null,
   }).select("id").single();
   if (error) throw new Error(`Could not save application: ${error.message}`);
   return await run(db, user, row.id as string, req);
@@ -230,6 +238,25 @@ async function acceptFlags(db: SupabaseClient, user: AuthedUser, body: Record<st
     });
   }
   return await run(db, user, applicationId, req, { fraud_flags_accepted: true });
+}
+
+async function assign(db: SupabaseClient, user: AuthedUser, body: Record<string, unknown>) {
+  const update: Record<string, string | null> = {};
+  for (const key of ["credit_assignee", "sales_assignee"] as const) {
+    if (!(key in body)) continue;
+    const id = body[key] === null || body[key] === "" ? null : String(body[key]);
+    if (id) {
+      const { data: target } = await db.from("app_users").select("user_id, role, active").eq("user_id", id).maybeSingle();
+      if (!target?.active) throw new UserError(`${key}: not an active CreditPilot user`);
+    }
+    update[key] = id;
+  }
+  if (!Object.keys(update).length) throw new UserError("Nothing to assign");
+  const { error } = await db.from("credit_applications").update({ ...update, updated_at: new Date().toISOString() })
+    .eq("id", String(body.application_id));
+  if (error) throw new Error(error.message);
+  void user;
+  return { application_id: body.application_id, ...update };
 }
 
 async function decide(db: SupabaseClient, user: AuthedUser, body: Record<string, unknown>) {
@@ -428,7 +455,7 @@ function eventFor(type: string, row: AppRow, app: CreditApplication, o: Onboardi
           summary: `Missing: ${o.completeness!.missing.join(", ")}.` } };
     }
     case "SCREENING_PASS":
-      return { title: "Screening passed", summary: `${o.screening!.people_screened} people and the entity screened; no open matches.`,
+      return { title: "Screening passed", summary: `The entity and ${o.screening!.people_screened} ${o.screening!.people_screened === 1 ? "person" : "people"} screened; no open matches.`,
         payload: { ...base, severity_score: 7, screening_run_id: runId, subjects_screened: o.screening!.people_screened + 1 } };
     case "SCREENING_REVIEW": {
       const open = o.screening!.hits.filter((h) => h.status === "open").length;

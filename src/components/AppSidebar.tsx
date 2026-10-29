@@ -1,13 +1,15 @@
-import { Zap, Newspaper, BarChart2, FileSearch, Users, Wrench, Info, Github, CreditCard, Factory, Globe, Coins, LogIn, LogOut } from "lucide-react";
-import { NavLink } from "react-router-dom";
+import { Zap, Newspaper, BarChart2, FileSearch, Users, Wrench, Info, Github, CreditCard, Factory, Globe, Coins, LogIn, LogOut, UserPlus } from "lucide-react";
+import { NavLink, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { useAuth, ROLE_LABEL } from "@/lib/auth";
+import { VIEWS } from "@/lib/onboarding";
 
 const navItems = [
   { title: "Credit Events", path: "/events", icon: Zap },
   { title: "Actions", path: "/actions", icon: Wrench },
+  { title: "New customers", path: "/new-customers", icon: UserPlus, views: true },
   { title: "AR Aging", path: "/aging", icon: BarChart2 },
   { title: "News Monitor", path: "/news", icon: Newspaper },
   { title: "SEC Filings", path: "/sec", icon: FileSearch },
@@ -20,6 +22,8 @@ const navItems = [
 
 export function AppSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
   const { appUser, signOut } = useAuth();
+  const location = useLocation();
+  const currentView = new URLSearchParams(location.search).get("view") ?? "needs_decision";
   const { data: company } = useQuery({
     queryKey: ["company"],
     queryFn: async () => {
@@ -36,23 +40,35 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
 
       <nav className="flex-1 p-3 space-y-0.5">
         {navItems.map((item) => (
-          <NavLink
-            key={item.path}
-            to={item.path}
-            end={item.path === "/"}
-            className={({ isActive }) =>
-              cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors",
-                isActive
-                  ? "bg-sidebar-accent text-sidebar-foreground font-medium"
-                  : "text-sidebar-muted hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
-              )
-            }
-            onClick={onNavigate}
-          >
-            <item.icon className="h-4 w-4 shrink-0" />
-            <span className="flex-1">{item.title}</span>
-          </NavLink>
+          <div key={item.path}>
+            <NavLink
+              to={item.path}
+              end={item.path === "/"}
+              className={({ isActive }) =>
+                cn(
+                  "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors",
+                  isActive
+                    ? "bg-sidebar-accent text-sidebar-foreground font-medium"
+                    : "text-sidebar-muted hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
+                )
+              }
+              onClick={onNavigate}
+            >
+              <item.icon className="h-4 w-4 shrink-0" />
+              <span className="flex-1">{item.title}</span>
+            </NavLink>
+            {item.views && appUser && location.pathname === "/new-customers" && (
+              <div className="ml-9 mb-1 space-y-0.5">
+                {VIEWS.map((v) => (
+                  <NavLink key={v.key} to={`/new-customers?view=${v.key}`} onClick={onNavigate}
+                    className={cn("block px-2 py-1 rounded text-xs transition-colors",
+                      currentView === v.key ? "text-sidebar-foreground font-medium" : "text-sidebar-muted hover:text-sidebar-foreground")}>
+                    {v.label}
+                  </NavLink>
+                ))}
+              </div>
+            )}
+          </div>
         ))}
       </nav>
 

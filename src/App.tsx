@@ -25,7 +25,10 @@ import Actions from "@/pages/Actions";
 import CIA from "@/pages/CIA";
 import About from "@/pages/About";
 import Login from "@/pages/Login";
-import { AuthProvider } from "@/lib/auth";
+import NewCustomers from "@/pages/NewCustomers";
+import NewApplication from "@/pages/NewApplication";
+import Prospect from "@/pages/Prospect";
+import { AuthProvider, RequireAuth } from "@/lib/auth";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -102,6 +105,9 @@ const App = () => (
             <Route path="/country" element={<CountryRisk />} />
             <Route path="/fx" element={<FxRisk />} />
             <Route path="/customers" element={<Customers />} />
+            <Route path="/new-customers" element={<RequireAuth><NewCustomers /></RequireAuth>} />
+            <Route path="/new-customers/new" element={<RequireAuth roles={["admin", "credit_manager", "credit_analyst"]}><NewApplication /></RequireAuth>} />
+            <Route path="/new-customers/:id" element={<RequireAuth><Prospect /></RequireAuth>} />
             <Route path="/cia" element={<CIA />} />
             <Route path="/about" element={<About />} />
             <Route path="*" element={<NotFound />} />
