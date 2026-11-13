@@ -66,8 +66,11 @@ applies schema or deploys code goes through the scripts.
 Work goes on a branch and a PR. CI (`.github/workflows/ci.yml`) runs on the PR: Unit
 tests (vitest, golden onboarding harness 14/14, build), CIA harness (against production,
 must be 8/8 before merge) and a migration dry run against production (always rolled
-back). After merge, production changes only by Actions → Deploy → Run workflow
-(`.github/workflows/deploy.yml`): encrypted backup, migrations, changed functions
+back). Claude merges its own PRs once every check is green (founder 2026-11-13); anything
+that deletes data waits for the founder. Every merge to `main` runs Deploy
+(`.github/workflows/deploy.yml`; also Actions → Deploy → Run workflow): service settings
+synced into Supabase secrets (`scripts/sync-function-secrets.sh`, from GitHub
+production-environment secrets), encrypted backup, migrations, changed functions
 (`scripts/changed-since.mjs` against the `prod-migrated` / `prod-deployed` tags, which the
 workflow moves), CIA harness. Never move those tags by hand unless production was
 changed outside the workflow. Local fallback: `npm run db:prod -- …`, `scripts/deploy.sh <fn> prod`.

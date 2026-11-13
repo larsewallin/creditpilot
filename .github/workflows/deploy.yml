@@ -1,7 +1,10 @@
 name: Deploy
 
-# Ships main to production. Manual only: Actions → Deploy → Run workflow.
+# Ships main to production: automatically after every push (merge) to main,
+# or by hand with Actions → Deploy → Run workflow (founder 2026-11-13).
 #
+# 0. Copies the service settings (KEEN_*, COMPANY_LOOKUP_URL, TCM_API_URL) from
+#    the production environment's secrets into Supabase function secrets.
 # 1. Works out what changed since the last deploy (tags prod-migrated / prod-deployed).
 # 2. Backs up the public schema (encrypted, kept 30 days as a run artifact).
 # 3. Applies new migrations in one transaction (dry run first).
@@ -15,6 +18,8 @@ name: Deploy
 # (it asks for the passphrase).
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -41,6 +46,11 @@ jobs:
       SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
       CIA_INTERNAL_TEST_SECRET: ${{ secrets.CIA_INTERNAL_TEST_SECRET }}
       BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+      # Service settings copied into Supabase function secrets (empty ones are skipped, never unset)
+      KEEN_API_KEY: ${{ secrets.KEEN_API_KEY }}
+      KEEN_API_URL: ${{ secrets.KEEN_API_URL }}
+      COMPANY_LOOKUP_URL: ${{ secrets.COMPANY_LOOKUP_URL }}
+      TCM_API_URL: ${{ secrets.TCM_API_URL }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -77,6 +87,8 @@ jobs:
             echo "- Deploy functions: ${DEP:-none}"
             echo "- Delete functions: ${DEL:-none}"
           } | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ -n "$MIG$DEP$DEL" ]; then ANY=yes; else ANY=; echo "- Nothing to ship." >> "$GITHUB_STEP_SUMMARY"; fi
+          echo "any=$ANY" >> "$GITHUB_OUTPUT"
           echo "migrations=$MIG" >> "$GITHUB_OUTPUT"
           echo "deploy=$DEP" >> "$GITHUB_OUTPUT"
           echo "delete=$DEL" >> "$GITHUB_OUTPUT"
@@ -86,8 +98,10 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+        if: steps.plan.outputs.any == 'yes'
 
       - name: Install Postgres 17 client
+        if: steps.plan.outputs.any == 'yes'
         run: |
           sudo apt-get install -y -q postgresql-common
           sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
@@ -95,6 +109,7 @@ jobs:
           echo /usr/lib/postgresql/17/bin >> "$GITHUB_PATH"
 
       - name: Back up production (public schema)
+        if: steps.plan.outputs.any == 'yes'
         run: |
           mkdir -p "$RUNNER_TEMP/backup"
           OUT="$RUNNER_TEMP/backup/$(date -u +%Y%m%d-%H%M%S)-before-deploy-$(git rev-parse --short HEAD).sql"
@@ -141,9 +156,13 @@ jobs:
           if-no-files-found: ignore
 
       - uses: supabase/setup-cli@v1
-        if: steps.plan.outputs.deploy != '' || steps.plan.outputs.delete != ''
         with:
           version: 3.1.0   # pinned: a new CLI release must not change a deploy unannounced
+
+      - name: Sync service settings to Supabase
+        env:
+          DEPLOY_CONFIRMED: "1"
+        run: scripts/sync-function-secrets.sh prod
 
       - name: Deploy functions
         if: steps.plan.outputs.deploy != ''
@@ -172,4 +191,5 @@ jobs:
           git push -f origin refs/tags/prod-migrated refs/tags/prod-deployed
 
       - name: CIA harness (must be 8/8)
+        if: steps.plan.outputs.any == 'yes'
         run: node tests/cia/run.mjs
