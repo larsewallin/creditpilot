@@ -7,6 +7,9 @@ set -euo pipefail
 # Every call names the target project explicitly with --project-ref, so the
 # result never depends on whatever `supabase link` left behind (backlog E14/E15).
 # Works the same on a laptop and in the Deploy workflow (SUPABASE_ACCESS_TOKEN).
+# Supabase CLI v3 asks for confirmation before changing a hosted project. On a
+# laptop that prompt stays. The Deploy workflow sets DEPLOY_CONFIRMED=1, which
+# passes --yes (CI has no terminal to answer the prompt).
 
 ACTION="deploy"
 if [ "${1:-}" = "--delete" ]; then
@@ -34,12 +37,17 @@ case "$ENV" in
     ;;
 esac
 
+YES=()
+if [ "${DEPLOY_CONFIRMED:-}" = "1" ]; then
+  YES=(--yes)
+fi
+
 if [ "$ACTION" = "delete" ]; then
   echo "Deleting $FUNCTION from $ENV ($TARGET_REF)..."
-  supabase functions delete "$FUNCTION" --project-ref "$TARGET_REF"
+  supabase functions delete "$FUNCTION" --project-ref "$TARGET_REF" "${YES[@]}"
   echo "✅ Deleted $FUNCTION from $ENV."
 else
   echo "Deploying $FUNCTION to $ENV ($TARGET_REF)..."
-  supabase functions deploy "$FUNCTION" --project-ref "$TARGET_REF"
+  supabase functions deploy "$FUNCTION" --project-ref "$TARGET_REF" "${YES[@]}"
   echo "✅ Deployed $FUNCTION to $ENV."
 fi
