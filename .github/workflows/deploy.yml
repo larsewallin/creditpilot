@@ -190,6 +190,20 @@ jobs:
           git tag -f prod-deployed HEAD
           git push -f origin refs/tags/prod-migrated refs/tags/prod-deployed
 
+      - name: Database types (artifact for src/integrations/supabase/types.ts)
+        continue-on-error: true
+        run: |
+          mkdir -p "$RUNNER_TEMP/types"
+          supabase gen types typescript --project-id "$PROD_REF" --schema public > "$RUNNER_TEMP/types/types.ts"
+          if cmp -s "$RUNNER_TEMP/types/types.ts" src/integrations/supabase/types.ts; then echo "Types are current."; else echo "::notice::Database types differ from src/integrations/supabase/types.ts (see the db-types artifact)."; fi
+      - uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: db-types
+          path: ${{ runner.temp }}/types/types.ts
+          retention-days: 7
+          if-no-files-found: ignore
+
       - name: CIA harness (must be 8/8)
         if: steps.plan.outputs.any == 'yes'
         run: node tests/cia/run.mjs
