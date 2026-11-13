@@ -49,7 +49,8 @@ function SidebarLayout() {
           return initDemo().then(() => queryClient.invalidateQueries());
         }
       })
-      .catch(() => {
+      // PromiseLike has no .catch; the second then catches the query and initDemo alike
+      .then(undefined, () => {
         // silent — demo still works via manual run
       });
   }, []);
