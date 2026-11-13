@@ -370,7 +370,7 @@ creditpilot/
 │   │   ├── _shared/
 │   │   │   └── skills/            # Reusable skill functions
 │   │   │       ├── analytical/    # analyse-payment-behaviour, analyse-payment-trend, calculate-credit-limit-proposal,
-│   │   │       │                  #   assess-composite-risk, aggregate-credit-scores, sector-exposure-direction,
+│   │   │       │                  #   assess-composite-risk, select-credit-score, sector-exposure-direction,
 │   │   │       │                  #   detect-rating-change, normalise-credit-signal, parse-ar-csv
 │   │   │       ├── integration/   # fetch-sec-filing, fetch-credit-score, fetch-industry-signal, deliver-message, search-news
 │   │   │       └── generative/    # classify-news, compose-dunning-letter, compose-teams-alert
@@ -399,7 +399,7 @@ creditpilot/
 npx vitest run supabase/functions/_shared/skills
 ```
 
-Tests cover: `normalise-credit-signal` (36), `parse-ar-csv` (29), `aggregate-credit-scores` (15), `detect-rating-change` (14), `assess-composite-risk` (13), `calculate-credit-limit-proposal` (13), `classify-news` (12), `analyse-payment-behaviour` (11), `deliver-message` (5). The `fetch-sec-filing` skill's test requires the Deno runtime (it imports the Supabase client via Deno's remote-import mechanism) and is not part of the Node/vitest suite.
+Tests cover: `normalise-credit-signal` (36), `parse-ar-csv` (29), `select-credit-score` (5), `detect-rating-change` (14), `assess-composite-risk` (13), `calculate-credit-limit-proposal` (13), `classify-news` (12), `analyse-payment-behaviour` (11), `deliver-message` (5). The `fetch-sec-filing` skill's test requires the Deno runtime (it imports the Supabase client via Deno's remote-import mechanism) and is not part of the Node/vitest suite.
 
 ---
 

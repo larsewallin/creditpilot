@@ -95,7 +95,7 @@ Reusable logic in `supabase/functions/_shared/skills/`:
 | `parse-ar-csv` | Analytical | Parses uploaded AR aging CSVs — ERP column-alias mapping, date/amount normalization, validation warnings |
 | `calculate-credit-limit-proposal` | Analytical | Determines whether to reduce a credit limit and by how much |
 | `assess-composite-risk` | Analytical | Flags customers with corroborating signals from multiple agents |
-| `aggregate-credit-scores` | Analytical | Combines multiple providers' credit signals into one aggregate score |
+| `select-credit-score` | Analytical | Picks the one score that counts by the company's source priority (Keen first if used); never averages |
 | `detect-rating-change` | Analytical | Detects and classifies a credit rating change between two snapshots |
 | `normalise-credit-signal` | Analytical | Converts any provider's credit score to a common 0–100 scale |
 | `fetch-sec-filing` | Integration | Fetches recent SEC filings via EDGAR API; detects risk keywords |

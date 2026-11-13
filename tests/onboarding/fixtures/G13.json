@@ -1,7 +1,7 @@
 {
   "id": "G13",
-  "title": "File scoring app times out",
-  "why": "File times out -> falls back to the uploaded bureau report score 88 (band B), and the memo says so. Caps: WC 90,000; NW 120,000; bureau 150,000 -> 90,000 x 0.75 = 67,500 -> supportable 65,000. needs = 45,000 x 1 x 1.15 = 51,750 -> recommended 50,000. Request 50,000 -> approve; 65,000 >= 60,000 -> higher-limit note.",
+  "title": "Keen times out",
+  "why": "Keen times out -> falls back to the uploaded bureau report score 88 (band B), and the memo says so. Caps: WC 90,000; NW 120,000; bureau 150,000 -> 90,000 x 0.75 = 67,500 -> supportable 65,000. needs = 45,000 x 1 x 1.15 = 51,750 -> recommended 50,000. Request 50,000 -> approve; 65,000 >= 60,000 -> higher-limit note.",
   "application": {
     "application_id": "G13",
     "submitted_by": "credit_team",
@@ -88,7 +88,7 @@
     "public_financials": {
       "error": "not_found"
     },
-    "file_score": {
+    "keen_score": {
       "error": "timeout"
     }
   },
@@ -105,7 +105,7 @@
       "band": "B",
       "fallbacks": [
         {
-          "provider": "file",
+          "provider": "keen",
           "reason": "timeout"
         }
       ]

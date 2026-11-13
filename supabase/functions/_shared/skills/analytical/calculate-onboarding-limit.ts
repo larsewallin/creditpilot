@@ -7,7 +7,7 @@
  *
  *   needs        = monthly purchases × (terms ÷ 30) × (1 + buffer)       (falls back to the request)
  *   caps         = lowest of: working capital × wc%, net worth × nw%     (both × (1 − haircut) for compiled statements)
- *                  and any bureau / File maximum credit recommendation
+ *                  and any bureau / Keen maximum credit recommendation
  *   risk-adjusted = cap × score-band multiplier × (1 − macro haircut, once, if a Country or FX signal applies)
  *   supportable  = risk-adjusted, rounded down
  *   recommended  = lowest of needs and risk-adjusted, rounded down
@@ -30,7 +30,7 @@ export interface OnboardingLimitInput {
   terms_days?: number;
   /** Latest statement in USD, or undefined when there are no usable financials. */
   statement?: FinancialStatement;
-  /** Maximum credit recommendations from a bureau report or File, in USD. */
+  /** Maximum credit recommendations from a bureau report or Keen, in USD. */
   max_credit_recommendations_usd?: number[];
   band: Band | null;
   macro: { country: boolean; fx: boolean };

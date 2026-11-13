@@ -321,9 +321,15 @@ async function decide(db: SupabaseClient, user: AuthedUser, body: Record<string,
   }).select("id").single();
   if (bErr) throw new Error(`Could not store the underwriting baseline: ${bErr.message}`);
 
+  // The score the decision used becomes the customer's score on the Customers tab.
+  const an = outcome.analysis;
+  const scoreFields = an?.score != null && an.score_source ? {
+    credit_rating_score: Math.round(an.score), credit_rating_source: an.score_source,
+    credit_rating_raw: an.score_raw ?? String(an.score), credit_rating_previous_score: null, credit_rating_updated_at: now,
+  } : {};
   const { error: cErr } = await db.from("customers").update({
     lifecycle_status: "active", credit_limit: approved, payment_terms_days: app.credit_request.terms_days ?? 30,
-    customer_since: now.slice(0, 10), last_reviewed: now.slice(0, 10), updated_at: now,
+    customer_since: now.slice(0, 10), last_reviewed: now.slice(0, 10), updated_at: now, ...scoreFields,
   }).eq("id", row.customer_id);
   if (cErr) throw new Error(`Could not activate the customer: ${cErr.message}`);
 
@@ -399,7 +405,7 @@ async function persist(db: SupabaseClient, user: AuthedUser, row: AppRow, app: C
 
   if (o.analysis) {
     const rows: Record<string, unknown>[] = o.analysis.fallbacks
-      .filter((f) => f.provider === "file" || f.provider === "bureau_report")
+      .filter((f) => f.provider === "keen" || f.provider === "bureau_report")
       .map((f) => ({ application_id: row.id, provider: f.provider, status: f.reason === "timeout" ? "timeout" : "error", detail: { reason: f.reason } }));
     if (o.analysis.score_source) {
       rows.push({

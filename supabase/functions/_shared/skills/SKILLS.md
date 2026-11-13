@@ -90,24 +90,17 @@ Severity weighted by signal severity and agent count — not just agent count al
 
 ---
 
-### `aggregate-credit-scores.ts`
-**Purpose:** Combines multiple credit signals from different providers into one authoritative 0-100 score. Simple average — no provider weighting, keeping it transparent and auditable.
-**Called by:** CIA agent (question and briefing modes — credit context for customers)
-**Inputs:**
-- `CreditSignal[]` — any mix of providers (S&P, Coface, D&B, Experian, internal etc)
+### `select-credit-score.ts`
+**Purpose:** Picks the one score that counts for a company, by the company's source priority (Settings › `onboarding.sources.score_order`, default `["keen", "bureau_report"]`). The first source with a score wins. Scores are never averaged.
+**Called by:** onboarding pipeline; customer score refresh (planned, same list)
+**Inputs:** `order` (source ids, most trusted first), `fetchers` (one lazy fetcher per source; each returns a 0–100 score or an error)
 
 **Key design decisions:**
-- No provider weighting — simple average. Every rating source treated equally to keep the score transparent and auditable.
-- Empty input returns `final_score: null`, `interpretation: 'NR'` (No Rating) — never assumes a score of 50 for unrated customers
-- `source_providers[]` field makes it clear which providers contributed to the score
-- Frontend shows 'NR' and 'Provider: N/A' for unrated customers — never shows a dash that looks like missing data
-
-**Interpretation bands:**
-- very_safe ≥80, safe ≥60, watch ≥40, concern ≥20, high_risk <20, NR = no data
-
-**Outputs:** `final_score` (0-100 or null), `interpretation`, `source_count`, `source_providers[]`, `sources[]`
-**Connection to other skills:** calls `normalise-credit-signal` internally for each signal
-**Tests:** 15 tests — NR for empty, simple average verification, source_providers accuracy
+- One source counts: a company that uses Keen gets Keen's score; otherwise its next source (D&B, Creditsafe, an uploaded bureau report). Averaging different models dilutes the one the company trusts and makes the number hard to explain.
+- Lazy: a lower-priority provider is only called when the ones above it have no score (saves paid lookups).
+- Every source tried before the winner is recorded with its reason (`insufficient_data`, `timeout`, `not_supported`, …); `used_fallback` drives the `SCORE_FALLBACK` reason code in the memo.
+- No score from any source returns no score (NR), never 50.
+- Replaces `aggregate-credit-scores` (simple average), which was never called.
 
 ---
 
@@ -148,9 +141,9 @@ CIA will detect the delta automatically on the next briefing run.
 ---
 
 ### `normalise-credit-signal.ts`
-**Purpose:** Converts any credit score from any supported provider to a common 0-100 scale where higher = lower risk. The foundation for all credit scoring in CreditPilot — called by `aggregate-credit-scores` internally.
-**Called by:** `aggregate-credit-scores.ts` (internally)
-**Supported providers:** dnb_paydex, dnb_failure_score, experian_intelliscore, equifax_business, moodys, sp_fitch, coface, atradius, euler_hermes, internal_payment_score, manual, estimated
+**Purpose:** Converts any credit score from any supported provider to a common 0-100 scale where higher = lower risk. The foundation for all credit scoring in CreditPilot: adapters use it to turn a provider's own value into the 0–100 score that `select-credit-score` picks from.
+**Called by:** provider adapters (score refresh, planned)
+**Supported providers:** dnb_paydex, dnb_failure_score, experian_intelliscore, equifax_business, moodys, sp_fitch, coface, atradius, euler_hermes, keen (already 0–100, passed through), internal_payment_score, manual, estimated
 **Key design decisions:**
 - Never throws — unknown inputs return score 50, confidence 'low'
 - Euler Hermes: 1-10 scale, 1=best (reversed) — (10-value)/9×100
@@ -245,7 +238,7 @@ CIA will detect the delta automatically on the next briefing run.
 ---
 
 ### `fetch-credit-score.ts`
-**Purpose:** Provider-agnostic credit score fetcher. Returns CreditSignal[] from all configured providers, ready for normalise-credit-signal and aggregate-credit-scores.
+**Purpose:** Provider-agnostic credit score fetcher. Returns CreditSignal[] from all configured providers, ready for normalise-credit-signal and select-credit-score.
 **Called by:** Not yet wired — stubs ready for activation when API keys available
 **Inputs:** company_name, identifier (DUNS/CIK/ticker), providers (CreditScoreProvider[])
 **Available providers (all stubbed, ready to wire):**

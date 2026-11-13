@@ -91,8 +91,8 @@
     "public_financials": {
       "error": "not_found"
     },
-    "file_score": {
-      "provider": "file",
+    "keen_score": {
+      "provider": "keen",
       "score": 95
     }
   },
@@ -104,7 +104,7 @@
       "CREDIT_ANALYSIS_COMPLETE"
     ],
     "analysis": {
-      "score_source": "file",
+      "score_source": "keen",
       "band": "A"
     },
     "proposal": {

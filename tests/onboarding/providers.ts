@@ -1,6 +1,6 @@
 /**
  * Fixture providers for the golden-prospect harness. They answer exactly what
- * a real adapter would (registry, sanctions list, File, EDGAR, macro context),
+ * a real adapter would (registry, sanctions list, Keen, EDGAR, macro context),
  * but from the case's JSON, so every run is deterministic and offline.
  */
 import { readFileSync } from "fs";
@@ -30,7 +30,7 @@ export function fixtureProviders(sources: any): OnboardingProviders {
     async domainAgeMonths() { return sources.domain_age_months ?? null; },
     async sanctionsList() { return SANCTIONS; },
     async publicFinancials() { return sources.public_financials ?? { error: "not_found" }; },
-    async fileScore() { return sources.file_score ?? { error: "unavailable" }; },
+    async keenScore() { return sources.keen_score ?? { error: "unavailable" }; },
     async macroContext(country, sector, currency) {
       const keys = [country, sector, currency].filter(Boolean);
       return MACRO.filter((e: any) => keys.includes(e.key));

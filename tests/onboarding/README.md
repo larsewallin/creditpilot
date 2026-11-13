@@ -3,7 +3,7 @@
 14 fictional applicants whose correct outcome was decided **before** any
 onboarding code was written. The real pipeline core
 (`supabase/functions/_shared/onboarding/pipeline.ts`) runs each one with
-fixture providers instead of live registries, sanctions lists, File, EDGAR
+fixture providers instead of live registries, sanctions lists, Keen, EDGAR
 and macro agents, so the whole decision path is tested offline.
 
     node tests/onboarding/run.mjs
@@ -25,12 +25,12 @@ harness is expected to fail (Phase 0: 0/14).
 | G05 | Director close to a sanctions-list name | Screening review; hit open until a person decides |
 | G06 | Entity on a sanctions list | Screening fail; decline proposed to a person only |
 | G07 | 4-month-old company, 2-month-old website, virtual office, $150k | Screening review with 3 fraud flags |
-| G08 | No financials, bureau report only (File: insufficient data) | Bureau report used; approve $45k + higher-limit note |
+| G08 | No financials, bureau report only (Keen: insufficient data) | Bureau report used; approve $45k + higher-limit note |
 | G09 | Public US company | SEC EDGAR financials; approve $750k + note |
 | G10 | German company, EUR invoicing | DE + EUR signals → 20% haircut → counteroffer $200k (asked $220k) |
 | G11 | UK Ltd | Companies House + PSC owners (3 people) + HMRC VAT; approve $100k + note |
 | G12 | Already a customer (same tax ID) | No duplicate; routed to limit-increase review |
-| G13 | File times out | Falls back to bureau score, memo says so; approve $50k + note |
+| G13 | Keen times out | Falls back to bureau score, memo says so; approve $50k + note |
 | G14 | Compiled statements only | 50% haircut → counteroffer $50k (asked $75k) |
 
 Each fixture's `why` field shows the arithmetic. All names, IDs and
@@ -55,7 +55,7 @@ company in Settings › Onboarding.
 
 **Limit**
 - Score bands: A ≥ 90, B 80–89, C 70–79, D 60–69, E < 60. Multipliers A 1.00, B 0.75, C 0.50, D 0.35, E 0.
-- Score source order: File, then uploaded bureau report. Every fallback is recorded.
+- Score source order: Keen, then uploaded bureau report. The first source with a score counts (never an average); every fallback is recorded.
 - Financials: SEC EDGAR for public companies, uploaded statements otherwise.
 - Needs = monthly purchases × (terms ÷ 30) × 1.15.
 - Caps = lowest of 10% of working capital, 10% of net worth (both halved for compiled statements), and the bureau's maximum credit recommendation.

@@ -31,6 +31,6 @@ export const ONBOARDING_DEFAULTS: OnboardingSettings = {
     rounding_usd: 5_000,
   },
   sources: {
-    score_order: ["file", "bureau_report"],
+    score_order: ["keen", "bureau_report"],
   },
 };

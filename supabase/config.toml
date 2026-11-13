@@ -13,6 +13,6 @@ verify_jwt = false
 [functions.sanctions-sync]
 verify_jwt = false
 
-# Stand-in for the File scoring API; authenticated in code with FILE_API_KEY.
-[functions.file-mock]
+# Stand-in for the Keen scoring API; authenticated in code with KEEN_API_KEY.
+[functions.keen-mock]
 verify_jwt = false

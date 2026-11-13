@@ -85,8 +85,8 @@
         "equity": 90000000
       }
     ],
-    "file_score": {
-      "provider": "file",
+    "keen_score": {
+      "provider": "keen",
       "score": 90
     }
   },
@@ -100,7 +100,7 @@
     "analysis": {
       "financials_source": "sec_edgar",
       "statement_quality": "audited",
-      "score_source": "file",
+      "score_source": "keen",
       "band": "A"
     },
     "proposal": {

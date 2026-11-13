@@ -18,6 +18,7 @@ import type {
   OnboardingProviders, OnboardingSettings, Person, ScreeningHit,
 } from "./types.ts";
 import { ONBOARDING_DEFAULTS } from "./settings.ts";
+import { selectCreditScore } from "../skills/analytical/select-credit-score.ts";
 import { calculateOnboardingLimit, scoreToBand } from "../skills/analytical/calculate-onboarding-limit.ts";
 import { matchSanctionsName, normalize, prepareSanctionsList, type PreparedEntry } from "../skills/analytical/match-sanctions-name.ts";
 
@@ -111,23 +112,22 @@ export async function runOnboarding(
     capStatement = undefined;
   }
 
-  let score: number | undefined;
-  let score_source: string | undefined;
+  // One score counts: the first source in the company's priority list that has one
+  // (Keen if the company uses it, then whatever else it uses). Never an average.
+  const picked = await selectCreditScore(settings.sources.score_order, {
+    keen: async () => {
+      const r = await providers.keenScore(app, statement ? [statement] : app.financial_statements);
+      return "error" in r ? r : { ...r, raw: String(r.score) };
+    },
+    bureau_report: async () => app.bureau_report
+      ? { score: app.bureau_report.score_normalized, raw: `${app.bureau_report.bureau} report` }
+      : { error: "not_found" },
+  });
+  fallbacks.push(...picked.fallbacks);
+  const score = picked.result?.score;
+  const score_source = picked.source;
   const maxCredit: number[] = [];
-  for (const source of settings.sources.score_order) {
-    if (source === "file") {
-      const r = await providers.fileScore(app, statement ? [statement] : app.financial_statements);
-      if ("error" in r) { fallbacks.push({ provider: "file", reason: r.error }); continue; }
-      score = r.score; score_source = "file";
-      if (r.max_credit_recommendation_usd !== undefined) maxCredit.push(r.max_credit_recommendation_usd);
-      break;
-    }
-    if (source === "bureau_report") {
-      if (!app.bureau_report) { fallbacks.push({ provider: "bureau_report", reason: "not_found" }); continue; }
-      score = app.bureau_report.score_normalized; score_source = "bureau_report";
-      break;
-    }
-  }
+  if (picked.source === "keen" && picked.result?.max_credit_recommendation_usd !== undefined) maxCredit.push(picked.result.max_credit_recommendation_usd);
   if (app.bureau_report?.max_credit_recommendation_usd !== undefined) maxCredit.push(app.bureau_report.max_credit_recommendation_usd);
   const band = scoreToBand(score);
 
@@ -142,7 +142,7 @@ export async function runOnboarding(
   out.analysis = {
     financials_source,
     statement_quality: statement?.statement_quality,
-    score_source, score, band: band ?? undefined,
+    score_source, score, score_raw: picked.result?.raw, band: band ?? undefined,
     fallbacks, macro_context,
   };
 
@@ -158,7 +158,7 @@ export async function runOnboarding(
     limits: settings.limits,
   });
   const reason_codes = [...limit.reason_codes];
-  if (score_source && score_source !== settings.sources.score_order[0]) reason_codes.push("SCORE_FALLBACK");
+  if (picked.used_fallback) reason_codes.push("SCORE_FALLBACK");
 
   out.stopped_at = "decision";
   out.events.push("CREDIT_ANALYSIS_COMPLETE");

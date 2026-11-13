@@ -16,6 +16,10 @@ export const SETTING_KEYS = [
 ] as const;
 export type SettingKey = typeof SETTING_KEYS[number];
 
+/** Score sources the pipeline can call, in no particular order. A company's
+ *  score_order lists the ones it uses, most trusted first; the first with a score counts. */
+export const SCORE_SOURCES = ["keen", "bureau_report"] as const;
+
 type Json = unknown;
 const isObj = (v: Json): v is Record<string, Json> => typeof v === "object" && v !== null && !Array.isArray(v);
 
@@ -45,6 +49,11 @@ export function validateSetting(key: string, value: Json): string[] {
   const section = key.slice("onboarding.".length) as keyof typeof ONBOARDING_DEFAULTS;
   const errors: string[] = [];
   check(ONBOARDING_DEFAULTS[section], value, key, errors);
+  if (key === "onboarding.sources" && Array.isArray((value as Record<string, Json>).score_order)) {
+    const order = (value as Record<string, Json>).score_order as unknown[];
+    for (const s of order) if (!(SCORE_SOURCES as readonly unknown[]).includes(s)) errors.push(`${key}.score_order: unknown score source "${s}" (known: ${SCORE_SOURCES.join(", ")})`);
+    if (order.length === 0) errors.push(`${key}.score_order: list at least one score source`);
+  }
   return errors;
 }
 

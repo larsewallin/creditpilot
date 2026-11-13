@@ -91,8 +91,8 @@
     "public_financials": {
       "error": "not_found"
     },
-    "file_score": {
-      "provider": "file",
+    "keen_score": {
+      "provider": "keen",
       "score": 92
     }
   },
@@ -112,7 +112,7 @@
     "analysis": {
       "financials_source": "uploaded_statements",
       "statement_quality": "reviewed",
-      "score_source": "file",
+      "score_source": "keen",
       "band": "A",
       "fallbacks": []
     },

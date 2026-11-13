@@ -20,6 +20,7 @@ export type SignalSource =
   | "coface"
   | "atradius"
   | "euler_hermes"
+  | "keen"
   | "internal_payment_score"
   | "manual"
   | "estimated";
@@ -123,6 +124,7 @@ function normaliseValue(
     // Pass-through (already 0–100, higher = safer)
     case "dnb_paydex":
     case "experian_intelliscore":
+    case "keen":
     case "internal_payment_score":
     case "manual":
     case "estimated":

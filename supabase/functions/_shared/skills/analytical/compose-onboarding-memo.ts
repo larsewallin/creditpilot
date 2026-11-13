@@ -5,7 +5,7 @@
  *   customer's first limit. Deterministic: every sentence comes from the
  *   pipeline outcome, nothing is generated, so the memo can never state a
  *   figure the analysis did not produce. Each section names its sources
- *   (SEC filing, uploaded statements, File, bureau report, registry, VAT check,
+ *   (SEC filing, uploaded statements, Keen, bureau report, registry, VAT check,
  *   sanctions lists, Country / FX / Industry agent signals).
  *
  * @input  CreditApplication + OnboardingOutcome (from the onboarding pipeline)
@@ -40,7 +40,7 @@ export const REASON_TEXT: Record<string, string> = {
 
 const usd = (n?: number) => (n === undefined || n === null ? "n/a" : `$${Math.round(n).toLocaleString("en-US")}`);
 const FIN_SOURCE: Record<string, string> = { sec_edgar: "SEC EDGAR (10-K, XBRL)", uploaded_statements: "Statements uploaded with the application", none: "None" };
-const SCORE_SOURCE: Record<string, string> = { file: "File scoring app", bureau_report: "Uploaded bureau report" };
+const SCORE_SOURCE: Record<string, string> = { keen: "Keen", file: "Keen", bureau_report: "Uploaded bureau report" };
 const AGENT: Record<string, string> = { country_risk_agent: "Country Risk agent", fx_risk_agent: "FX Risk agent", industry_risk_agent: "Industry Risk agent", news_agent: "News agent" };
 const CHECK: Record<string, string> = {
   "registry:companies_house": "Companies House", "registry:sec_edgar": "SEC EDGAR", "registry:gleif": "GLEIF (LEI register)",
@@ -82,7 +82,7 @@ export function composeOnboardingMemo(app: CreditApplication, o: OnboardingOutco
     ];
     if (caps.working_capital !== undefined) lines.push(`Working-capital cap: ${usd(caps.working_capital)}.`);
     if (caps.net_worth !== undefined) lines.push(`Net-worth cap: ${usd(caps.net_worth)}.`);
-    if (caps.bureau_recommendation !== undefined) lines.push(`Bureau / File maximum credit recommendation: ${usd(caps.bureau_recommendation)}.`);
+    if (caps.bureau_recommendation !== undefined) lines.push(`Bureau / Keen maximum credit recommendation: ${usd(caps.bureau_recommendation)}.`);
     lines.push(`After score band ${o.analysis?.band ?? "n/a"}${p.macro_haircut_applied ? " and the macro haircut" : ""}: ${usd(p.risk_adjusted_cap_usd)} (supportable ${usd(p.supportable_usd)}).`);
     lines.push(`Recommended: ${usd(p.recommended_usd)}, bound by ${(p.binding_method ?? "n/a").replace(/_/g, " ")}.`);
     sections.push({ title: "Limit working", lines, sources: ["Company onboarding limit policy (Settings › Onboarding)"] });

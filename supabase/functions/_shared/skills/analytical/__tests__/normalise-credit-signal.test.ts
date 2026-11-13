@@ -232,3 +232,11 @@ describe("normaliseAll", () => {
     expect(results[2].normalised_score).toBe(100);
   });
 });
+
+describe("keen", () => {
+  it("passes Keen's 0–100 score through unchanged", () => {
+    const result = normaliseCreditSignal(sig("keen", 82));
+    expect(result.normalised_score).toBe(82);
+    expect(result.confidence).toBe("high");
+  });
+});

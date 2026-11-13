@@ -144,23 +144,23 @@ describe("SEC EDGAR financials", () => {
   });
 });
 
-describe("File adapter", () => {
-  const env = (k: string) => ({ FILE_API_URL: "https://file.test/", FILE_API_KEY: "k" } as Record<string, string>)[k];
+describe("Keen adapter", () => {
+  const env = (k: string) => ({ KEEN_API_URL: "https://keen.test/", KEEN_API_KEY: "k" } as Record<string, string>)[k];
   it("maps a score and the recommended limit", async () => {
-    const f = fakeFetch([[/file\.test\/v1\/score$/, () => ok({ score: 92, model_version: "m1", recommended_limit: 60_000, reason_codes: [{ code: "CURRENT_RATIO" }] })]]);
-    const r = await liveProviders({ db: fakeDb(), env, fetch: f }).fileScore(app());
-    expect(r).toEqual({ provider: "file", score: 92, model_version: "m1", reason_codes: ["CURRENT_RATIO"], max_credit_recommendation_usd: 60_000 });
+    const f = fakeFetch([[/keen\.test\/v1\/score$/, () => ok({ score: 92, model_version: "m1", recommended_limit: 60_000, reason_codes: [{ code: "CURRENT_RATIO" }] })]]);
+    const r = await liveProviders({ db: fakeDb(), env, fetch: f }).keenScore(app());
+    expect(r).toEqual({ provider: "keen", score: 92, model_version: "m1", reason_codes: ["CURRENT_RATIO"], max_credit_recommendation_usd: 60_000 });
   });
   it("maps 422 to insufficient data and a missing config to unavailable", async () => {
-    const f = fakeFetch([[/file\.test/, () => new Response("", { status: 422 })]]);
-    expect(await liveProviders({ db: fakeDb(), env, fetch: f }).fileScore(app())).toEqual({ error: "insufficient_data" });
-    expect(await liveProviders({ db: fakeDb(), env: () => undefined, fetch: f }).fileScore(app())).toEqual({ error: "unavailable" });
+    const f = fakeFetch([[/keen\.test/, () => new Response("", { status: 422 })]]);
+    expect(await liveProviders({ db: fakeDb(), env, fetch: f }).keenScore(app())).toEqual({ error: "insufficient_data" });
+    expect(await liveProviders({ db: fakeDb(), env: () => undefined, fetch: f }).keenScore(app())).toEqual({ error: "unavailable" });
   });
   it("maps a slow answer to timeout", async () => {
     const slow: typeof fetch = ((_u: unknown, init?: RequestInit) => new Promise((_r, rej) => {
       init?.signal?.addEventListener("abort", () => rej(Object.assign(new Error("aborted"), { name: "AbortError" })));
     })) as typeof fetch;
-    expect(await liveProviders({ db: fakeDb(), env, fetch: slow, timeoutMs: 20 }).fileScore(app())).toEqual({ error: "timeout" });
+    expect(await liveProviders({ db: fakeDb(), env, fetch: slow, timeoutMs: 20 }).keenScore(app())).toEqual({ error: "timeout" });
   });
 });
 

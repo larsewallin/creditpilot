@@ -4,7 +4,7 @@
  * Design: claude/CreditPilot_Onboarding_Build_Plan.md (Project files).
  *
  * The pipeline core (pipeline.ts) is pure orchestration: every external
- * source (registries, sanctions lists, File, EDGAR, bureau reports, macro
+ * source (registries, sanctions lists, Keen, EDGAR, bureau reports, macro
  * context, existing customers) is reached through the `OnboardingProviders`
  * interface below. Production wires real adapters; the golden-prospect
  * harness (tests/onboarding) wires fixture providers. This is what lets the
@@ -125,7 +125,7 @@ export interface SanctionsEntry {
 }
 
 export interface ScoreResult {
-  provider: "file" | "bureau_report" | string;
+  provider: "keen" | "bureau_report" | string;
   score: number;            // normalized 0–100, higher = safer
   model_version?: string;
   reason_codes?: string[];
@@ -166,8 +166,8 @@ export interface OnboardingProviders {
    *  the full lists (tens of thousands of names) down to plausible candidates. */
   sanctionsList(subjects?: string[]): Promise<SanctionsEntry[]>;
   publicFinancials(app: CreditApplication): Promise<FinancialStatement[] | ProviderError>;
-  /** `financials`: what analysis found (SEC filings or uploads), so File scores on the same figures. */
-  fileScore(app: CreditApplication, financials?: FinancialStatement[]): Promise<ScoreResult | ProviderError>;
+  /** `financials`: what analysis found (SEC filings or uploads), so Keen scores on the same figures. */
+  keenScore(app: CreditApplication, financials?: FinancialStatement[]): Promise<ScoreResult | ProviderError>;
   macroContext(country_code: string | undefined, sector: string | undefined, currency: string | undefined): Promise<MacroContextEvent[]>;
 }
 
@@ -198,7 +198,7 @@ export interface OnboardingSettings {
     rounding_usd: number;                       // round down to this step
   };
   sources: {
-    score_order: string[];                      // e.g. ["file", "bureau_report"]
+    score_order: string[];                      // e.g. ["keen", "bureau_report"]; first with a score wins
   };
 }
 
@@ -249,6 +249,8 @@ export interface OnboardingOutcome {
     statement_quality?: FinancialStatement["statement_quality"];
     score_source?: string;
     score?: number;
+    /** The provider's own value as shown to people (e.g. "D&B report"). */
+    score_raw?: string;
     band?: "A" | "B" | "C" | "D" | "E";
     fallbacks: { provider: string; reason: string }[];
     macro_context: MacroContextEvent[];

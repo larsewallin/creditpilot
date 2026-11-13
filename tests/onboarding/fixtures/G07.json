@@ -76,7 +76,7 @@
     "public_financials": {
       "error": "not_found"
     },
-    "file_score": {
+    "keen_score": {
       "error": "insufficient_data"
     }
   },

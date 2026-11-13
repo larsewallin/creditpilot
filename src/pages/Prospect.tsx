@@ -424,7 +424,7 @@ function ScreeningView({ app, runs, checks, hits, canDispose }: { app: any; runs
 }
 
 const SOURCE_TILES: { key: string; name: string; note: string }[] = [
-  { key: "file", name: "File scoring app", note: "Your scoring model" },
+  { key: "keen", name: "Keen", note: "Your scoring model (counts first when connected)" },
   { key: "bureau_report", name: "Uploaded bureau report", note: "Any bureau the applicant or you already use" },
   { key: "sec_edgar", name: "SEC EDGAR", note: "Audited financials for US public companies" },
   { key: "uploaded_statements", name: "Uploaded statements", note: "Financials sent with the application" },
@@ -435,7 +435,7 @@ function AnalysisView({ o, scores, memo, a }: { o: any; scores: any[]; memo?: an
   const an = o.analysis;
   if (!an) return <Panel title="Credit analysis"><p className="text-xs text-muted-foreground">Analysis runs after screening passes.</p></Panel>;
   const tile = (key: string) => {
-    if (key === "file" || key === "bureau_report") {
+    if (key === "keen" || key === "bureau_report") {
       const s = scores.find((x) => x.provider === key && x.status === "ok");
       if (s) return { state: "used", text: `Score ${s.score}${s.band ? ` (band ${s.band})` : ""}` };
       const f = an.fallbacks?.find((x: any) => x.provider === key);
@@ -472,7 +472,7 @@ function AnalysisView({ o, scores, memo, a }: { o: any; scores: any[]; memo?: an
         </div>
       </Panel>
       <Panel title="Score">
-        <p>{an.score != null ? `${an.score} (band ${an.band}) from ${an.score_source === "file" ? "the File scoring app" : "the uploaded bureau report"}` : "No score could be obtained."}</p>
+        <p>{an.score != null ? `${an.score} (band ${an.band}) from ${an.score_source === "keen" || an.score_source === "file" ? "Keen" : an.score_raw ? `the uploaded ${an.score_raw}` : "the uploaded bureau report"}` : "No score could be obtained."}</p>
       </Panel>
       <Panel title="Market context">
         {an.macro_context?.length ? <ul className="space-y-1">{an.macro_context.map((m: any, i: number) => (

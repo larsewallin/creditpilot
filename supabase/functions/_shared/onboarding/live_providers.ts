@@ -12,7 +12,7 @@
  *   VIES (EU VAT), HMRC (GB VAT)                          HMRC_CLIENT_ID / HMRC_CLIENT_SECRET (optional)
  *   RDAP (domain registration date)
  *   FMP (non-US public financials)                        FMP_API_KEY (optional)
- *   File scoring app                                      FILE_API_URL / FILE_API_KEY (optional)
+ *   Keen scoring (hosted)                                 KEEN_API_URL / KEEN_API_KEY (optional)
  *   sanctions_entries table (filled daily by sanctions-sync)
  *   credit_events (Country, FX, Industry agents)
  */
@@ -146,11 +146,11 @@ export function liveProviders(deps: LiveDeps): OnboardingProviders {
       return { error: "not_found" };
     },
 
-    // ─── File scoring app ─────────────────────────────────────────────────────
-    async fileScore(app, financials): Promise<ScoreResult | ProviderError> {
-      const base = deps.env("FILE_API_URL"), key = deps.env("FILE_API_KEY");
+    // ─── Keen scoring ─────────────────────────────────────────────────────────
+    async keenScore(app, financials): Promise<ScoreResult | ProviderError> {
+      const base = deps.env("KEEN_API_URL"), key = deps.env("KEEN_API_KEY");
       if (!base || !key) return { error: "unavailable" };
-      return fileScore(base.replace(/\/$/, ""), key, app, financials ?? app.financial_statements);
+      return keenScore(base.replace(/\/$/, ""), key, app, financials ?? app.financial_statements);
     },
 
     // ─── Macro context from the existing agents ───────────────────────────────
@@ -333,7 +333,7 @@ export function liveProviders(deps: LiveDeps): OnboardingProviders {
     };
   }
 
-  async function fileScore(base: string, key: string, app: CreditApplication, financials: FinancialStatement[]): Promise<ScoreResult | ProviderError> {
+  async function keenScore(base: string, key: string, app: CreditApplication, financials: FinancialStatement[]): Promise<ScoreResult | ProviderError> {
     const body = {
       request_id: app.application_id,
       company: {
@@ -362,7 +362,7 @@ export function liveProviders(deps: LiveDeps): OnboardingProviders {
     const j = await r.json() as { score: number; model_version?: string; recommended_limit?: number; reason_codes?: { code: string }[] };
     if (typeof j.score !== "number") return { error: "unavailable" };
     return {
-      provider: "file", score: j.score, model_version: j.model_version,
+      provider: "keen", score: j.score, model_version: j.model_version,
       reason_codes: (j.reason_codes ?? []).map((c) => c.code),
       max_credit_recommendation_usd: j.recommended_limit,
     };

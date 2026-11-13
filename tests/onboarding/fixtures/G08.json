@@ -1,7 +1,7 @@
 {
   "id": "G08",
   "title": "No financial statements, uploaded bureau report only",
-  "why": "File returns insufficient_data (no financials) -> fallback to the uploaded bureau report: score 81 = band B, max credit recommendation 120,000 -> cap 120,000 x 0.75 = 90,000. needs = 40,000 x 1 x 1.15 = 46,000 -> recommended 45,000. Request 45,000 -> approve. Supportable 90,000 >= 54,000 -> higher-limit note.",
+  "why": "Keen returns insufficient_data (no financials) -> fallback to the uploaded bureau report: score 81 = band B, max credit recommendation 120,000 -> cap 120,000 x 0.75 = 90,000. needs = 40,000 x 1 x 1.15 = 46,000 -> recommended 45,000. Request 45,000 -> approve. Supportable 90,000 >= 54,000 -> higher-limit note.",
   "application": {
     "application_id": "G08",
     "submitted_by": "credit_team",
@@ -76,7 +76,7 @@
     "public_financials": {
       "error": "not_found"
     },
-    "file_score": {
+    "keen_score": {
       "error": "insufficient_data"
     }
   },
@@ -93,7 +93,7 @@
       "band": "B",
       "fallbacks": [
         {
-          "provider": "file",
+          "provider": "keen",
           "reason": "insufficient_data"
         }
       ]

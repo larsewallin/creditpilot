@@ -42,3 +42,4 @@ supabase/.temp/
 
 # Pre-migration database backups (scripts/migrate.sh)
 backups/
+_to_delete/

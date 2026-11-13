@@ -10,7 +10,7 @@ const app: CreditApplication = {
 const outcome: OnboardingOutcome = {
   application_id: "A1", stopped_at: "decision", events: [],
   screening: { status: "pass", checks: ["registry:gleif", "tax_id:vies", "sanctions_entity", "sanctions_people"], people_screened: 2, hits: [], fraud_flags: [] },
-  analysis: { financials_source: "uploaded_statements", statement_quality: "audited", score_source: "file", score: 91, band: "A", fallbacks: [],
+  analysis: { financials_source: "uploaded_statements", statement_quality: "audited", score_source: "keen", score: 91, band: "A", fallbacks: [],
     macro_context: [{ source_agent: "country_risk_agent", event_type: "COUNTRY_RATING_CHANGE", severity: "high", key: "DE", title: "Germany outlook cut to negative" }] },
   proposal: { decision: "counteroffer", human_required: true, requested_usd: 220_000, recommended_usd: 200_000, supportable_usd: 200_000,
     proposed_usd: 200_000, binding_method: "working_capital", higher_limit_note: false, macro_haircut_applied: true,
@@ -30,7 +30,7 @@ describe("composeOnboardingMemo", () => {
     expect(w.lines.join(" ")).toContain("bound by working capital");
   });
   it("cites its sources", () => {
-    expect(m.sections.find((s) => s.title === "Credit analysis")!.sources).toEqual(["Statements uploaded with the application", "File scoring app"]);
+    expect(m.sections.find((s) => s.title === "Credit analysis")!.sources).toEqual(["Statements uploaded with the application", "Keen"]);
     expect(m.sections.find((s) => s.title === "Market context")!.sources).toEqual(["Country Risk agent"]);
     expect(m.sections.find((s) => s.title === "Screening")!.sources).toContain("EU VIES VAT check");
   });

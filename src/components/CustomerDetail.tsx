@@ -20,8 +20,11 @@ function signalDotColor(severity: string) {
 function formatRatingSource(source: string): string {
   const labels: Record<string, string> = {
     sp: "S&P",
+    sp_fitch: "S&P / Fitch",
     dnb_paydex: "D&B Paydex",
     coface: "Coface",
+    keen: "Keen",
+    bureau_report: "Bureau report",
   };
   return labels[source] ?? source;
 }

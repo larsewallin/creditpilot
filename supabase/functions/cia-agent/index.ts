@@ -48,7 +48,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Anthropic from "https://esm.sh/@anthropic-ai/sdk@0.27.0";
 import { assessCompositeRisk } from "../_shared/skills/analytical/assess-composite-risk.ts";
 import { calculateCreditLimitProposal } from "../_shared/skills/analytical/calculate-credit-limit-proposal.ts";
-import { aggregateCreditScores } from "../_shared/skills/analytical/aggregate-credit-scores.ts";
 import { detectRatingChange } from "../_shared/skills/analytical/detect-rating-change.ts";
 import { composeTeamsAlert } from "../_shared/skills/generative/compose-teams-alert.ts";
 import { deliverMessage, EmailProvider, TeamsProvider, SlackProvider, LogProvider } from "../_shared/skills/integration/deliver-message.ts";
