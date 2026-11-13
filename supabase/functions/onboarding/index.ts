@@ -38,6 +38,7 @@ import type { CreditApplication, OnboardingOutcome, OnboardingSettings } from ".
 import { publishEvent } from "../_shared/publishEvent.ts";
 import { SectorEnum } from "../_shared/event_schemas.ts";
 import { NEW_CREDIT_LIMIT, decisionLabel, underwritingAssumptions } from "../_shared/onboarding/decision.ts";
+import { companyLookup, prefillFromCard, isCompanyId } from "../_shared/onboarding/company_lookup.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -79,6 +80,14 @@ Deno.serve(async (req) => {
         const user = await requireUser(req, [...RUNNERS]);
         return json(await assign(db, user, body));
       }
+      case "lookup_search": {
+        await requireUser(req, [...RUNNERS]);
+        return json(await lookupSearch(body));
+      }
+      case "lookup_card": {
+        await requireUser(req, [...RUNNERS]);
+        return json(await lookupCard(body));
+      }
       case "decide": {
         const user = await requireUser(req, [...DISPOSERS]);
         return json(await decide(db, user, body));
@@ -95,6 +104,33 @@ Deno.serve(async (req) => {
 });
 
 class UserError extends Error {}
+
+// ─── Company Lookup (autofill) ────────────────────────────────────────────────
+// The credit team types a name; Company Lookup searches the official registers.
+// Picking a result returns the card and the application fields it can fill,
+// each with its source and the date it was checked.
+
+const lookup = () => companyLookup({ baseUrl: Deno.env.get("COMPANY_LOOKUP_URL") || undefined });
+
+async function lookupSearch(body: { q?: unknown; country?: unknown }) {
+  const r = await lookup().search(String(body.q ?? ""), typeof body.country === "string" ? body.country : undefined);
+  if ("error" in r) throw new UserError(lookupMessage(r.error, r.message));
+  return r;
+}
+
+async function lookupCard(body: { id?: unknown; website?: unknown }) {
+  const id = String(body.id ?? "");
+  const r = await lookup().card(id, typeof body.website === "string" && body.website ? body.website : undefined);
+  if ("error" in r) throw new UserError(lookupMessage(r.error, r.message));
+  return { card: r, prefill: prefillFromCard(id, r) };
+}
+
+function lookupMessage(code: string, message?: string): string {
+  if (code === "bad_request") return message || "Check the search";
+  if (code === "not_found") return message || "Company not found";
+  if (code === "timeout") return "Company Lookup took too long; try again";
+  return "Company Lookup is unavailable; fill the fields by hand";
+}
 
 // ─── Actions ──────────────────────────────────────────────────────────────────
 
@@ -128,11 +164,20 @@ async function submit(db: SupabaseClient, user: AuthedUser, body: Record<string,
     }).select("id").single();
     if (error) throw new Error(`Could not create prospect: ${error.message}`);
     customerId = data.id as string;
-    const ids = [["tax_id", app.tax_id], ["duns", app.duns]].filter(([, v]) => v) as [string, string][];
+    // Identifiers the application carries. The Company Lookup id is the company's primary ID
+    // (an official number: register, SEC CIK or LEI); the others are kept alongside it.
+    const companyId = isCompanyId(app.company_id) ? app.company_id : undefined;
+    const ids = ([
+      ["company_id", companyId], ["registration_no", app.registration_no], ["cik", app.cik], ["lei", app.lei],
+      ["ticker", app.ticker?.toUpperCase()], ["tax_id", app.tax_id], ["duns", app.duns],
+    ] as [string, string | undefined][]).filter(([, v]) => v && String(v).trim()) as [string, string][];
     if (ids.length) {
-      await db.from("customer_identifiers").insert(ids.map(([id_type, id_value]) => ({
-        customer_id: customerId, id_type, id_value, is_primary: false, source: "customer_supplied",
-      })));
+      const { error: idErr } = await db.from("customer_identifiers").upsert(ids.map(([id_type, id_value]) => ({
+        customer_id: customerId, id_type, id_value: String(id_value).trim(), is_primary: id_type === "company_id",
+        source: id_type === "company_id" ? "company_lookup" : "customer_supplied",
+        verified_at: id_type === "company_id" ? new Date().toISOString() : null,
+      })), { onConflict: "id_type,id_value", ignoreDuplicates: true });   // one taken value never blocks the rest
+      if (idErr) console.error("[onboarding] customer_identifiers insert failed:", idErr.message);
     }
   }
 

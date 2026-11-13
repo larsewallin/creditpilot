@@ -68,6 +68,9 @@ export interface CreditApplication {
   is_public?: boolean;
   ticker?: string;
   cik?: string;
+  lei?: string;
+  /** Company Lookup id (gb:00445790, us:sec-0000320193, lei:…): the company's ID across CreditPilot, Company Lookup and Keen */
+  company_id?: string;
   date_established?: string; // as stated by applicant
   billing_address?: Address;
   address_type?: "commercial" | "residential" | "virtual" | "po_box";

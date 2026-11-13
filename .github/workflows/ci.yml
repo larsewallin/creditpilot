@@ -38,6 +38,25 @@ jobs:
       - name: Build
         run: npm run build
 
+  deno-check:
+    name: Edge functions (Deno check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Type-check every edge function
+        run: |
+          fail=0
+          for f in supabase/functions/*/index.ts; do
+            case "$f" in supabase/functions/_shared/*) continue ;; esac
+            echo "::group::$f"
+            deno check --quiet "$f" || { echo "::error file=$f::deno check failed"; fail=1; }
+            echo "::endgroup::"
+          done
+          exit $fail
+
   cia-harness:
     name: CIA harness
     runs-on: ubuntu-latest
