@@ -1,0 +1,38 @@
+name: Connect Keen
+
+# Creates a fresh Keen API key that no person sees, installs it on Keen (Vercel
+# project file-credit, KEEN_API_KEYS) and in CreditPilot (Supabase secrets
+# KEEN_API_KEY / KEEN_API_URL), redeploys Keen and checks a scored request.
+# Runs when ops/connect-keen.txt changes on main (that is how Claude triggers it:
+# a PR that edits the file), or by hand: Actions → Connect Keen → Run workflow.
+# Running it again rotates the key.
+
+on:
+  push:
+    branches: [main]
+    paths: [ops/connect-keen.txt]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: connect-keen
+  cancel-in-progress: false
+
+jobs:
+  connect:
+    name: Connect Keen
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 3.1.0
+      - name: Connect
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: scripts/connect-keen.sh

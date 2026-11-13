@@ -1,0 +1,3 @@
+# Editing this file on main runs the "Connect Keen" workflow (new Keen API key, installed on both sides).
+# Change the line below (e.g. the date) to rotate the key.
+2026-11-13 first connection

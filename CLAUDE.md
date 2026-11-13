@@ -70,7 +70,8 @@ back). Claude merges its own PRs once every check is green (founder 2026-11-13);
 that deletes data waits for the founder. Every merge to `main` runs Deploy
 (`.github/workflows/deploy.yml`; also Actions → Deploy → Run workflow): service settings
 synced into Supabase secrets (`scripts/sync-function-secrets.sh`, from GitHub
-production-environment secrets), encrypted backup, migrations, changed functions
+production-environment secrets; Keen's key is created and installed on both sides by the
+Connect Keen workflow, `scripts/connect-keen.sh`, triggered by editing `ops/connect-keen.txt`), encrypted backup, migrations, changed functions
 (`scripts/changed-since.mjs` against the `prod-migrated` / `prod-deployed` tags, which the
 workflow moves), CIA harness. Never move those tags by hand unless production was
 changed outside the workflow. Local fallback: `npm run db:prod -- …`, `scripts/deploy.sh <fn> prod`.
