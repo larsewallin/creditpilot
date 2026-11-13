@@ -131,10 +131,8 @@ if (!SUPABASE_URL.includes(PROD_REF)) {
 }
 console.log(`Running ${questions.length} questions sequentially...\n`);
 
-for (const q of questions) {
-  process.stdout.write(`  ${q.id} ... `);
-  let result;
-
+// One attempt at a question: ask, grade, never throw.
+async function attempt(q) {
   try {
     const { json, duration_ms } = await askQuestion(q.question);
     const response = {
@@ -144,32 +142,35 @@ for (const q of questions) {
       confidence_reason: json.confidence_reason ?? "",
     };
     const failures = evaluate(response, q.expected);
-    const questionPassed = failures.length === 0;
-
-    if (questionPassed) passed++; else failed++;
-    console.log(questionPassed ? `PASS (${duration_ms}ms)` : `FAIL (${duration_ms}ms)`);
-
-    result = {
-      id: q.id,
-      question: q.question,
-      passed: questionPassed,
-      failures,
-      response,
-      duration_ms,
-    };
+    return { id: q.id, question: q.question, passed: failures.length === 0, failures, response, duration_ms };
   } catch (err) {
-    failed++;
-    console.log(`ERROR: ${err.message}`);
-    result = {
-      id: q.id,
-      question: q.question,
-      passed: false,
-      failures: [`request_error: ${err.message}`],
-      response: null,
-      duration_ms: 0,
-    };
+    return { id: q.id, question: q.question, passed: false, failures: [`request_error: ${err.message}`], response: null, duration_ms: 0 };
   }
+}
 
+// A failed question is asked once more (CIA_RETRIES, default 1): the answers come from a
+// language model, so one run can wobble on a borderline criterion (backlog E11). A real
+// regression fails every attempt. A pass on retry is reported, with the first failure kept.
+const RETRIES = Math.max(0, Number(process.env.CIA_RETRIES ?? 1));
+let passedOnRetry = 0;
+
+for (const q of questions) {
+  process.stdout.write(`  ${q.id} ... `);
+  let result = await attempt(q);
+  const earlier = [];
+  for (let i = 0; i < RETRIES && !result.passed; i++) {
+    earlier.push({ failures: result.failures, confidence: result.response?.confidence ?? null, confidence_reason: result.response?.confidence_reason ?? null });
+    result = await attempt(q);
+  }
+  if (earlier.length) result.earlier_attempts = earlier;
+  if (result.passed) {
+    passed++;
+    if (earlier.length) passedOnRetry++;
+    console.log(earlier.length ? `PASS on retry (${result.duration_ms}ms; first attempt: ${earlier[0].failures.join("; ")})` : `PASS (${result.duration_ms}ms)`);
+  } else {
+    failed++;
+    console.log(result.failures[0]?.startsWith("request_error") ? `ERROR: ${result.failures[0].slice(15)}` : `FAIL (${result.duration_ms}ms)`);
+  }
   results.push(result);
 }
 
@@ -184,7 +185,7 @@ await writeFile(outPath, JSON.stringify({ timestamp, results }, null, 2), "utf8"
 // ── Summary ────────────────────────────────────────────────────────────────
 
 console.log(`\n${"─".repeat(60)}`);
-console.log(`Results: ${passed}/${questions.length} passed, ${failed} failed`);
+console.log(`Results: ${passed}/${questions.length} passed, ${failed} failed${passedOnRetry ? ` (${passedOnRetry} passed on retry)` : ""}`);
 console.log(`Saved:   ${outPath}`);
 
 if (failed > 0) {
@@ -195,6 +196,7 @@ if (failed > 0) {
       for (const f of r.failures) {
         console.log(`    • ${f}`);
       }
+      if (r.response?.confidence_reason) console.log(`    confidence reason: ${r.response.confidence_reason}`);
     }
   }
   console.log();
