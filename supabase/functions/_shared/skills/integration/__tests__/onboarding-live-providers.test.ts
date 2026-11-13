@@ -151,6 +151,17 @@ describe("Keen adapter", () => {
     const r = await liveProviders({ db: fakeDb(), env, fetch: f }).keenScore(app());
     expect(r).toEqual({ provider: "keen", score: 92, model_version: "m1", reason_codes: ["CURRENT_RATIO"], max_credit_recommendation_usd: 60_000 });
   });
+  it("sends the ticker and CIK with a Bearer key (Keen API v1 scores public companies by ticker)", async () => {
+    let sent: { auth?: string; body?: { company: Record<string, unknown> } } = {};
+    const f = fakeFetch([[/keen\.test\/v1\/score$/, (_u, init) => {
+      sent = { auth: (init?.headers as Record<string, string>)?.Authorization, body: JSON.parse(String(init?.body)) };
+      return ok({ score: 70 });
+    }]]);
+    await liveProviders({ db: fakeDb(), env, fetch: f }).keenScore(app({ ticker: "AAPL", cik: "0000320193" }));
+    expect(sent.auth).toBe("Bearer k");
+    expect(sent.body?.company.ticker).toBe("AAPL");
+    expect(sent.body?.company.cik).toBe("0000320193");
+  });
   it("maps 422 to insufficient data and a missing config to unavailable", async () => {
     const f = fakeFetch([[/keen\.test/, () => new Response("", { status: 422 })]]);
     expect(await liveProviders({ db: fakeDb(), env, fetch: f }).keenScore(app())).toEqual({ error: "insufficient_data" });

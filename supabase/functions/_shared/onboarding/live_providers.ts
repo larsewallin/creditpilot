@@ -339,6 +339,9 @@ export function liveProviders(deps: LiveDeps): OnboardingProviders {
       company: {
         legal_name: app.legal_name, country_code: app.country_code, registration_no: app.registration_no,
         tax_id: app.tax_id, duns: app.duns, website: app.website,
+        // Keen API v1 scores public companies from their latest 10-K by ticker; without one it answers
+        // 422 insufficient_data and the pipeline falls back to the next score source.
+        ticker: app.ticker, cik: app.cik,
       },
       financials,
       requested_limit: app.credit_request.amount_usd,
