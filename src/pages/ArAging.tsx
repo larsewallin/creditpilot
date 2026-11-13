@@ -47,7 +47,9 @@ export default function ArAging() {
 
   // Upload dialog state
   const [uploadOpen, setUploadOpen] = useState(false);
-  const [uploadStep, setUploadStep] = useState<"pick" | "mapping" | "success">("pick");
+  const [uploadStep, setUploadStep] = useState<"pick" | "mapping" | "dateorder" | "success">("pick");
+  const [dateOrder, setDateOrder] = useState<"DMY" | "MDY" | null>(null);
+  const [dateOrderMessage, setDateOrderMessage] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [mappingState, setMappingState] = useState<MappingState | null>(null);
   const [manualMap, setManualMap] = useState<Record<string, string>>({});
@@ -108,6 +110,7 @@ export default function ArAging() {
       if (resolvedMap) form.append("column_map", JSON.stringify(resolvedMap));
       form.append("is_demo", String(DEMO_MODE));
       form.append("as_of_date", reportDate);
+      if (dateOrder) form.append("date_order", dateOrder);
 
       const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch(
@@ -120,6 +123,14 @@ export default function ArAging() {
       );
 
       const json = await res.json();
+
+      if (res.status === 422 && json.needs_date_order) {
+        // Dates like 03/04/2026 can be read two ways: the user chooses
+        setDateOrderMessage(json.error ?? "");
+        setUploadStep("dateorder");
+        setUploading(false);
+        return;
+      }
 
       if (res.status === 422 && json.unmapped_columns) {
         // Needs manual column mapping
@@ -157,6 +168,8 @@ export default function ArAging() {
     setUploadOpen(false);
     setUploadStep("pick");
     setUploadFile(null);
+    setDateOrder(null);
+    setDateOrderMessage("");
     setMappingState(null);
     setManualMap({});
     setUploadResult(null);
@@ -380,6 +393,34 @@ export default function ArAging() {
                       onClick={handleUpload}
                       disabled={uploading || mappingState.unmapped.some((f) => !manualMap[f])}
                     >
+                      {uploading ? "Uploading…" : "Upload"}
+                    </Button>
+                  </DialogFooter>
+                </>
+              )}
+
+              {uploadStep === "dateorder" && (
+                <>
+                  <DialogHeader>
+                    <DialogTitle>Which date format does the file use?</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-3 py-2">
+                    <p className="text-xs text-muted-foreground">
+                      {dateOrderMessage || "Dates like 03/04/2026 can be read two ways."}
+                    </p>
+                    <Select value={dateOrder ?? ""} onValueChange={(v) => setDateOrder(v as "DMY" | "MDY")}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="Choose the date format…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="MDY" className="text-xs">Month/day/year (03/04/2026 = March 4)</SelectItem>
+                        <SelectItem value="DMY" className="text-xs">Day/month/year (03/04/2026 = 3 April)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" size="sm" onClick={() => setUploadStep("pick")}>Back</Button>
+                    <Button size="sm" onClick={handleUpload} disabled={uploading || !dateOrder}>
                       {uploading ? "Uploading…" : "Upload"}
                     </Button>
                   </DialogFooter>

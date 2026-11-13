@@ -56,9 +56,22 @@ Deno.serve(async (req) => {
     const isDemo = formData.get("is_demo") === "true";
     const as_of_date = (formData.get("as_of_date") as string | null) ?? undefined;
     const customer_currency = (formData.get("customer_currency") as string | null) ?? undefined;
+    const dateOrderRaw = formData.get("date_order") as string | null;
+    const date_order = dateOrderRaw === "DMY" || dateOrderRaw === "MDY" ? dateOrderRaw : undefined;
 
     const csvText = await file.text();
-    const parseResult = parseARCsv(csvText, columnMap, as_of_date, customer_currency);
+    const parseResult = parseARCsv(csvText, columnMap, as_of_date, customer_currency, date_order);
+
+    if (parseResult.needs_date_order) {
+      return new Response(
+        JSON.stringify({
+          error: parseResult.errors[0]?.message ?? "Choose the date order",
+          needs_date_order: true,
+          column_map: parseResult.column_map,
+        }),
+        { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     if (parseResult.unmapped_columns.length > 0) {
       return new Response(
