@@ -10,7 +10,7 @@
 // This is the gateway / anti-corruption layer for the V1 taxonomy.
 // Every agent uses this; no agent inserts into credit_events directly.
 
-import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.98.0";
 import {
   getPayloadSchema,
   severityToScore,

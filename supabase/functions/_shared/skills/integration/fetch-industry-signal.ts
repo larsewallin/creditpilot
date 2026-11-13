@@ -13,7 +13,7 @@
  * @usedBy industry-risk-agent
  */
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.98.0";
 import { getIndicatorsForSector } from "../analytical/sector-exposure-direction.ts";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -58,10 +58,10 @@ export interface RawNewsSignal {
 
 export type RawSignal = RawEconSignal | RawNewsSignal;
 
-export interface IndustrySignalSource {
+export interface IndustrySignalSource<T extends RawSignal = RawSignal> {
   name: string;
   enabled: boolean;
-  fetch(sector: string, since: Date): Promise<RawSignal[]>;
+  fetch(sector: string, since: Date): Promise<T[]>;
 }
 
 // ─── FredBlsSource ──────────────────────────────────────────────────────────
@@ -69,7 +69,7 @@ export interface IndustrySignalSource {
 const FRED_OBSERVATIONS_URL = "https://api.stlouisfed.org/fred/series/observations";
 const YEAR_MS = 365 * 24 * 60 * 60 * 1000;
 
-export class FredBlsSource implements IndustrySignalSource {
+export class FredBlsSource implements IndustrySignalSource<RawEconSignal> {
   readonly name = "fred_bls";
   readonly enabled: boolean;
 
@@ -168,7 +168,7 @@ function gdeltDateToIso(seendate: string): string {
   return m ? `${m[1]}-${m[2]}-${m[3]}` : new Date().toISOString().slice(0, 10);
 }
 
-export class GdeltSource implements IndustrySignalSource {
+export class GdeltSource implements IndustrySignalSource<RawNewsSignal> {
   readonly name = "gdelt";
   // GDELT's DOC 2.0 API is public and requires no key — verified live
   // (fred.stlouisfed.org requires a key; GDELT does not).

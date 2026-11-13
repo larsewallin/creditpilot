@@ -102,8 +102,8 @@ Deno.serve(async (req) => {
   const DEMO_MODE = Deno.env.get("DEMO_MODE") === "true";
   const FRED_API_KEY = Deno.env.get("FRED_API_KEY");
 
-  const econSource: IndustrySignalSource = new FredBlsSource(FRED_API_KEY);
-  const newsSource: IndustrySignalSource = new GdeltSource();
+  const econSource: IndustrySignalSource<RawEconSignal> = new FredBlsSource(FRED_API_KEY);
+  const newsSource: IndustrySignalSource<RawNewsSignal> = new GdeltSource();
 
   // --- Rate limit check ---
   const cutoff = new Date(Date.now() - RATE_LIMIT_MINUTES * 60 * 1000).toISOString();

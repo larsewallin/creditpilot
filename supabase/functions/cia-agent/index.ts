@@ -44,7 +44,7 @@
 // Credit Intelligence Agent (CIA) — synthesises signals from all agents into daily briefings
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.98.0";
 import Anthropic from "https://esm.sh/@anthropic-ai/sdk@0.27.0";
 import { assessCompositeRisk } from "../_shared/skills/analytical/assess-composite-risk.ts";
 import { calculateCreditLimitProposal } from "../_shared/skills/analytical/calculate-credit-limit-proposal.ts";
