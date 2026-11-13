@@ -3,7 +3,8 @@ name: Deploy
 # Ships main to production: automatically after every push (merge) to main,
 # or by hand with Actions → Deploy → Run workflow (founder 2026-11-13).
 #
-# 0. Copies the service settings (KEEN_*, COMPANY_LOOKUP_URL, TCM_API_URL) from
+# 0. Copies the service settings (COMPANY_LOOKUP_URL, TCM_API_URL; Keen's key comes from
+#    the Connect Keen workflow) from
 #    the production environment's secrets into Supabase function secrets.
 # 1. Works out what changed since the last deploy (tags prod-migrated / prod-deployed).
 # 2. Backs up the public schema (encrypted, kept 30 days as a run artifact).
@@ -47,8 +48,6 @@ jobs:
       CIA_INTERNAL_TEST_SECRET: ${{ secrets.CIA_INTERNAL_TEST_SECRET }}
       BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
       # Service settings copied into Supabase function secrets (empty ones are skipped, never unset)
-      KEEN_API_KEY: ${{ secrets.KEEN_API_KEY }}
-      KEEN_API_URL: ${{ secrets.KEEN_API_URL }}
       COMPANY_LOOKUP_URL: ${{ secrets.COMPANY_LOOKUP_URL }}
       TCM_API_URL: ${{ secrets.TCM_API_URL }}
     steps:

@@ -10,7 +10,8 @@ set -euo pipefail
 # Used by the Deploy workflow, which reads them from GitHub production-
 # environment secrets.
 
-NAMES=(KEEN_API_KEY KEEN_API_URL COMPANY_LOOKUP_URL TCM_API_URL)
+# KEEN_API_KEY / KEEN_API_URL are installed by scripts/connect-keen.sh (Connect Keen workflow), not here.
+NAMES=(COMPANY_LOOKUP_URL TCM_API_URL)
 
 ENV="${1:-}"
 case "$ENV" in
