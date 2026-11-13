@@ -101,7 +101,6 @@ jobs:
         if: steps.plan.outputs.any == 'yes'
 
       - name: Install Postgres 17 client
-        if: steps.plan.outputs.any == 'yes'
         run: |
           sudo apt-get install -y -q postgresql-common
           sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
@@ -195,7 +194,13 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/types"
           supabase gen types typescript --project-id "$PROD_REF" --schema public > "$RUNNER_TEMP/types/types.ts"
-          if cmp -s "$RUNNER_TEMP/types/types.ts" src/integrations/supabase/types.ts; then echo "Types are current."; else echo "::notice::Database types differ from src/integrations/supabase/types.ts (see the db-types artifact)."; fi
+          if cmp -s "$RUNNER_TEMP/types/types.ts" src/integrations/supabase/types.ts; then
+            echo "Types are current."
+          else
+            echo "::notice::Database types differ from src/integrations/supabase/types.ts (db-types artifact, and the DB_TYPES_GZ_B64 log line)."
+            # One log line, so a session that can read logs but not artifacts can apply it. Schema only, no data.
+            echo "DB_TYPES_GZ_B64=$(gzip -9 -c "$RUNNER_TEMP/types/types.ts" | base64 -w 0)"
+          fi
       - uses: actions/upload-artifact@v4
         continue-on-error: true
         with:
@@ -207,3 +212,8 @@ jobs:
       - name: CIA harness (must be 8/8)
         if: steps.plan.outputs.any == 'yes'
         run: node tests/cia/run.mjs
+
+      - name: Live checks (read-only)
+        if: always()
+        continue-on-error: true
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "SET default_transaction_read_only = on" -f scripts/live-checks.sql

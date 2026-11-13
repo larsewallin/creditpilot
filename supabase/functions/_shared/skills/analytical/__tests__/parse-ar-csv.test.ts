@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseARCsv, autoMapColumns, parseDate, parseAmount } from "../parse-ar-csv";
+import { parseARCsv, autoMapColumns, parseDate, parseAmount, detectDateOrder, detectDecimalMark } from "../parse-ar-csv";
 
 // ── autoMapColumns ───────────────────────────────────────────────────────────
 
@@ -120,7 +120,7 @@ describe("parseARCsv", () => {
       "Invoice No,Debtor,Invoice Date,Due Date,Amount,Balance",
       "INV-100,Globex Corp,01/01/2025,01/02/2025,20000,20000",
     ].join("\n");
-    const result = parseARCsv(csv);
+    const result = parseARCsv(csv, undefined, undefined, undefined, "DMY");
     expect(result.unmapped_columns).toHaveLength(0);
     expect(result.invoices).toHaveLength(1);
     expect(result.invoices[0].invoice_number).toBe("INV-100");
@@ -259,5 +259,93 @@ describe("parseARCsv", () => {
     expect(result.currency_warnings[0].invoice_number).toBe("INV-001");
     expect(result.currency_warnings[0].invoice_currency).toBe("EUR");
     expect(result.currency_warnings[0].expected_currency).toBe("USD");
+  });
+});
+
+
+// ── Fixes found while porting Payment Risk (2026-11-13) ─────────────────────
+
+describe("column mapping: most specific name wins", () => {
+  it("'Date' before 'Invoice Date' still maps Invoice Date", () => {
+    const map = autoMapColumns(["Date", "Invoice No", "Customer", "Invoice Date", "Due Date", "Balance"]);
+    expect(map.invoice_date).toBe("Invoice Date");
+  });
+  it("'Payment Date' is never read as the due date", () => {
+    const map = autoMapColumns(["Invoice No", "Customer", "Invoice Date", "Payment Date", "Balance"]);
+    expect(map.due_date).toBeUndefined();
+  });
+  it("bare 'Date' is used when nothing more specific exists", () => {
+    expect(autoMapColumns(["Date", "Due Date"]).invoice_date).toBe("Date");
+  });
+});
+
+describe("dates: one order for the whole file", () => {
+  const head = "Invoice No,Customer,Invoice Date,Due Date,Balance";
+  it("a US file is read month-first from one unambiguous date", () => {
+    const r = parseARCsv([head, "A,X,03/04/2026,04/03/2026,10", "B,X,03/04/2026,03/25/2026,10"].join("\n"));
+    expect(r.date_order).toBe("MDY");
+    expect(r.invoices[0].invoice_date).toBe("2026-03-04");
+    expect(r.invoices[1].due_date).toBe("2026-03-25");
+  });
+  it("a European file is read day-first", () => {
+    const r = parseARCsv([head, "A,X,03/04/2026,25/04/2026,10"].join("\n"));
+    expect(r.date_order).toBe("DMY");
+    expect(r.invoices[0].invoice_date).toBe("2026-04-03");
+  });
+  it("an all-ambiguous file imports nothing and asks for the order", () => {
+    const r = parseARCsv([head, "A,X,03/04/2026,04/05/2026,10"].join("\n"));
+    expect(r.needs_date_order).toBe(true);
+    expect(r.invoices).toHaveLength(0);
+  });
+  it("the caller's order is used when given", () => {
+    const r = parseARCsv([head, "A,X,03/04/2026,04/05/2026,10"].join("\n"), undefined, undefined, undefined, "MDY");
+    expect(r.invoices[0].invoice_date).toBe("2026-03-04");
+    expect(r.needs_date_order).toBeUndefined();
+  });
+  it("a file mixing both orders asks instead of guessing", () => {
+    const r = parseARCsv([head, "A,X,25/04/2026,04/25/2026,10"].join("\n"));
+    expect(r.needs_date_order).toBe(true);
+    expect(r.invoices).toHaveLength(0);
+  });
+  it("ISO dates need no order", () => {
+    const r = parseARCsv([head, "A,X,2026-03-04,2026-04-03,10"].join("\n"));
+    expect(r.needs_date_order).toBeUndefined();
+    expect(r.invoices).toHaveLength(1);
+  });
+  it("detectDateOrder and impossible dates", () => {
+    expect(detectDateOrder(["13/01/2026"])).toBe("DMY");
+    expect(detectDateOrder(["01/13/2026"])).toBe("MDY");
+    expect(detectDateOrder(["01/02/2026"])).toBeNull();
+    expect(parseDate("31/02/2026")).toBeNull();
+    expect(parseDate("29/02/2028")).toBe("2028-02-29");
+  });
+});
+
+describe("amounts", () => {
+  it("European format", () => {
+    expect(parseAmount("1.234,56")).toBe(1234.56);
+    expect(parseAmount("1.234.567,89")).toBe(1234567.89);
+    expect(parseAmount("1 234,56", ",")).toBe(1234.56);
+  });
+  it("negatives", () => {
+    expect(parseAmount("(1,234.00)")).toBe(-1234);
+    expect(parseAmount("1,234.00-")).toBe(-1234);
+    expect(parseAmount("\u22121234.5")).toBe(-1234.5);
+    expect(parseAmount("1,234.56 CR")).toBe(-1234.56);
+    expect(parseAmount("1,234.56 DR")).toBe(1234.56);
+    expect(parseAmount("-$500")).toBe(-500);
+  });
+  it("currency codes and odd input", () => {
+    expect(parseAmount("USD 2,500.00")).toBe(2500);
+    expect(parseAmount("1e5")).toBeNull();
+    expect(parseAmount("12abc")).toBeNull();
+    expect(parseAmount("1.2.3")).toBeNull();
+  });
+  it("decimal mark decided per column", () => {
+    expect(detectDecimalMark(["1.234,56", "500,00", "1.000"])).toBe(",");
+    expect(detectDecimalMark(["1,234.56", "500.00", "1,000"])).toBe(".");
+    const head = "Invoice No,Customer,Invoice Date,Due Date,Balance";
+    const r = parseARCsv([head, 'A,X,2026-01-01,2026-02-01,"1.000"', 'B,X,2026-01-01,2026-02-01,"250,50"'].join("\n"));
+    expect(r.invoices.map((i) => i.outstanding_amount)).toEqual([1000, 250.5]);
   });
 });

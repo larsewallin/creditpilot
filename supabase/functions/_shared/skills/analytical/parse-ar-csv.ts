@@ -35,15 +35,23 @@ export interface ParseResult {
   available_columns:    string[];           // all headers found in the CSV
   validation_warnings:  { row: number; field: string; message: string }[];
   currency_warnings:    { row: number; invoice_number: string; invoice_currency: string; expected_currency: string }[];
+  /** "DMY" | "MDY" used for slash/dash dates, or null when the file has none */
+  date_order?:          DateOrder | null;
+  /** true when dates like 03/04/2026 can't be read without the caller choosing the order; nothing is imported */
+  needs_date_order?:    boolean;
 }
+
+export type DateOrder = "DMY" | "MDY";
 
 // ─── Column alias map ─────────────────────────────────────────────────────────
 
 const COLUMN_ALIASES: Record<string, string[]> = {
   invoice_number:     ["invoice no", "inv number", "invoice number", "document number", "doc no", "ref", "invoice #", "inv #", "invoice_number"],
   customer_name:      ["customer", "account", "debtor", "client", "company", "customer name", "account name", "customer_name"],
-  invoice_date:       ["invoice date", "doc date", "date", "issue date", "inv date", "invoice_date"],
-  due_date:           ["due date", "payment due", "maturity date", "due", "payment date", "due_date"],
+  // Most specific first; bare "date" only when nothing more specific is in the file.
+  invoice_date:       ["invoice date", "invoice_date", "inv date", "doc date", "issue date", "date"],
+  // "payment date" is when an invoice was paid, not when it is due: never mapped here.
+  due_date:           ["due date", "due_date", "payment due", "maturity date", "due"],
   amount:             ["amount", "invoice amount", "gross amount", "total", "original amount", "gross"],
   outstanding_amount: ["outstanding", "balance", "open amount", "remaining", "outstanding amount", "open balance", "balance due", "outstanding_amount"],
   currency:               ["currency", "curr", "ccy"],
@@ -98,7 +106,12 @@ function parseCSVText(text: string): { rows: string[][]; delimiter: string } {
 
 // ─── Date parsing ─────────────────────────────────────────────────────────────
 
-export function parseDate(val: string): string | null {
+/**
+ * Parses one date. Slash/dash dates whose day and month can't be told apart
+ * (03/04/2026) are read in `order` (default "DMY"); parseARCsv decides the
+ * order for the whole file first and never relies on this default silently.
+ */
+export function parseDate(val: string, order: DateOrder = "DMY"): string | null {
   const v = val.trim();
   if (!v) return null;
 
@@ -121,11 +134,12 @@ export function parseDate(val: string): string | null {
         } else if (b > 12) {
           // b must be day → MM/DD/YYYY
           month = a; day = b;
+        } else if (order === "MDY") {
+          month = a; day = b;
         } else {
-          // Ambiguous — default to DD/MM/YYYY (international ERP convention)
           day = a; month = b;
         }
-        if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+        if (month >= 1 && month <= 12 && day >= 1 && day <= daysIn(c, month)) {
           return `${c}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
         }
       }
@@ -135,14 +149,84 @@ export function parseDate(val: string): string | null {
   return null;
 }
 
+function daysIn(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+/**
+ * Decides the day/month order from every slash/dash date in the file:
+ * a first part above 12 means day-first, a second part above 12 means
+ * month-first. Returns "conflict" when both appear, null when no date settles it.
+ */
+export function detectDateOrder(values: string[]): DateOrder | "conflict" | null {
+  let dmy = false, mdy = false;
+  for (const raw of values) {
+    const m = /^\s*(\d{1,2})[/-](\d{1,2})[/-](\d{4})\s*$/.exec(raw ?? "");
+    if (!m) continue;
+    const a = Number(m[1]), b = Number(m[2]);
+    if (a > 12 && b <= 12) dmy = true;
+    if (b > 12 && a <= 12) mdy = true;
+  }
+  if (dmy && mdy) return "conflict";
+  return dmy ? "DMY" : mdy ? "MDY" : null;
+}
+
+function isAmbiguousDate(raw: string): boolean {
+  const m = /^\s*(\d{1,2})[/-](\d{1,2})[/-](\d{4})\s*$/.exec(raw ?? "");
+  return !!m && Number(m[1]) <= 12 && Number(m[2]) <= 12 && m[1] !== m[2];
+}
+
 // ─── Amount parsing ───────────────────────────────────────────────────────────
 
-export function parseAmount(val: string): number | null {
+export type DecimalMark = "." | ",";
+
+/**
+ * Decides a column's decimal mark from all its values: a value with both marks
+ * uses the last one as the decimal mark; a lone comma followed by 1-2 digits
+ * at the end ("12,5") means comma. Defaults to "." (US).
+ */
+export function detectDecimalMark(values: string[]): DecimalMark {
+  let comma = 0, dot = 0;
+  for (const raw of values) {
+    const v = (raw ?? "").replace(/[^\d.,]/g, "");
+    const lc = v.lastIndexOf(","), ld = v.lastIndexOf(".");
+    if (lc >= 0 && ld >= 0) { if (lc > ld) comma++; else dot++; continue; }
+    if (lc >= 0 && /,\d{1,2}$/.test(v) && (v.match(/,/g) ?? []).length === 1) comma++;
+    else if (ld >= 0 && /\.\d{1,2}$/.test(v) && (v.match(/\./g) ?? []).length === 1) dot++;
+  }
+  return comma > dot ? "," : ".";
+}
+
+/**
+ * Parses an amount: currency symbols and codes, spaces and thousands
+ * separators removed; "(1,234.00)", a leading or trailing minus (also the
+ * Unicode minus) and a "CR" suffix mean negative. `mark` is the decimal mark;
+ * without it a value with both marks uses the last one, otherwise ".".
+ */
+export function parseAmount(val: string, mark?: DecimalMark): number | null {
   if (!val || !val.trim()) return null;
-  // Remove currency symbols, spaces; remove commas only when used as thousands separators
-  const cleaned = val.replace(/[£$€\s]/g, "").replace(/,(?=\d{3}(\D|$))/g, "").trim();
-  const num = parseFloat(cleaned);
-  return isNaN(num) ? null : num;
+  let v = val.trim().replace(/\u2212/g, "-");
+  let negative = false;
+  if (/^\(.*\)$/.test(v)) { negative = true; v = v.slice(1, -1); }
+  if (/\s*CR$/i.test(v)) { negative = true; v = v.replace(/\s*CR$/i, ""); }
+  else if (/\s*DR$/i.test(v)) { v = v.replace(/\s*DR$/i, ""); }
+  v = v.replace(/[£$€¥]|\b[A-Z]{3}\b/g, "").replace(/[\s\u00a0']/g, "");
+  if (/^-/.test(v)) { negative = !negative; v = v.slice(1); }
+  if (/-$/.test(v)) { negative = !negative; v = v.slice(0, -1); }
+  if (!/^[\d.,]+$/.test(v) || !/\d/.test(v)) return null;
+  let m: DecimalMark = mark ?? ".";
+  if (!mark) {
+    const lc = v.lastIndexOf(","), ld = v.lastIndexOf(".");
+    if (lc >= 0 && ld >= 0) m = lc > ld ? "," : ".";
+  }
+  const thousands = m === "," ? "." : ",";
+  const parts = v.split(m);
+  if (parts.length > 2) return null;
+  const intPart = parts[0].split(thousands).join("");
+  if (!/^\d*$/.test(intPart) || (parts[1] !== undefined && !/^\d*$/.test(parts[1]))) return null;
+  const num = Number(parts[1] !== undefined ? `${intPart || "0"}.${parts[1]}` : intPart);
+  if (!Number.isFinite(num)) return null;
+  return negative ? -num : num;
 }
 
 // ─── Days overdue ─────────────────────────────────────────────────────────────
@@ -165,10 +249,11 @@ export function autoMapColumns(headers: string[]): Record<string, string> {
   const result: Record<string, string> = {};
   const usedHeaders = new Set<string>();
 
+  // For each field the most specific alias wins, whatever the column order.
   for (const [field, aliases] of Object.entries(COLUMN_ALIASES)) {
-    for (const header of headers) {
-      if (usedHeaders.has(header)) continue;
-      if (aliases.includes(header.toLowerCase().trim())) {
+    for (const alias of aliases) {
+      const header = headers.find((h) => !usedHeaders.has(h) && h.toLowerCase().trim() === alias);
+      if (header !== undefined) {
         result[field] = header;
         usedHeaders.add(header);
         break;
@@ -185,7 +270,8 @@ export function parseARCsv(
   csvText: string,
   columnMap?: Record<string, string>,
   as_of_date?: string,
-  customer_currency?: string
+  customer_currency?: string,
+  date_order?: DateOrder
 ): ParseResult {
   try {
     const { rows } = parseCSVText(csvText);
@@ -207,6 +293,38 @@ export function parseARCsv(
     const unmapped_columns = REQUIRED_FIELDS.filter((f) => !resolvedMap[f]);
 
     const referenceDate = as_of_date ? new Date(as_of_date) : undefined;
+
+    const columnValues = (field: string): string[] => {
+      const idx = resolvedMap[field] ? headers.findIndex((h) => h === resolvedMap[field]) : -1;
+      return idx >= 0 ? rows.slice(1).map((r) => r[idx] ?? "") : [];
+    };
+
+    // Day/month order for the whole file: given by the caller, else read from
+    // the dates themselves. Never guessed: an ambiguous file imports nothing.
+    const dateValues = [...columnValues("invoice_date"), ...columnValues("due_date")];
+    let order: DateOrder | null = date_order ?? null;
+    if (!order) {
+      const found = detectDateOrder(dateValues);
+      if (found === "conflict") {
+        return {
+          invoices: [], unmapped_columns, column_map: resolvedMap, available_columns: headers,
+          errors: [{ row: 0, message: "The file mixes day-first and month-first dates; fix the dates or choose the order." }],
+          validation_warnings: [], currency_warnings: [], date_order: null, needs_date_order: true,
+        };
+      }
+      order = found;
+      if (!order && dateValues.some(isAmbiguousDate)) {
+        return {
+          invoices: [], unmapped_columns, column_map: resolvedMap, available_columns: headers,
+          errors: [{ row: 0, message: "Dates like 03/04/2026 can be read two ways. Choose whether the file uses day/month or month/day." }],
+          validation_warnings: [], currency_warnings: [], date_order: null, needs_date_order: true,
+        };
+      }
+    }
+    const readDate = (v: string) => parseDate(v, order ?? "DMY");
+
+    const outstandingMark = detectDecimalMark(columnValues("outstanding_amount"));
+    const amountMark = detectDecimalMark(columnValues("amount"));
 
     const invoices: ParsedInvoice[] = [];
     const errors: { row: number; message: string }[] = [];
@@ -233,7 +351,7 @@ export function parseARCsv(
       }
 
       const dueDateRaw = get("due_date");
-      const dueDate = parseDate(dueDateRaw);
+      const dueDate = readDate(dueDateRaw);
       if (!dueDate) {
         errors.push({ row: i + 1, message: `Invalid due_date: "${dueDateRaw}"` });
         continue;
@@ -243,7 +361,7 @@ export function parseARCsv(
       let invoiceDate: string;
       if (resolvedMap["invoice_date"]) {
         const invoiceDateRaw = get("invoice_date");
-        const parsed = parseDate(invoiceDateRaw);
+        const parsed = readDate(invoiceDateRaw);
         if (!parsed) {
           errors.push({ row: i + 1, message: `Invalid or missing invoice_date: "${invoiceDateRaw}"` });
           continue;
@@ -254,14 +372,14 @@ export function parseARCsv(
       }
 
       const outstandingRaw = get("outstanding_amount");
-      const outstanding = parseAmount(outstandingRaw);
+      const outstanding = parseAmount(outstandingRaw, outstandingMark);
       if (outstanding === null) {
         errors.push({ row: i + 1, message: `Invalid outstanding_amount: "${outstandingRaw}"` });
         continue;
       }
 
       const amountRaw = get("amount");
-      const amount = parseAmount(amountRaw) ?? outstanding;
+      const amount = parseAmount(amountRaw, amountMark) ?? outstanding;
 
       const daysOverdueRaw = get("days_overdue");
       const parsedDpd = daysOverdueRaw ? parseInt(daysOverdueRaw, 10) : NaN;
@@ -310,7 +428,7 @@ export function parseARCsv(
       });
     }
 
-    return { invoices, errors, unmapped_columns, column_map: resolvedMap, available_columns: headers, validation_warnings, currency_warnings };
+    return { invoices, errors, unmapped_columns, column_map: resolvedMap, available_columns: headers, validation_warnings, currency_warnings, date_order: order };
   } catch (err) {
     return {
       invoices: [],
