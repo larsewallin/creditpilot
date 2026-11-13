@@ -43,14 +43,16 @@ credential afterward.
 
 ## Always deploy and migrate through scripts/deploy.sh and scripts/migrate.sh — never bare supabase/psql commands
 
-`scripts/deploy.sh <function> staging|prod` and `scripts/migrate.sh <file.sql> [--apply]`
+`scripts/deploy.sh [--delete] <function> staging|prod` and
+`scripts/migrate.sh <file.sql> [<file.sql> ...] [--apply]`
 exist specifically so a bare `supabase functions deploy`, `supabase db push`, or `psql
-"$DATABASE_URL" -f ...` can never silently land on the wrong project. `deploy.sh` links
-explicitly around each deploy (staging is currently paused — see "Staging must match
-production" below — so `deploy.sh staging` refuses outright rather than relinking
-anywhere); `migrate.sh` requires `DATABASE_URL` to be set, prints the (password-masked)
+"$DATABASE_URL" -f ...` can never silently land on the wrong project. `deploy.sh` passes
+`--project-ref` explicitly on every deploy or delete, so it never depends on `supabase link`
+state (staging is currently paused — see "Staging must match production" below — so
+`deploy.sh staging` refuses outright); `migrate.sh` requires `DATABASE_URL` to be set, prints the (password-masked)
 target before running, refuses any migration file containing its own
-`BEGIN`/`COMMIT`/`ROLLBACK` (that defeats its dry-run), and defaults to a dry run unless
+`BEGIN`/`COMMIT`/`ROLLBACK` (that defeats its dry-run), runs several files in one
+transaction in the order given, and defaults to a dry run unless
 `--apply` is passed. See "Environment variables" below for how `DATABASE_URL` gets set now.
 
 **The rule:** every function deploy and every migration apply/dry-run goes through these
@@ -58,6 +60,17 @@ two scripts. Never run `supabase functions deploy`, `supabase db push`, `supabas
 or a raw `psql "$DATABASE_URL" -f <migration>` directly — even for "just checking," even
 mid-diagnosis. If a task needs a one-off read-only query, that's fine raw; anything that
 applies schema or deploys code goes through the scripts.
+
+## Shipping: branch → PR → merge → Deploy workflow (as of 2026-11-13)
+
+Work goes on a branch and a PR. CI (`.github/workflows/ci.yml`) runs on the PR: Unit
+tests (vitest, golden onboarding harness 14/14, build), CIA harness (against production,
+must be 8/8 before merge) and a migration dry run against production (always rolled
+back). After merge, production changes only by Actions → Deploy → Run workflow
+(`.github/workflows/deploy.yml`): encrypted backup, migrations, changed functions
+(`scripts/changed-since.mjs` against the `prod-migrated` / `prod-deployed` tags, which the
+workflow moves), CIA harness. Never move those tags by hand unless production was
+changed outside the workflow. Local fallback: `npm run db:prod -- …`, `scripts/deploy.sh <fn> prod`.
 
 ## Staging must match production
 

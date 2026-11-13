@@ -1,10 +1,22 @@
 name: CI
 
+# Checks on every PR to main (and unit tests on every push to main).
+# Production is never changed here: the migration dry run always rolls back.
+# Shipping happens only through the manual Deploy workflow (deploy.yml).
+#
+# The repo is public. Jobs that need production secrets read REPOSITORY-level
+# secrets (the `production` environment only serves the main branch, so it
+# cannot be used on PR branches). Fork PRs get no secrets and skip those jobs.
+# Never switch these triggers to pull_request_target.
+
 on:
   pull_request:
     branches: [main]
   push:
     branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
   unit-tests:
@@ -17,15 +29,20 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: npm test
+      - name: Unit tests
+        run: npm test
+      - name: Golden onboarding harness (14/14)
+        run: node tests/onboarding/run.mjs
+      - name: Build
+        run: npm run build
 
   cia-harness:
-    name: CIA harness (staging)
+    name: CIA harness
     runs-on: ubuntu-latest
-    # Secrets aren't available to pull_request runs triggered from forks,
-    # so this job only runs for PRs from branches on this repo, plus every
-    # push to main. Fork PRs still get the unit-tests job above.
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    # Runs against the functions deployed on production (no staging since
+    # 2026-10-13), so on a PR it proves production is healthy before merge;
+    # the Deploy workflow runs it again after the PR's functions are live.
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     needs: unit-tests
     steps:
       - uses: actions/checkout@v4
@@ -34,8 +51,56 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      - name: Check target is production
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        run: |
+          [[ "$SUPABASE_URL" == *yxqudytimmxufypothis* ]] || { echo "SUPABASE_URL secret is missing or not production"; exit 1; }
       - run: node tests/cia/run.mjs
         env:
-          SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.STAGING_SUPABASE_ANON_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           CIA_INTERNAL_TEST_SECRET: ${{ secrets.CIA_INTERNAL_TEST_SECRET }}
+
+  migration-dry-run:
+    name: Migration dry run
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Find migrations not yet on production
+        id: plan
+        run: |
+          git fetch --tags --force origin
+          # Same baseline as deploy.yml, used until the first Deploy run creates the tag.
+          BASE=prod-migrated
+          git rev-parse -q --verify "refs/tags/$BASE" >/dev/null || BASE=309fcca37e08d51a5fa2b463db892f4385e85b0a
+          node scripts/changed-since.mjs "$BASE" HEAD > plan.json
+          cat plan.json
+          FILES=$(node -e 'console.log(require("./plan.json").migrations.join(" "))')
+          EDITED=$(node -e 'console.log(require("./plan.json").editedMigrations.join(" "))')
+          if [ -n "$EDITED" ]; then
+            echo "::warning::Edited existing migration(s): $EDITED. An applied migration is never re-run; add a new file instead."
+          fi
+          echo "files=$FILES" >> "$GITHUB_OUTPUT"
+      - name: Install Postgres 17 client
+        if: steps.plan.outputs.files != ''
+        run: |
+          sudo apt-get install -y -q postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y -q postgresql-client-17
+          echo /usr/lib/postgresql/17/bin >> "$GITHUB_PATH"
+      - name: Dry run against production (rolled back)
+        if: steps.plan.outputs.files != ''
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          FILES: ${{ steps.plan.outputs.files }}
+        run: |
+          [[ "$DATABASE_URL" == *yxqudytimmxufypothis* ]] || { echo "DATABASE_URL secret is missing or not production"; exit 1; }
+          read -ra F <<< "$FILES"
+          scripts/migrate.sh "${F[@]}"
+      - name: No migrations
+        if: steps.plan.outputs.files == ''
+        run: echo "No new migrations in this PR."
