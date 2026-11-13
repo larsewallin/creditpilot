@@ -193,7 +193,7 @@ jobs:
         continue-on-error: true
         run: |
           mkdir -p "$RUNNER_TEMP/types"
-          supabase gen types typescript --project-id "$PROD_REF" --schema public > "$RUNNER_TEMP/types/types.ts"
+          supabase gen types typescript --db-url "$DATABASE_URL" --schema public > "$RUNNER_TEMP/types/types.ts"
           if cmp -s "$RUNNER_TEMP/types/types.ts" src/integrations/supabase/types.ts; then
             echo "Types are current."
           else
