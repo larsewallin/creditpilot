@@ -1,11 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# scripts/deploy.sh <function-name> prod            deploy one edge function
+# scripts/deploy.sh --delete <function-name> prod   delete one edge function
+#
+# Every call names the target project explicitly with --project-ref, so the
+# result never depends on whatever `supabase link` left behind (backlog E14/E15).
+# Works the same on a laptop and in the Deploy workflow (SUPABASE_ACCESS_TOKEN).
+
+ACTION="deploy"
+if [ "${1:-}" = "--delete" ]; then
+  ACTION="delete"
+  shift
+fi
+
 FUNCTION="${1:-}"
 ENV="${2:-}"
 
 if [ -z "$FUNCTION" ] || [ -z "$ENV" ]; then
-  echo "Usage: scripts/deploy.sh <function-name> prod"
+  echo "Usage: scripts/deploy.sh [--delete] <function-name> prod"
   exit 1
 fi
 
@@ -21,16 +34,12 @@ case "$ENV" in
     ;;
 esac
 
-# supabase functions deploy targets whatever project is currently `supabase
-# link`-ed, which is independent of DATABASE_URL/SUPABASE_URL (now sourced from
-# .env.production, see CLAUDE.md) — those don't influence the CLI's deploy
-# target at all. This script owns the link
-# explicitly around the deploy instead of trusting whatever was left linked
-# by a prior command (see backlog E14).
-echo "Linking to $ENV ($TARGET_REF)..."
-supabase link --project-ref "$TARGET_REF"
-
-echo "Deploying $FUNCTION to $ENV..."
-supabase functions deploy "$FUNCTION"
-
-echo "✅ Deployed $FUNCTION to $ENV."
+if [ "$ACTION" = "delete" ]; then
+  echo "Deleting $FUNCTION from $ENV ($TARGET_REF)..."
+  supabase functions delete "$FUNCTION" --project-ref "$TARGET_REF"
+  echo "✅ Deleted $FUNCTION from $ENV."
+else
+  echo "Deploying $FUNCTION to $ENV ($TARGET_REF)..."
+  supabase functions deploy "$FUNCTION" --project-ref "$TARGET_REF"
+  echo "✅ Deployed $FUNCTION to $ENV."
+fi

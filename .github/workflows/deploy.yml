@@ -1,0 +1,173 @@
+name: Deploy
+
+# Ships main to production. Manual only: Actions → Deploy → Run workflow.
+#
+# 1. Works out what changed since the last deploy (tags prod-migrated / prod-deployed).
+# 2. Backs up the public schema (encrypted, kept 30 days as a run artifact).
+# 3. Applies new migrations in one transaction (dry run first).
+# 4. Deploys changed edge functions; deletes removed ones.
+# 5. Runs the CIA harness (must be 8/8).
+#
+# The repo is public: run logs and artifacts are visible, so the backup is
+# encrypted with BACKUP_PASSPHRASE before upload and the plaintext never leaves
+# the runner. Decrypt on a Mac with:
+#   openssl enc -d -aes-256-cbc -pbkdf2 -in <file>.sql.enc -out <file>.sql
+# (it asks for the passphrase).
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write   # to move the prod-migrated / prod-deployed tags
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to production
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      PROD_REF: yxqudytimmxufypothis
+      # Last commit whose backend was fully on production before this workflow
+      # existed. Used only while the prod-* tags do not exist (the first run creates them).
+      BASELINE: 309fcca37e08d51a5fa2b463db892f4385e85b0a
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      CIA_INTERNAL_TEST_SECRET: ${{ secrets.CIA_INTERNAL_TEST_SECRET }}
+      BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check secrets point at production
+        run: |
+          fail=0
+          for v in SUPABASE_ACCESS_TOKEN DATABASE_URL SUPABASE_URL SUPABASE_ANON_KEY CIA_INTERNAL_TEST_SECRET BACKUP_PASSPHRASE; do
+            [ -n "${!v}" ] || { echo "::error::Secret $v is not set on the production environment"; fail=1; }
+          done
+          [[ "$DATABASE_URL" == *"$PROD_REF"* ]] || { echo "::error::DATABASE_URL is not the production project"; fail=1; }
+          [[ "$SUPABASE_URL" == *"$PROD_REF"* ]] || { echo "::error::SUPABASE_URL is not the production project"; fail=1; }
+          exit $fail
+
+      - name: Work out what to ship
+        id: plan
+        run: |
+          git fetch --tags --force origin
+          for t in prod-migrated prod-deployed; do
+            if ! git rev-parse -q --verify "refs/tags/$t" >/dev/null; then
+              echo "Tag $t not found: starting from the baseline $BASELINE (first run)."
+              git tag "$t" "$BASELINE"
+            fi
+          done
+          node scripts/changed-since.mjs prod-migrated HEAD > migrations.json
+          node scripts/changed-since.mjs prod-deployed HEAD > functions.json
+          MIG=$(node -e 'console.log(require("./migrations.json").migrations.join(" "))')
+          DEP=$(node -e 'console.log(require("./functions.json").deploy.join(" "))')
+          DEL=$(node -e 'console.log(require("./functions.json").delete.join(" "))')
+          {
+            echo "### Deploy plan ($(git rev-parse --short HEAD))"
+            echo "- Migrations: ${MIG:-none}"
+            echo "- Deploy functions: ${DEP:-none}"
+            echo "- Delete functions: ${DEL:-none}"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "migrations=$MIG" >> "$GITHUB_OUTPUT"
+          echo "deploy=$DEP" >> "$GITHUB_OUTPUT"
+          echo "delete=$DEL" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+
+      - name: Install Postgres 17 client
+        run: |
+          sudo apt-get install -y -q postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y -q postgresql-client-17
+          echo /usr/lib/postgresql/17/bin >> "$GITHUB_PATH"
+
+      - name: Back up production (public schema)
+        run: |
+          mkdir -p "$RUNNER_TEMP/backup"
+          OUT="$RUNNER_TEMP/backup/$(date -u +%Y%m%d-%H%M%S)-before-deploy-$(git rev-parse --short HEAD).sql"
+          pg_dump "$DATABASE_URL" --schema=public --no-owner --no-privileges -f "$OUT"
+          echo "Backup size: $(du -h "$OUT" | cut -f1)"
+
+      - name: Dry run migrations
+        if: steps.plan.outputs.migrations != ''
+        env:
+          FILES: ${{ steps.plan.outputs.migrations }}
+        run: |
+          read -ra F <<< "$FILES"
+          scripts/migrate.sh "${F[@]}"
+
+      - name: Apply migrations
+        if: steps.plan.outputs.migrations != ''
+        env:
+          FILES: ${{ steps.plan.outputs.migrations }}
+          BACKUP_DIR: ${{ runner.temp }}/backup
+          MIGRATE_NO_DELAY: "1"
+        run: |
+          read -ra F <<< "$FILES"
+          scripts/migrate.sh "${F[@]}" --apply
+          git tag -f prod-migrated HEAD
+          git push -f origin refs/tags/prod-migrated
+
+      - name: Encrypt and keep backups
+        if: always()
+        run: |
+          shopt -s nullglob
+          files=("$RUNNER_TEMP"/backup/*.sql)
+          [ ${#files[@]} -gt 0 ] || { echo "No backup files."; exit 0; }
+          [ -n "$BACKUP_PASSPHRASE" ] || { echo "No passphrase: deleting plaintext backups unkept."; rm -f "${files[@]}"; exit 1; }
+          for f in "${files[@]}"; do
+            openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:BACKUP_PASSPHRASE -in "$f" -out "$f.enc"
+            rm -f "$f"
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: prod-backup-${{ github.run_number }}
+          path: ${{ runner.temp }}/backup/*.enc
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - uses: supabase/setup-cli@v1
+        if: steps.plan.outputs.deploy != '' || steps.plan.outputs.delete != ''
+        with:
+          version: latest
+
+      - name: Deploy functions
+        if: steps.plan.outputs.deploy != ''
+        env:
+          FNS: ${{ steps.plan.outputs.deploy }}
+        run: |
+          read -ra F <<< "$FNS"
+          for fn in "${F[@]}"; do scripts/deploy.sh "$fn" prod; done
+
+      - name: Delete removed functions
+        if: steps.plan.outputs.delete != ''
+        env:
+          FNS: ${{ steps.plan.outputs.delete }}
+        run: |
+          read -ra F <<< "$FNS"
+          for fn in "${F[@]}"; do
+            scripts/deploy.sh --delete "$fn" prod || echo "::warning::Could not delete $fn (already gone?)"
+          done
+
+      - name: Mark deployed
+        run: |
+          git tag -f prod-migrated HEAD
+          git tag -f prod-deployed HEAD
+          git push -f origin refs/tags/prod-migrated refs/tags/prod-deployed
+
+      - name: CIA harness (must be 8/8)
+        run: node tests/cia/run.mjs
