@@ -5,7 +5,7 @@
  *
  * Existing agents keep verify_jwt=false and are not affected.
  */
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.98.0";
 
 export type AppRole = "admin" | "credit_manager" | "credit_analyst" | "sales" | "viewer";
 

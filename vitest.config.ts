@@ -23,6 +23,7 @@ export default defineConfig({
       // with this import fail before any test body runs. This alias only
       // affects local/CI test resolution — the deployed Edge Function
       // still uses the real esm.sh URL under Deno at runtime.
+      "https://esm.sh/@supabase/supabase-js@2.98.0": "@supabase/supabase-js",
       "https://esm.sh/@supabase/supabase-js@2": "@supabase/supabase-js",
     },
   },
