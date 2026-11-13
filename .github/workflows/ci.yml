@@ -33,6 +33,8 @@ jobs:
         run: npm test
       - name: Golden onboarding harness (14/14)
         run: node tests/onboarding/run.mjs
+      - name: Type check
+        run: npx tsc --noEmit -p tsconfig.app.json
       - name: Build
         run: npm run build
 
