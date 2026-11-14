@@ -115,10 +115,15 @@ DELETE FROM payment_transactions WHERE customer_id IN (
   'c0000001-0000-0000-0000-000000000049'
 );
 
+-- Fresh installs (added 2026-11-14): only rows whose customer exists are inserted, so a
+-- database built from the migrations alone (no demo seed yet) does not fail here; the demo
+-- seed (supabase/seed.sql) carries these rows in their final form. Unchanged where the
+-- customers exist (production applied this file on 2026-09-29).
 INSERT INTO payment_transactions
-  (customer_id, payment_date, amount_paid, invoice_date, invoice_due_date,
-   days_to_pay, days_early_late, on_time, payment_method, is_demo, demo_days_offset)
-VALUES
+  (customer_id, payment_date, amount_paid, invoice_date, invoice_due_date, days_to_pay, days_early_late, on_time, payment_method, is_demo, demo_days_offset)
+SELECT v.customer_id::uuid, v.payment_date, v.amount_paid, v.invoice_date, v.invoice_due_date,
+       v.days_to_pay, v.days_early_late, v.on_time, v.payment_method, v.is_demo, v.demo_days_offset
+FROM (VALUES
 ('c0000002-0000-0000-0000-000000000002', CURRENT_DATE - 215, 446250, CURRENT_DATE - 238, CURRENT_DATE - 208, 23, -7, true, 'wire_transfer'::payment_method, true, -215),
 ('c0000002-0000-0000-0000-000000000002', CURRENT_DATE - 185, 450500, CURRENT_DATE - 209, CURRENT_DATE - 179, 24, -6, true, 'wire_transfer'::payment_method, true, -185),
 ('c0000002-0000-0000-0000-000000000002', CURRENT_DATE - 155, 454750, CURRENT_DATE - 179, CURRENT_DATE - 149, 24, -6, true, 'wire_transfer'::payment_method, true, -155),
@@ -590,5 +595,6 @@ VALUES
 ('c0000001-0000-0000-0000-000000000049', CURRENT_DATE - 95, 196200, CURRENT_DATE - 186, CURRENT_DATE - 156, 91, 61, false, 'wire_transfer'::payment_method, true, -95),
 ('c0000001-0000-0000-0000-000000000049', CURRENT_DATE - 65, 198000, CURRENT_DATE - 170, CURRENT_DATE - 140, 105, 75, false, 'wire_transfer'::payment_method, true, -65),
 ('c0000001-0000-0000-0000-000000000049', CURRENT_DATE - 35, 199800, CURRENT_DATE - 148, CURRENT_DATE - 118, 113, 83, false, 'wire_transfer'::payment_method, true, -35),
-('c0000001-0000-0000-0000-000000000049', CURRENT_DATE - 5, 201600, CURRENT_DATE - 133, CURRENT_DATE - 103, 128, 98, false, 'wire_transfer'::payment_method, true, -5);
-
+('c0000001-0000-0000-0000-000000000049', CURRENT_DATE - 5, 201600, CURRENT_DATE - 133, CURRENT_DATE - 103, 128, 98, false, 'wire_transfer'::payment_method, true, -5)
+) AS v(customer_id, payment_date, amount_paid, invoice_date, invoice_due_date, days_to_pay, days_early_late, on_time, payment_method, is_demo, demo_days_offset)
+WHERE EXISTS (SELECT 1 FROM customers c WHERE c.id = v.customer_id::uuid);
