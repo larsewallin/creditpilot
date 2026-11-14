@@ -121,16 +121,6 @@ export interface LookupSummary {
   verdict: "stop" | "check" | "clear" | string;
   as_of: string;
   flags: { level: string; label: string; detail?: string; source?: string }[];
-  financials: {
-    /** Newer accounts are needed once the financial year end is this many months old, by score. */
-    max_age_months_70_plus: number;
-    max_age_months_55_to_69: number;
-    max_age_months_40_to_54: number;
-    max_age_months_below_40: number;
-    max_age_months_no_score: number;
-    /** "Due soon" this many months before the limit. */
-    due_soon_months: number;
-  };
   sources: { name: string; result: string; url?: string }[];
 }
 
@@ -238,6 +228,16 @@ export interface OnboardingSettings {
     band_multipliers: { A: number; B: number; C: number; D: number; E: number };
     higher_limit_note_ratio: number;            // supportable ≥ ratio × requested
     rounding_usd: number;                       // round down to this step
+  };
+  financials: {
+    /** Newer accounts are needed once the financial year end is this many months old, by score. */
+    max_age_months_70_plus: number;
+    max_age_months_55_to_69: number;
+    max_age_months_40_to_54: number;
+    max_age_months_below_40: number;
+    max_age_months_no_score: number;
+    /** "Due soon" this many months before the limit. */
+    due_soon_months: number;
   };
   sources: {
     score_order: string[];                      // e.g. ["keen", "bureau_report"]; first with a score wins
