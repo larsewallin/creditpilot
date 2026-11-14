@@ -14,7 +14,7 @@
  * Rules and numbers: tests/onboarding/README.md and settings.ts.
  */
 import type {
-  CreditApplication, FinancialStatement, FraudFlag, MacroContextEvent, OnboardingOutcome,
+  CreditApplication, FinancialStatement, FraudFlag, KeenDetail, MacroContextEvent, OnboardingOutcome,
   OnboardingProviders, OnboardingSettings, Person, ScreeningHit,
 } from "./types.ts";
 import { ONBOARDING_DEFAULTS } from "./settings.ts";
@@ -117,7 +117,8 @@ export async function runOnboarding(
   const picked = await selectCreditScore(settings.sources.score_order, {
     keen: async () => {
       const r = await providers.keenScore(app, statement ? [statement] : app.financial_statements);
-      return "error" in r ? r : { ...r, raw: String(r.score) };
+      if ("error" in r) return { error: r.reason ? `${r.error}:${r.reason}` : r.error };
+      return { ...r, raw: r.keen?.label ? `${r.score} ${r.keen.label}` : String(r.score) };
     },
     bureau_report: async () => app.bureau_report
       ? { score: app.bureau_report.score_normalized, raw: `${app.bureau_report.bureau} report` }
@@ -143,6 +144,7 @@ export async function runOnboarding(
     financials_source,
     statement_quality: statement?.statement_quality,
     score_source, score, score_raw: picked.result?.raw, band: band ?? undefined,
+    ...(picked.source === "keen" && picked.result?.keen ? { keen: picked.result.keen as KeenDetail } : {}),
     fallbacks, macro_context,
   };
 

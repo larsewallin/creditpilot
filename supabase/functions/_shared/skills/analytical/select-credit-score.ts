@@ -22,6 +22,8 @@ export interface ScoreCandidate {
   model_version?: string;
   reason_codes?: string[];
   max_credit_recommendation_usd?: number;
+  /** Keen's label, 10-K and reasons, carried through untouched. */
+  keen?: unknown;
 }
 
 export type FetchOutcome = ScoreCandidate | { error: string };

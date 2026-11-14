@@ -195,7 +195,26 @@ describe("Keen adapter", () => {
   it("maps a score and the recommended limit", async () => {
     const f = fakeFetch([[/keen\.test\/v1\/score$/, () => ok({ score: 92, model_version: "m1", recommended_limit: 60_000, reason_codes: [{ code: "CURRENT_RATIO" }] })]]);
     const r = await liveProviders({ db: fakeDb(), env, fetch: f }).keenScore(app());
-    expect(r).toEqual({ provider: "keen", score: 92, model_version: "m1", reason_codes: ["CURRENT_RATIO"], max_credit_recommendation_usd: 60_000 });
+    expect(r).toMatchObject({ provider: "keen", score: 92, model_version: "m1", reason_codes: ["CURRENT_RATIO"], max_credit_recommendation_usd: 60_000 });
+  });
+  it("keeps Keen's label, 10-K date and reasons", async () => {
+    const f = fakeFetch([[/keen\.test\/v1\/score$/, () => ok({
+      score: 79, label: "Strong", model_version: "keen-r120", as_of: "2026-09-26",
+      company: { ticker: "AAPL", name: "Apple Inc." }, filing: { form: "10-K", fiscal_year: 2026, filed: "2026-10-31" },
+      reason_codes: [{ code: "STRONG_CURRENT_RATIO", text: "Current ratio 1.1x", direction: "positive" }], warnings: [],
+    })]]);
+    const r = await liveProviders({ db: fakeDb(), env, fetch: f }).keenScore(app({ ticker: "AAPL" }));
+    expect(r).toMatchObject({ score: 79, keen: { label: "Strong", as_of: "2026-09-26", company_name: "Apple Inc.",
+      filing: { form: "10-K", fiscal_year: 2026 }, reasons: [{ code: "STRONG_CURRENT_RATIO", text: "Current ratio 1.1x", direction: "positive" }] } });
+  });
+  it("finds the ticker from the SEC number when only a CIK is known", async () => {
+    let sent: { company: Record<string, unknown> } | undefined;
+    const f = fakeFetch([
+      [/sec\.gov\/files\/company_tickers\.json/, () => ok({ 0: { cik_str: 320193, ticker: "AAPL" }, 1: { cik_str: 789019, ticker: "MSFT" } })],
+      [/keen\.test\/v1\/score$/, (_u, init) => { sent = JSON.parse(String(init?.body)); return ok({ score: 79 }); }],
+    ]);
+    await liveProviders({ db: fakeDb(), env, fetch: f }).keenScore(app({ cik: "0000320193" }));
+    expect(sent?.company.ticker).toBe("AAPL");
   });
   it("sends the ticker and CIK with a Bearer key (Keen API v1 scores public companies by ticker)", async () => {
     let sent: { auth?: string; body?: { company: Record<string, unknown> } } = {};
@@ -211,6 +230,8 @@ describe("Keen adapter", () => {
   it("maps 422 to insufficient data and a missing config to unavailable", async () => {
     const f = fakeFetch([[/keen\.test/, () => new Response("", { status: 422 })]]);
     expect(await liveProviders({ db: fakeDb(), env, fetch: f }).keenScore(app())).toEqual({ error: "insufficient_data" });
+    const g = fakeFetch([[/keen\.test/, () => ok({ error: "insufficient_data", reason: "foreign-filer" }, 422)]]);
+    expect(await liveProviders({ db: fakeDb(), env, fetch: g }).keenScore(app({ ticker: "SAP" }))).toEqual({ error: "insufficient_data", reason: "foreign-filer" });
     expect(await liveProviders({ db: fakeDb(), env: () => undefined, fetch: f }).keenScore(app())).toEqual({ error: "unavailable" });
   });
   it("maps a slow answer to timeout", async () => {

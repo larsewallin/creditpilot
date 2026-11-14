@@ -144,6 +144,18 @@ export interface ScoreResult {
   model_version?: string;
   reason_codes?: string[];
   max_credit_recommendation_usd?: number;
+  /** Keen only: what the score was read from, for the prospect page and the customer record. */
+  keen?: KeenDetail;
+}
+
+export interface KeenDetail {
+  label?: string;                 // "Strong", "Watch", …
+  as_of?: string;                 // fiscal year end of the 10-K scored
+  company_name?: string;
+  ticker?: string;
+  filing?: { form?: string; fiscal_year?: number; filed?: string; accession?: string };
+  reasons: { code: string; text: string; direction: "positive" | "negative" | string }[];
+  warnings: string[];
 }
 
 export interface BureauReport {
@@ -154,7 +166,11 @@ export interface BureauReport {
   liens_or_judgments?: number;
 }
 
-export type ProviderError = { error: "timeout" | "insufficient_data" | "unavailable" | "not_found" };
+export type ProviderError = {
+  error: "timeout" | "insufficient_data" | "unavailable" | "not_found";
+  /** The provider's own reason code (Keen: no-ticker, foreign-filer, bank, not-covered, …). */
+  reason?: string;
+};
 
 export interface MacroContextEvent {
   source_agent: "country_risk_agent" | "industry_risk_agent" | "fx_risk_agent" | "news_agent";
@@ -269,6 +285,8 @@ export interface OnboardingOutcome {
     /** The provider's own value as shown to people (e.g. "D&B report"). */
     score_raw?: string;
     band?: "A" | "B" | "C" | "D" | "E";
+    /** Set when the score came from Keen. */
+    keen?: KeenDetail;
     fallbacks: { provider: string; reason: string }[];
     macro_context: MacroContextEvent[];
   };

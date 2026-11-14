@@ -313,7 +313,9 @@ function ApplicationView({ a }: { a: any }) {
                 <td className="text-right font-mono">{formatCurrency(s.current_assets)}</td><td className="text-right font-mono">{formatCurrency(s.current_liabilities)}</td><td className="text-right font-mono">{formatCurrency(s.equity)}</td></tr>
             ))}</tbody>
           </table>
-        ) : <p className="text-muted-foreground">None uploaded.</p>}
+        ) : a.is_public && (a.ticker || a.cik) && String(a.country_code).toUpperCase() === "US"
+          ? <p className="text-muted-foreground">From the latest 10-K at the SEC, scored by Keen (see Analysis).</p>
+          : <p className="text-muted-foreground">None uploaded.</p>}
       </Panel>
       {a.bureau_report && (
         <Panel title="Uploaded bureau report">
@@ -444,8 +446,50 @@ function ScreeningView({ app, runs, checks, hits, canDispose }: { app: any; runs
   );
 }
 
+/** Why Keen gave no score, in words (Keen API v1 reason codes). */
+const KEEN_REASON: Record<string, string> = {
+  "no-ticker": "scores US-listed companies from their 10-K; this company has no ticker or SEC number",
+  "unknown-ticker": "the ticker was not found at the SEC", "no-10k": "no 10-K on file at the SEC",
+  "foreign-filer": "the company files abroad, not a 10-K", "non-usd": "the accounts are not in US dollars",
+  "missing-required": "the 10-K lacks lines the score needs", bank: "banks are not scored",
+  "not-covered": "this industry is not scored (financial institutions, insurers, real estate and similar)",
+  "classification-needed": "the industry code needs classifying", "not-scored": "the statements could not be scored",
+};
+function keenGap(an: any): string | null {
+  const f = an.fallbacks?.find((x: any) => x.provider === "keen");
+  if (!f) return null;
+  const [kind, code] = String(f.reason).split(":");
+  if (kind === "insufficient_data") return `no score (${code && KEEN_REASON[code] ? KEEN_REASON[code] : "not enough data"})`;
+  if (kind === "unavailable") return "not reachable, another source was used";
+  if (kind === "timeout") return "did not answer in time, another source was used";
+  return kind.replace(/_/g, " ");
+}
+
+function KeenScore({ an }: { an: any }) {
+  const k = an.keen;
+  const neg = (k.reasons ?? []).filter((r: any) => r.direction !== "positive");
+  const pos = (k.reasons ?? []).filter((r: any) => r.direction === "positive");
+  return (
+    <div className="space-y-2">
+      <p><span className="text-base font-semibold">{an.score}</span> of 100{k.label ? <span className="font-medium"> · {k.label}</span> : null}<span className="text-muted-foreground"> (band {an.band}) from Keen</span></p>
+      <p className="text-muted-foreground">
+        {k.company_name ? `${k.company_name}${k.ticker ? ` (${k.ticker})` : ""}, ` : ""}
+        {k.filing?.form ?? "10-K"}{k.filing?.fiscal_year ? ` for fiscal ${k.filing.fiscal_year}` : ""}{k.as_of ? `, year ended ${k.as_of}` : ""}{k.filing?.filed ? `, filed ${k.filing.filed}` : ""}.
+      </p>
+      {(neg.length > 0 || pos.length > 0) && (
+        <div className="grid gap-2 sm:grid-cols-2">
+          {neg.length > 0 && <div><p className="font-medium">Holding the score down</p><ul className="list-disc pl-4">{neg.map((r: any) => <li key={r.code}>{r.text}</li>)}</ul></div>}
+          {pos.length > 0 && <div><p className="font-medium">Supporting the score</p><ul className="list-disc pl-4">{pos.map((r: any) => <li key={r.code}>{r.text}</li>)}</ul></div>}
+        </div>
+      )}
+      {k.warnings?.length > 0 && <p className="text-amber-700">{k.warnings.join(" · ")}</p>}
+      <p className="text-muted-foreground">Not a credit rating.</p>
+    </div>
+  );
+}
+
 const SOURCE_TILES: { key: string; name: string; note: string }[] = [
-  { key: "keen", name: "Keen", note: "Your scoring model (counts first when connected)" },
+  { key: "keen", name: "Keen", note: "Scores US-listed companies from their latest 10-K" },
   { key: "bureau_report", name: "Uploaded bureau report", note: "Any bureau the applicant or you already use" },
   { key: "sec_edgar", name: "SEC EDGAR", note: "Audited financials for US public companies" },
   { key: "uploaded_statements", name: "Uploaded statements", note: "Financials sent with the application" },
@@ -458,9 +502,9 @@ function AnalysisView({ o, scores, memo, a }: { o: any; scores: any[]; memo?: an
   const tile = (key: string) => {
     if (key === "keen" || key === "bureau_report") {
       const s = scores.find((x) => x.provider === key && x.status === "ok");
-      if (s) return { state: "used", text: `Score ${s.score}${s.band ? ` (band ${s.band})` : ""}` };
+      if (s) return { state: "used", text: `Score ${s.score}${key === "keen" && an.keen?.label ? ` · ${an.keen.label}` : ""}${s.band ? ` (band ${s.band})` : ""}` };
       const f = an.fallbacks?.find((x: any) => x.provider === key);
-      if (f) return { state: "gap", text: f.reason.replace(/_/g, " ") };
+      if (f) return { state: "gap", text: key === "keen" ? (keenGap(an) ?? "") : f.reason.replace(/_/g, " ") };
       if (key === "bureau_report" && a.bureau_report) return { state: "available", text: `${a.bureau_report.bureau} report on file` };
       return { state: "idle", text: "Not used" };
     }
@@ -493,7 +537,10 @@ function AnalysisView({ o, scores, memo, a }: { o: any; scores: any[]; memo?: an
         </div>
       </Panel>
       <Panel title="Score">
-        <p>{an.score != null ? `${an.score} (band ${an.band}) from ${an.score_source === "keen" || an.score_source === "file" ? "Keen" : an.score_raw ? `the uploaded ${an.score_raw}` : "the uploaded bureau report"}` : "No score could be obtained."}</p>
+        {an.keen ? <KeenScore an={an} /> : (
+          <p>{an.score != null ? `${an.score} (band ${an.band}) from ${an.score_source === "keen" || an.score_source === "file" ? "Keen" : an.score_raw ? `the uploaded ${an.score_raw}` : "the uploaded bureau report"}` : "No score could be obtained."}</p>
+        )}
+        {keenGap(an) && <p className="text-muted-foreground pt-1">Keen: {keenGap(an)}.</p>}
       </Panel>
       <Panel title="Market context">
         {an.macro_context?.length ? <ul className="space-y-1">{an.macro_context.map((m: any, i: number) => (
