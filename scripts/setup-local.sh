@@ -46,8 +46,10 @@ if [ "$MODE" = "demo" ]; then
   # Marker: a seed customer (migrations alone add only the 23 fixture customers).
   HAS_SEED="$(psql "$DB_URL" -tAc "select count(*) from public.customers where id = 'c0000001-0000-0000-0000-000000000038'" 2>/dev/null || echo 0)"
   if [ "$HAS_SEED" = "0" ]; then
-    # pg_dump 18 adds \restrict lines that older psql versions do not know.
-    grep -v '^\\\(un\)\?restrict ' supabase/seed.sql | psql "$DB_URL" -q -v ON_ERROR_STOP=1 >/dev/null
+    # pg_dump 18 adds \restrict lines that older psql versions do not know, and empties
+    # search_path, which the database's triggers (unqualified table names) need.
+    grep -v -e '^\\\(un\)\?restrict ' -e "^SELECT pg_catalog.set_config('search_path', '', false);" supabase/seed.sql \
+      | psql "$DB_URL" -q -v ON_ERROR_STOP=1 >/dev/null
     echo "   Loaded $(psql "$DB_URL" -tAc 'select count(*) from public.customers') customers."
   else
     echo "   Already loaded ($(psql "$DB_URL" -tAc 'select count(*) from public.customers') customers)."
