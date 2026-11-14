@@ -1,0 +1,63 @@
+name: Fresh install
+
+# Installs CreditPilot from scratch the way a new user would (scripts/setup-local.sh:
+# local Supabase stack in Docker, every migration, the demo data), then checks the
+# database and the agent scheduler answer. Nothing here touches the hosted project.
+# Runs on PRs that change the schema, the seed, the setup script or the function
+# config, every Monday, and by hand (Actions → Fresh install → Run workflow).
+
+on:
+  pull_request:
+    paths:
+      - supabase/migrations/**
+      - supabase/seed.sql
+      - supabase/config.toml
+      - scripts/setup-local.sh
+      - scripts/create-demo-users.mjs
+      - .github/workflows/fresh-install.yml
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fresh-install:
+    name: Fresh install (local stack)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Postgres client
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client >/dev/null
+      - name: Set up CreditPilot (demo)
+        run: scripts/setup-local.sh
+      - name: Check the database
+        run: |
+          DB="$(npx --yes supabase@3.1.0 status -o env | sed -n 's/^DB_URL="\(.*\)"$/\1/p')"
+          q() { psql "$DB" -tAc "$1"; }
+          echo "customers:            $(q 'select count(*) from customers')"
+          echo "invoices:             $(q 'select count(*) from invoices')"
+          echo "payment_transactions: $(q 'select count(*) from payment_transactions')"
+          echo "cron jobs:            $(q "select string_agg(jobname, ', ' order by jobname) from cron.job")"
+          [ "$(q 'select count(*) from customers')" -ge 59 ] || { echo "::error::demo customers missing"; exit 1; }
+          [ "$(q "select count(*) from cron.job where jobname = 'agent-scheduler'")" = 1 ] || { echo "::error::agent-scheduler job missing"; exit 1; }
+          [ "$(q "select count(*) from information_schema.columns where table_name = 'customers' and column_name = 'financials_fye'")" = 1 ] || { echo "::error::schema incomplete"; exit 1; }
+      - name: Check the functions answer
+        run: |
+          npx --yes supabase@3.1.0 functions serve --env-file supabase/functions/.env.local > /tmp/functions.log 2>&1 &
+          API="$(npx --yes supabase@3.1.0 status -o env | sed -n 's/^API_URL="\(.*\)"$/\1/p')"
+          SECRET="$(sed -n 's/^SCHEDULER_SECRET=//p' supabase/functions/.env.local)"
+          for i in $(seq 1 60); do
+            CODE="$(curl -s -o /tmp/s.json -w '%{http_code}' -X POST "$API/functions/v1/agent-scheduler" -H "x-scheduler-secret: $SECRET" -H 'Content-Type: application/json' --data '{"dry_run":true}' || true)"
+            [ "$CODE" = 200 ] && break; sleep 5
+          done
+          cat /tmp/s.json; echo
+          [ "$CODE" = 200 ] || { tail -50 /tmp/functions.log; echo "::error::agent-scheduler did not answer"; exit 1; }
+          jq -e '.mode == "demo" and (.started | length) == 0' /tmp/s.json >/dev/null || { echo "::error::the demo scheduler must start nothing"; exit 1; }
+      - name: Build the web app
+        run: npm run build
