@@ -96,7 +96,7 @@ export interface CreditApplication {
 // ─── Provider results ─────────────────────────────────────────────────────────
 
 export interface RegistryRecord {
-  source: "companies_house" | "sec_edgar" | "gleif" | "state_registry" | "national_registry";
+  source: "company_lookup" | "companies_house" | "sec_edgar" | "gleif" | "state_registry" | "national_registry";
   found: boolean;
   /** No registry could be checked (no free source for this country, or the source failed).
    *  Recorded as a gap, never as a fraud flag. */
@@ -109,6 +109,17 @@ export interface RegistryRecord {
   formation_date?: string;
   officers?: Person[];
   owners?: Person[];   // e.g. UK PSC register
+  /** The Company Lookup card the record came from (source "company_lookup"). */
+  lookup?: LookupSummary;
+}
+
+/** What screening keeps from a Company Lookup card: its verdict, flags and the sources checked. */
+export interface LookupSummary {
+  company_id: string;
+  verdict: "stop" | "check" | "clear" | string;
+  as_of: string;
+  flags: { level: string; label: string; detail?: string; source?: string }[];
+  sources: { name: string; result: string; url?: string }[];
 }
 
 export interface TaxIdCheck {
@@ -212,7 +223,8 @@ export type Stage = "application" | "completeness" | "screening" | "analysis" | 
 export type FraudFlag =
   | "YOUNG_ENTITY_LARGE_REQUEST" | "NEW_DOMAIN" | "ADDRESS_RISK" | "FORMATION_DATE_MISMATCH" | "REGISTRY_NOT_FOUND"
   | "REGISTRY_INACTIVE"   // dissolved or dormant: always review on its own
-  | "TAX_ID_INVALID";
+  | "TAX_ID_INVALID"
+  | "COMPANY_LOOKUP_STOP"; // the Company Lookup card has a stop-level flag: always review on its own
 
 export interface ScreeningHit {
   subject: string;           // name screened
@@ -246,6 +258,8 @@ export interface OnboardingOutcome {
     people_screened: number;
     hits: ScreeningHit[];
     fraud_flags: FraudFlag[];
+    /** The Company Lookup card screening used, when the application has a company ID. */
+    lookup?: LookupSummary;
   };
   analysis?: {
     financials_source?: "uploaded_statements" | "sec_edgar" | "none";

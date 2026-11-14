@@ -24,6 +24,7 @@ import { db, STAGES, STAGE_LABEL, SEVERITY_CLASS, callOnboarding, loadAppUsers, 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 const CHECK_LABEL: Record<string, string> = {
+  "registry:company_lookup": "Company Lookup (official register, GLEIF, VAT and domain)",
   "registry:companies_house": "Companies House (UK registry)", "registry:sec_edgar": "SEC EDGAR (US public company)",
   "registry:gleif": "GLEIF (global LEI register)", "registry:state_registry": "State registry", "registry:national_registry": "National registry",
   "tax_id:vies": "EU VAT number (VIES)", "tax_id:hmrc_vat": "UK VAT number (HMRC)", "tax_id:ein_format": "US EIN format",
@@ -35,6 +36,7 @@ const FLAG_LABEL: Record<string, string> = {
   YOUNG_ENTITY_LARGE_REQUEST: "Young company asking for a large limit", NEW_DOMAIN: "Website registered recently",
   ADDRESS_RISK: "Virtual, residential or PO-box address", FORMATION_DATE_MISMATCH: "Formation date differs from the registry",
   REGISTRY_NOT_FOUND: "Not found in the registry", REGISTRY_INACTIVE: "Registry shows dissolved or dormant", TAX_ID_INVALID: "Tax ID not valid",
+  COMPANY_LOOKUP_STOP: "Company Lookup raised a flag to review",
 };
 
 export default function Prospect() {
@@ -377,6 +379,25 @@ function ScreeningView({ app, runs, checks, hits, canDispose }: { app: any; runs
           ))}
         </ul>
       </Panel>
+
+      {s?.lookup && (
+        <Panel title="Company Lookup">
+          <p className="text-muted-foreground">Card {s.lookup.company_id}, checked {s.lookup.as_of}. Flags are prompts to review, never a verdict.</p>
+          {s.lookup.flags?.length ? (
+            <ul className="space-y-1 pt-2">
+              {s.lookup.flags.map((fl: any, i: number) => (
+                <li key={i}>
+                  <Badge className={cn("border-0 text-[10px] mr-1.5", fl.level === "stop" ? "bg-destructive/15 text-destructive" : fl.level === "check" ? "bg-amber-500/15 text-amber-700" : "bg-muted text-muted-foreground")}>{fl.level}</Badge>
+                  {fl.label}{fl.detail ? <span className="text-muted-foreground"> ({fl.detail})</span> : null}{fl.source ? <span className="text-muted-foreground"> · {fl.source}</span> : null}
+                </li>
+              ))}
+            </ul>
+          ) : <p className="pt-2">No flags.</p>}
+          {s.lookup.sources?.length ? (
+            <p className="text-muted-foreground pt-2">Sources: {s.lookup.sources.map((x: any) => `${x.name} (${x.result})`).join(", ")}</p>
+          ) : null}
+        </Panel>
+      )}
 
       <Panel title="Sanctions matches">
         {hits.length === 0 ? <p className="text-muted-foreground">No names came close to any list entry.</p> : (

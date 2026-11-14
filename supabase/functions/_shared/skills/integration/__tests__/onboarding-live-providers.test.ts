@@ -3,7 +3,7 @@
  * source's answers and failures are mapped, without calling anything real.
  */
 import { describe, it, expect } from "vitest";
-import { liveProviders, chName, pscName, pscPct, normId } from "../../../onboarding/live_providers.ts";
+import { liveProviders, chName, pscName, pscPct, normId, recordFromCard, registerStatus } from "../../../onboarding/live_providers.ts";
 import type { CreditApplication } from "../../../onboarding/types.ts";
 
 type Route = (url: string, init?: RequestInit) => Response | Promise<Response>;
@@ -83,6 +83,52 @@ describe("Companies House", () => {
     const nokey = await liveProviders({ db: fakeDb(), env: () => undefined, fetch: f }).lookupRegistry(app());
     expect(nokey.unavailable).toBe(true);
     expect(nokey.unavailable_reason).toBe("no_api_key");
+  });
+});
+
+describe("Company Lookup card", () => {
+  const card = (o: Record<string, unknown> = {}) => ({
+    id: "de:HRB-719915", as_of: "2026-11-13",
+    identity: { legal_name: "SAP SE", country: "DE", status: "active", incorporated: "1972-04-01", register: { name: "Handelsregister", number: "HRB 719915" } },
+    ids: { lei: "529900D6BF99LW9R2E68" }, flags: [], verdict: "clear",
+    sources: [{ name: "GLEIF", result: "found" }], gaps: [], ...o,
+  });
+  const lookup = (c: unknown) => ({ card: async () => c as never });
+
+  it("uses the card for a company picked in Company Lookup", async () => {
+    let gleif = false;
+    const f = fakeFetch([[/api\.gleif\.org/, () => { gleif = true; return ok({ data: [] }); }]]);
+    const r = await liveProviders({ db: fakeDb(), env: () => undefined, fetch: f, lookup: lookup(card()) })
+      .lookupRegistry(app({ country_code: "DE", legal_name: "SAP SE", company_id: "de:HRB-719915" }));
+    expect(gleif).toBe(false);
+    expect(r).toMatchObject({ source: "company_lookup", found: true, status: "active", formation_date: "1972-04-01", registration_no: "HRB 719915" });
+    expect(r.lookup?.verdict).toBe("clear");
+  });
+  it("falls back to the direct sources when the card cannot be read", async () => {
+    const f = fakeFetch([[/api\.gleif\.org/, () => ok({ data: [] })]]);
+    const r = await liveProviders({ db: fakeDb(), env: () => undefined, fetch: f, lookup: lookup({ error: "unavailable" }) })
+      .lookupRegistry(app({ country_code: "DE", legal_name: "Kleine GmbH", company_id: "de:HRB-1" }));
+    expect(r.source).toBe("gleif");
+  });
+  it("keeps the UK officers and owners from Companies House", async () => {
+    const f = fakeFetch([
+      [/\/company\/08812345\/officers/, () => ok({ items: [{ name: "PRYCE, Gareth", officer_role: "director" }] })],
+      [/\/company\/08812345\/persons-with-significant-control/, () => ok({ items: [] })],
+      [/\/company\/08812345$/, () => ok({ company_name: "PINEWOOD TOOLING LTD", company_status: "active", date_of_creation: "2013-11-20" })],
+    ]);
+    const c = card({ id: "gb:08812345", identity: { legal_name: "PINEWOOD TOOLING LTD", status: "Active", register: { name: "Companies House", number: "08812345" } } });
+    const r = await liveProviders({ db: fakeDb(), env: (k) => (k === "COMPANIES_HOUSE_API_KEY" ? "k" : undefined), fetch: f, lookup: lookup(c) })
+      .lookupRegistry(app({ company_id: "gb:08812345" }));
+    expect(r.source).toBe("company_lookup");
+    expect(r.officers?.map((p) => p.name)).toEqual(["Gareth Pryce"]);
+  });
+  it("never reads an unclear status as active", () => {
+    expect(registerStatus("Active")).toBe("active");
+    expect(registerStatus("Dissolved")).toBe("dissolved");
+    expect(registerStatus("in liquidation")).toBe("dissolved");
+    expect(registerStatus("dormant")).toBe("dormant");
+    expect(registerStatus("unknown")).toBe(undefined);
+    expect(recordFromCard("x:1", card({ identity: {} }) as never).found).toBe(false);
   });
 });
 
