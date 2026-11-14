@@ -575,6 +575,17 @@ Published for prospects (`customers.lifecycle_status = 'prospect'`) by the onboa
 
 Severity scores to use: info 7, low 27, medium 52, critical 92 (matching `severityToScore`).
 
+### Accounts age (Credit Rating agent)
+
+#### `FINANCIALS_STALE`
+
+A customer's accounts are older than its score allows (Settings › How old accounts may be: by default 15 months at a score of 70+, 12 at 55–69, 9 at 40–54, 6 under 40, 12 with no score). Scope `customer`, severity low, published with `cia_processed: true` (a prompt to ask the customer for newer or interim accounts, not a decisioning signal). One event per customer and financial year end. Added by migration `20261114010000_customer_financials_age.sql` (CHECK 42 -> 43 values), which also adds `customers.financials_fye`, `financials_source` and `credit_rating_checked_at`.
+
+- `fye`: date string, the year end of the accounts the score uses
+- `months_old`, `max_months`: numbers
+- `score`: number 0–100 or null; `score_source`: string or null
+- `summary`: string
+
 ### Future event types (V2+ — placeholder, no payload schema yet)
 
 These are documented in the catalog but their full payload definitions are deferred to when their producer agents are built:
@@ -597,7 +608,7 @@ When the producer agent is built, the event type's full payload schema is added 
 
 ### Database constraints
 
-- `event_type` column has a CHECK constraint limiting it to the documented V1 event types (`NEWS_EVENT`, `COVENANT_WAIVER`, `CEO_DEPARTURE`, `REVENUE_MISS`, `GOING_CONCERN`, `SEC_OTHER`, `OVERDUE_INVOICE`, `UTILIZATION_THRESHOLD_BREACH`, `PAYMENT_DETERIORATION`, `PAYMENT_IMPROVEMENT`, `PAYMENT_VOLATILITY`, `COUNTRY_RATING_CHANGE`, `COUNTRY_POLITICAL_RISK`, `COUNTRY_ECONOMIC_SHOCK`, `INTEREST_RATE_CHANGE`, `INDUSTRY_DOWNTURN`, `INDUSTRY_DISRUPTION`, `REGULATORY_CHANGE`, `TARIFF_CHANGE`, `RISK_CHANGE`, `CONCENTRATION_THRESHOLD_BREACH`, `PORTFOLIO_INSIGHT`, `CONCENTRATION_WARNING`, `EXPANSION_OPPORTUNITY`, `EMERGING_RISK_SIGNAL`, `MACRO_TREND_WARNING`, `FX_EXPOSURE_FLAG`, `FX_HEDGING_NEEDED`, `CURRENCY_VOLATILITY`, `CREDIT_RATING_DOWNGRADE`, `CREDIT_RATING_UPGRADE`, plus the synthesis types and the eight onboarding types listed under "Onboarding events").
+- `event_type` column has a CHECK constraint limiting it to the documented V1 event types (`NEWS_EVENT`, `COVENANT_WAIVER`, `CEO_DEPARTURE`, `REVENUE_MISS`, `GOING_CONCERN`, `SEC_OTHER`, `OVERDUE_INVOICE`, `UTILIZATION_THRESHOLD_BREACH`, `PAYMENT_DETERIORATION`, `PAYMENT_IMPROVEMENT`, `PAYMENT_VOLATILITY`, `COUNTRY_RATING_CHANGE`, `COUNTRY_POLITICAL_RISK`, `COUNTRY_ECONOMIC_SHOCK`, `INTEREST_RATE_CHANGE`, `INDUSTRY_DOWNTURN`, `INDUSTRY_DISRUPTION`, `REGULATORY_CHANGE`, `TARIFF_CHANGE`, `RISK_CHANGE`, `CONCENTRATION_THRESHOLD_BREACH`, `PORTFOLIO_INSIGHT`, `CONCENTRATION_WARNING`, `EXPANSION_OPPORTUNITY`, `EMERGING_RISK_SIGNAL`, `MACRO_TREND_WARNING`, `FX_EXPOSURE_FLAG`, `FX_HEDGING_NEEDED`, `CURRENCY_VOLATILITY`, `CREDIT_RATING_DOWNGRADE`, `CREDIT_RATING_UPGRADE`, plus the synthesis types, the eight onboarding types listed under "Onboarding events", and `FINANCIALS_STALE`).
 - `severity` column has a CHECK constraint limiting it to `critical | high | medium | low | info`.
 - `scope` column has a CHECK constraint limiting it to `customer | country | industry | currency | portfolio`.
 - `customer_id` is NOT NULL when scope = 'customer', else NULL (enforced by trigger or CHECK constraint with conditional logic).
