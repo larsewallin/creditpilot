@@ -10,7 +10,7 @@ name: Deploy
 # 2. Backs up the public schema (encrypted, kept 30 days as a run artifact).
 # 3. Applies new migrations in one transaction (dry run first).
 # 4. Deploys changed edge functions; deletes removed ones.
-# 5. Runs the CIA harness (must be 8/8).
+# 5. Runs the CIA harness (every question must pass).
 #
 # The repo is public: run logs and artifacts are visible, so the backup is
 # encrypted with BACKUP_PASSPHRASE before upload and the plaintext never leaves
@@ -208,7 +208,7 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-      - name: CIA harness (must be 8/8)
+      - name: CIA harness (every question must pass)
         if: steps.plan.outputs.any == 'yes'
         run: node tests/cia/run.mjs
 

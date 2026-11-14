@@ -65,7 +65,7 @@ applies schema or deploys code goes through the scripts.
 
 Work goes on a branch and a PR. CI (`.github/workflows/ci.yml`) runs on the PR: Unit
 tests (vitest, golden onboarding harness 14/14, build), CIA harness (against production,
-must be 8/8 before merge) and a migration dry run against production (always rolled
+must pass every question before merge) and a migration dry run against production (always rolled
 back). Claude merges its own PRs once every check is green (founder 2026-11-13); anything
 that deletes data waits for the founder. Every merge to `main` runs Deploy
 (`.github/workflows/deploy.yml`; also Actions → Deploy → Run workflow): service settings
