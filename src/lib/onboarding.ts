@@ -135,10 +135,26 @@ export async function callOnboarding<T = Record<string, unknown>>(body: Record<s
 }
 
 export interface ScoreProviderInfo { id: string; name: string; scale: string }
+export interface AgentSchedule { enabled: boolean; every_hours: number; at_hour: number }
 export interface SettingsAnswer {
-  settings: { sources: { score_order: string[] }; financials: Record<string, number>; [k: string]: unknown };
+  settings: { sources: { score_order: string[] }; financials: Record<string, number>; agents: Record<string, AgentSchedule | string>; [k: string]: unknown };
   overrides: Record<string, unknown>;
   score_providers: ScoreProviderInfo[];
+  agents: { key: string; label: string; stage: "sense" | "risk" | "decide" }[];
+  demo: boolean;
+}
+
+export interface SchedulerPreview {
+  mode: "demo" | "production"; now: string; timezone: string;
+  due: { key: string; label: string; reason: string }[];
+  waiting: { key: string; reason: string }[];
+}
+
+/** What the scheduler would start now (never starts anything). */
+export async function previewScheduler(): Promise<SchedulerPreview> {
+  const { data, error } = await supabase.functions.invoke("agent-scheduler", { body: { dry_run: true } });
+  if (error) throw new Error(error.message);
+  return data as SchedulerPreview;
 }
 
 /** Company policy settings (any signed-in user can read; admins and credit managers save). */

@@ -41,3 +41,9 @@ FROM customers
 WHERE lifecycle_status = 'active'
 GROUP BY 1
 ORDER BY 2 DESC;
+
+\echo '— Agent scheduler: cron job, Vault names (names only), recent calls —'
+SELECT jobname, schedule, active FROM cron.job WHERE jobname IN ('agent-scheduler') ORDER BY jobname;
+SELECT name FROM vault.secrets WHERE name IN ('project_url', 'scheduler_secret', 'sanctions_sync_secret') ORDER BY name;
+SELECT agent_name, count(*) AS starts_7d, max(started_at) AS last_start
+  FROM agent_runs WHERE agent_name LIKE 'scheduler:%' AND started_at > now() - interval '7 days' GROUP BY 1 ORDER BY 1;

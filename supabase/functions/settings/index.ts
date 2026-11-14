@@ -11,6 +11,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.98.0";
 import { AuthError, requireUser } from "../_shared/auth.ts";
 import { effectiveSettings, validateSetting } from "../_shared/onboarding/settings_validate.ts";
 import { PROVIDER_LIST } from "../_shared/onboarding/score_providers.ts";
+import { AGENTS } from "../_shared/scheduling/schedule.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -37,7 +38,11 @@ Deno.serve(async (req) => {
     if (req.method === "GET") {
       await requireUser(req);
       const overrides = await load();
-      return json({ settings: effectiveSettings(overrides), overrides, score_providers: PROVIDER_LIST });
+      return json({
+        settings: effectiveSettings(overrides), overrides, score_providers: PROVIDER_LIST,
+        agents: AGENTS.map(({ key, label, stage }) => ({ key, label, stage })),
+        demo: Deno.env.get("DEMO_MODE") === "true",
+      });
     }
 
     if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
