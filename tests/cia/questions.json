@@ -151,6 +151,24 @@
           "High"
         ]
       }
+    },
+    {
+      "id": "q9_score_sources",
+      "question": "Which credit score providers do our customers' scores come from?",
+      "expected": {
+        "min_sources": 0,
+        "must_mention": [
+          "S&P"
+        ],
+        "must_not_say": [
+          "I don't have",
+          "supplier"
+        ],
+        "expected_confidence": [
+          "High",
+          "Medium"
+        ]
+      }
     }
   ]
 }
