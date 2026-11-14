@@ -43,13 +43,14 @@ echo "   Database, auth and functions are up (migrations applied)."
 
 if [ "$MODE" = "demo" ]; then
   say "3/5 Loading the demo data (59 fictional customers, invoices, payments, news, filings)…"
-  COUNT="$(psql "$DB_URL" -tAc 'select count(*) from public.customers' 2>/dev/null || echo 0)"
-  if [ "$COUNT" = "0" ]; then
+  # Marker: a seed customer (migrations alone add only the 23 fixture customers).
+  HAS_SEED="$(psql "$DB_URL" -tAc "select count(*) from public.customers where id = 'c0000001-0000-0000-0000-000000000038'" 2>/dev/null || echo 0)"
+  if [ "$HAS_SEED" = "0" ]; then
     # pg_dump 18 adds \restrict lines that older psql versions do not know.
     grep -v '^\\\(un\)\?restrict ' supabase/seed.sql | psql "$DB_URL" -q -v ON_ERROR_STOP=1 >/dev/null
     echo "   Loaded $(psql "$DB_URL" -tAc 'select count(*) from public.customers') customers."
   else
-    echo "   Already loaded ($COUNT customers)."
+    echo "   Already loaded ($(psql "$DB_URL" -tAc 'select count(*) from public.customers') customers)."
   fi
 else
   say "3/5 Empty database: no sample data loaded."

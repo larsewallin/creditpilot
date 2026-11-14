@@ -44,7 +44,7 @@ jobs:
           echo "invoices:             $(q 'select count(*) from invoices')"
           echo "payment_transactions: $(q 'select count(*) from payment_transactions')"
           echo "cron jobs:            $(q "select string_agg(jobname, ', ' order by jobname) from cron.job")"
-          [ "$(q 'select count(*) from customers')" -ge 59 ] || { echo "::error::demo customers missing"; exit 1; }
+          [ "$(q "select count(*) from customers where id::text like 'c000000%'")" -ge 59 ] || { echo "::error::demo customers missing"; exit 1; }
           [ "$(q "select count(*) from cron.job where jobname = 'agent-scheduler'")" = 1 ] || { echo "::error::agent-scheduler job missing"; exit 1; }
           [ "$(q "select count(*) from information_schema.columns where table_name = 'customers' and column_name = 'financials_fye'")" = 1 ] || { echo "::error::schema incomplete"; exit 1; }
       - name: Check the functions answer
