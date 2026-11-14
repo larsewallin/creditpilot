@@ -13,6 +13,7 @@
  * @usedBy cia-agent onboarding mode (pending_actions.memo / rationale)
  */
 import type { CreditApplication, OnboardingOutcome } from "../../onboarding/types.ts";
+import { SCORE_PROVIDERS } from "../../onboarding/score_providers.ts";
 
 export interface MemoSection { title: string; lines: string[]; sources: string[] }
 export interface OnboardingMemo {
@@ -41,7 +42,10 @@ export const REASON_TEXT: Record<string, string> = {
 
 const usd = (n?: number) => (n === undefined || n === null ? "n/a" : `$${Math.round(n).toLocaleString("en-US")}`);
 const FIN_SOURCE: Record<string, string> = { sec_edgar: "SEC EDGAR (10-K, XBRL)", uploaded_statements: "Statements entered from the customer's accounts", none: "None" };
-const SCORE_SOURCE: Record<string, string> = { keen: "Keen", file: "Keen", bureau_report: "Uploaded bureau report" };
+const SCORE_SOURCE: Record<string, string> = {
+  file: "Keen", bureau_report: "Uploaded bureau report",
+  ...Object.fromEntries(SCORE_PROVIDERS.map((p) => [p.id, p.id === "keen" ? "Keen" : `${p.name} (entered from its report)`])),
+};
 const AGENT: Record<string, string> = { country_risk_agent: "Country Risk agent", fx_risk_agent: "FX Risk agent", industry_risk_agent: "Industry Risk agent", news_agent: "News agent" };
 const CHECK: Record<string, string> = {
   "registry:companies_house": "Companies House", "registry:sec_edgar": "SEC EDGAR", "registry:gleif": "GLEIF (LEI register)",

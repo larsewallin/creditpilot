@@ -88,6 +88,8 @@ export interface CreditApplication {
   /** A private company's statements in Keen's template shape (keen_statements.ts); Keen scores them. */
   keen_statements?: import("./keen_statements.ts").KeenStatements;
   bureau_report?: BureauReport;   // uploaded PDF, already parsed
+  /** Scores from third-party providers, typed from their reports (score_providers.ts). */
+  provider_scores?: ProviderScore[];
   signatures: {
     terms?: boolean;
     credit_check_consent?: boolean;
@@ -158,6 +160,14 @@ export interface KeenDetail {
   filing?: { form?: string; fiscal_year?: number; filed?: string; accession?: string };
   reasons: { code: string; text: string; direction: "positive" | "negative" | string }[];
   warnings: string[];
+}
+
+export interface ProviderScore {
+  provider: string;          // score_providers.ts id: dnb, creditsafe, coface, allianz_trade, experian, other
+  raw: string | number;      // the provider's own value ("72", "B", "4")
+  as_of?: string;            // the report's date
+  max_credit_usd?: number;   // the provider's credit recommendation, if it gives one
+  name?: string;             // for "other": the provider's name
 }
 
 export interface BureauReport {

@@ -39,6 +39,7 @@ import { publishEvent } from "../_shared/publishEvent.ts";
 import { SectorEnum } from "../_shared/event_schemas.ts";
 import { NEW_CREDIT_LIMIT, decisionLabel, underwritingAssumptions } from "../_shared/onboarding/decision.ts";
 import { companyLookup, prefillFromCard, isCompanyId } from "../_shared/onboarding/company_lookup.ts";
+import { PROVIDER } from "../_shared/onboarding/score_providers.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -472,7 +473,7 @@ async function persist(db: SupabaseClient, user: AuthedUser, row: AppRow, app: C
 
   if (o.analysis) {
     const rows: Record<string, unknown>[] = o.analysis.fallbacks
-      .filter((f) => f.provider === "keen" || f.provider === "bureau_report")
+      .filter((f) => f.provider === "keen" || f.provider === "bureau_report" || !!PROVIDER[f.provider])
       .map((f) => ({ application_id: row.id, provider: f.provider, status: f.reason === "timeout" ? "timeout" : "error", detail: { reason: f.reason } }));
     if (o.analysis.score_source) {
       rows.push({

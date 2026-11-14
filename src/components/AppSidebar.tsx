@@ -1,4 +1,4 @@
-import { Zap, Newspaper, BarChart2, FileSearch, Users, Wrench, Info, Github, CreditCard, Factory, Globe, Coins, LogIn, LogOut, UserPlus } from "lucide-react";
+import { Zap, Newspaper, BarChart2, FileSearch, Users, Wrench, Info, Github, CreditCard, Factory, Globe, Coins, LogIn, LogOut, UserPlus, Settings as SettingsIcon } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -18,6 +18,7 @@ const navItems = [
   { title: "Country Risk", path: "/country", icon: Globe },
   { title: "FX Risk", path: "/fx", icon: Coins },
   { title: "Customers", path: "/customers", icon: Users },
+  { title: "Settings", path: "/settings", icon: SettingsIcon },
 ];
 
 export function AppSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {

@@ -24,6 +24,11 @@ function formatRatingSource(source: string): string {
     dnb_paydex: "D&B Paydex",
     coface: "Coface",
     keen: "Keen",
+    dnb: "Dun & Bradstreet",
+    creditsafe: "Creditsafe",
+    allianz_trade: "Allianz Trade",
+    experian: "Experian",
+    other: "Other provider",
     bureau_report: "Bureau report",
   };
   return labels[source] ?? source;

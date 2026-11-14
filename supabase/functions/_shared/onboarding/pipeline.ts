@@ -19,6 +19,7 @@ import type {
 } from "./types.ts";
 import { ONBOARDING_DEFAULTS } from "./settings.ts";
 import { financialsAge, statementFromKeen } from "./keen_statements.ts";
+import { PROVIDER, SCORE_PROVIDERS } from "./score_providers.ts";
 import { selectCreditScore } from "../skills/analytical/select-credit-score.ts";
 import { calculateOnboardingLimit, scoreToBand } from "../skills/analytical/calculate-onboarding-limit.ts";
 import { matchSanctionsName, normalize, prepareSanctionsList, type PreparedEntry } from "../skills/analytical/match-sanctions-name.ts";
@@ -130,13 +131,24 @@ export async function runOnboarding(
     bureau_report: async () => app.bureau_report
       ? { score: app.bureau_report.score_normalized, raw: `${app.bureau_report.bureau} report` }
       : { error: "not_found" },
+    // Third-party providers: the score the credit team typed from the provider's report.
+    ...Object.fromEntries(SCORE_PROVIDERS.filter((p) => p.id !== "keen").map((p) => [p.id, async () => {
+      const entry = (app.provider_scores ?? []).find((x) => x.provider === p.id);
+      if (!entry) return { error: "not_entered" };
+      const score = p.normalize(entry.raw);
+      if (score === null) return { error: "not_a_score" };
+      const who = p.id === "other" && entry.name ? entry.name : p.name;
+      return { score, raw: `${who} ${entry.raw}`, max_credit_recommendation_usd: entry.max_credit_usd, as_of: entry.as_of };
+    }])),
   });
-  fallbacks.push(...picked.fallbacks);
+  // A provider the company uses but nobody entered for this applicant is not a gap worth listing.
+  fallbacks.push(...picked.fallbacks.filter((f) => f.reason !== "not_entered"));
   const score = picked.result?.score;
   const score_source = picked.source;
   const maxCredit: number[] = [];
   if (picked.source === "keen" && picked.result?.max_credit_recommendation_usd !== undefined) maxCredit.push(picked.result.max_credit_recommendation_usd);
   if (app.bureau_report?.max_credit_recommendation_usd !== undefined) maxCredit.push(app.bureau_report.max_credit_recommendation_usd);
+  if (picked.source && PROVIDER[picked.source] && picked.source !== "keen" && picked.result?.max_credit_recommendation_usd !== undefined) maxCredit.push(picked.result.max_credit_recommendation_usd);
   const band = scoreToBand(score);
 
   const currency = app.credit_request.invoicing_currency?.toUpperCase();

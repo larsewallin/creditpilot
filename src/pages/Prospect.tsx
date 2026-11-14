@@ -511,12 +511,13 @@ function KeenScore({ an }: { an: any }) {
 }
 
 const SOURCE_TILES: { key: string; name: string; note: string }[] = [
-  { key: "keen", name: "Keen", note: "Scores US-listed companies from their latest 10-K" },
-  { key: "bureau_report", name: "Uploaded bureau report", note: "Any bureau the applicant or you already use" },
+  { key: "keen", name: "Keen", note: "Scores from a 10-K or the statements entered" },
   { key: "sec_edgar", name: "SEC EDGAR", note: "Audited financials for US public companies" },
-  { key: "uploaded_statements", name: "Uploaded statements", note: "Financials sent with the application" },
+  { key: "uploaded_statements", name: "Statements entered", note: "From the customer's accounts" },
 ];
-const CONNECT_TILES = ["Dun & Bradstreet", "Creditsafe", "Experian"];
+const PROVIDER_NAME: Record<string, string> = {
+  dnb: "Dun & Bradstreet", creditsafe: "Creditsafe", coface: "Coface", allianz_trade: "Allianz Trade", experian: "Experian", other: "Other provider", bureau_report: "Uploaded bureau report",
+};
 
 function AnalysisView({ o, scores, memo, a }: { o: any; scores: any[]; memo?: any; a: any }) {
   const an = o.analysis;
@@ -549,19 +550,30 @@ function AnalysisView({ o, scores, memo, a }: { o: any; scores: any[]; memo?: an
               </div>
             );
           })}
-          {CONNECT_TILES.map((n) => (
-            <div key={n} className="rounded-lg border border-dashed p-3 space-y-1 opacity-60">
-              <p className="font-semibold">{n}</p>
-              <p className="text-muted-foreground">Bring your own licence</p>
-              <p className="text-muted-foreground">Connect in Settings</p>
-            </div>
-          ))}
+          {(a.provider_scores ?? []).map((p: any, i: number) => {
+            const used = an.score_source === p.provider;
+            const gap = an.fallbacks?.find((x: any) => x.provider === p.provider);
+            return (
+              <div key={i} className={cn("rounded-lg border p-3 space-y-1", used ? "border-primary/40 bg-primary/5" : "")}>
+                <p className="font-semibold">{p.provider === "other" && p.name ? p.name : PROVIDER_NAME[p.provider] ?? p.provider}</p>
+                <p className="text-muted-foreground">Entered from its report{p.as_of ? ` of ${p.as_of}` : ""}: {p.raw}</p>
+                <p className={cn(used ? "text-primary font-medium" : gap ? "text-amber-700" : "text-muted-foreground")}>
+                  {used ? `Used: ${an.score} on 0–100 (band ${an.band})` : gap ? (gap.reason === "not_a_score" ? "Not on the provider's scale" : gap.reason.replace(/_/g, " ")) : "Not needed: a source higher in Settings had a score"}
+                </p>
+              </div>
+            );
+          })}
+          <Link to="/settings" className="rounded-lg border border-dashed p-3 space-y-1 opacity-70 hover:opacity-100">
+            <p className="font-semibold">Use another provider</p>
+            <p className="text-muted-foreground">D&amp;B, Creditsafe, Coface, Allianz Trade, Experian…</p>
+            <p className="text-primary">Settings › Credit score source</p>
+          </Link>
         </div>
       </Panel>
       <Panel title="Score">
         {an.financials_age && <AccountsAge age={an.financials_age} />}
         {an.keen ? <KeenScore an={an} /> : (
-          <p>{an.score != null ? `${an.score} (band ${an.band}) from ${an.score_source === "keen" || an.score_source === "file" ? "Keen" : an.score_raw ? `the uploaded ${an.score_raw}` : "the uploaded bureau report"}` : "No score could be obtained."}</p>
+          <p>{an.score != null ? `${an.score} on 0–100 (band ${an.band}) from ${an.score_source === "keen" || an.score_source === "file" ? "Keen" : an.score_source === "bureau_report" ? `the uploaded ${an.score_raw ?? "bureau report"}` : `${an.score_raw ?? PROVIDER_NAME[an.score_source] ?? an.score_source} (${PROVIDER_NAME[an.score_source] ?? "provider"}'s own scale), entered from its report`}` : "No score could be obtained."}</p>
         )}
         {keenGap(an) && <p className="text-muted-foreground pt-1">Keen: {keenGap(an)}.</p>}
       </Panel>
