@@ -16,3 +16,7 @@ verify_jwt = false
 # Stand-in for the Keen scoring API; authenticated in code with KEEN_API_KEY.
 [functions.keen-mock]
 verify_jwt = false
+
+# Called every 15 minutes by pg_cron with x-scheduler-secret, or by a signed-in admin for a dry run; auth is checked in code.
+[functions.agent-scheduler]
+verify_jwt = false

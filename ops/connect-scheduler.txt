@@ -1,0 +1,3 @@
+# Editing this file on main runs the "Connect scheduler" workflow (new scheduler secret, installed in Supabase and Vault).
+# Change the line below (e.g. the date) to rotate the secret.
+2026-11-14 first connection

@@ -7,6 +7,7 @@
  */
 import { ONBOARDING_DEFAULTS } from "./settings.ts";
 import { SCORE_PROVIDERS } from "./score_providers.ts";
+import { AGENTS, EVERY_HOURS, SCHEDULE_DEFAULTS, validTimezone } from "../scheduling/schedule.ts";
 
 export const SETTING_KEYS = [
   "onboarding.template",
@@ -15,6 +16,7 @@ export const SETTING_KEYS = [
   "onboarding.financials",
   "onboarding.sources",
   "onboarding.approval",
+  "agents.schedule",
 ] as const;
 export type SettingKey = typeof SETTING_KEYS[number];
 
@@ -48,8 +50,21 @@ export function validateSetting(key: string, value: Json): string[] {
   if (!(SETTING_KEYS as readonly string[]).includes(key)) return [`${key}: unknown settings key`];
   if (!isObj(value)) return [`${key}: expected an object`];
   if (key === "onboarding.approval") return [];
-  const section = key.slice("onboarding.".length) as keyof typeof ONBOARDING_DEFAULTS;
   const errors: string[] = [];
+  if (key === "agents.schedule") {
+    check(SCHEDULE_DEFAULTS, value, key, errors);
+    const v = value as Record<string, Json>;
+    if ("timezone" in v && !validTimezone(v.timezone)) errors.push(`${key}.timezone: not a time zone (use a name such as Europe/London or America/New_York)`);
+    for (const a of AGENTS) {
+      const s = v[a.key];
+      if (!isObj(s)) continue;
+      const clock = a.stage === "sense";
+      if ("every_hours" in s && clock && !(EVERY_HOURS as readonly unknown[]).includes(s.every_hours)) errors.push(`${key}.${a.key}.every_hours: use ${EVERY_HOURS.join(", ")}`);
+      if ("at_hour" in s && (typeof s.at_hour !== "number" || s.at_hour > 23 || !Number.isInteger(s.at_hour))) errors.push(`${key}.${a.key}.at_hour: a whole hour from 0 to 23`);
+    }
+    return errors;
+  }
+  const section = key.slice("onboarding.".length) as keyof typeof ONBOARDING_DEFAULTS;
   check(ONBOARDING_DEFAULTS[section], value, key, errors);
   if (key === "onboarding.sources" && Array.isArray((value as Record<string, Json>).score_order)) {
     const order = (value as Record<string, Json>).score_order as unknown[];
@@ -74,5 +89,7 @@ export function effectiveSettings(overrides: Record<string, Json>) {
     out[section] = merge(ONBOARDING_DEFAULTS[section], overrides[`onboarding.${section}`]);
   }
   out.approval = overrides["onboarding.approval"] ?? {};
+  const sched = (overrides["agents.schedule"] ?? {}) as Record<string, Json>;
+  out.agents = Object.fromEntries(Object.entries(SCHEDULE_DEFAULTS).map(([k, d]) => [k, merge(d, sched[k])]));
   return out;
 }
