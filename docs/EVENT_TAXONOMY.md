@@ -124,7 +124,7 @@ News article about a customer. Single event type covers all news regardless of s
   - `article_url`: string or null — nullable; a missing URL must never drop a real event
   - `published_at`: ISO datetime
   - `source`: string — free-form publication name (e.g. "Reuters", "Seeking Alpha"). Not an enum: publications are open-ended.
-  - `provider`: enum (`tavily` | `google_news` | `manual`) — the fetch mechanism, distinct from the publication.
+  - `provider`: enum (`tavily` | `google_news` | `manual` | `trade_credit_monitor`) — the fetch mechanism, distinct from the publication.
   - `key_phrases`: string[] — may be empty if the source doesn't supply phrases
   - `summary`: string (AI-generated, 2–3 sentences)
   - **No full article body** — URL is preserved for original-source access

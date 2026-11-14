@@ -17,12 +17,18 @@
  * Each payload's summary includes the USD exposure in that country.
  *
  * Data boundary: DEMO_MODE ? seed_country_risk : fetchLiveCountryRisk() (STUB —
- * no licensed live source chosen yet; returns []).
+ * no licensed live source of ratings, scores or policy rates chosen yet; returns []).
+ *
+ * Live country news (production only): Trade Credit Monitor's country-risk stories for
+ * each portfolio country (TCM_API_URL, on by default). The strongest story of severity 4+
+ * per country becomes COUNTRY_POLITICAL_RISK or COUNTRY_ECONOMIC_SHOCK (economic wording),
+ * with its link as evidence (skills/integration/trade-credit-monitor.ts).
  *
  * Rate limit 60 min; DEMO_MODE self-resets this agent's demo credit_events;
  * dedup against credit_events (today, fingerprint country:type).
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.98.0";
+import { countrySignals, tcmBase, tradeCreditMonitor } from "../_shared/skills/integration/trade-credit-monitor.ts";
 import { publishEvent } from "../_shared/publishEvent.ts";
 import { severityToScore } from "../_shared/event_schemas.ts";
 
@@ -198,6 +204,27 @@ Deno.serve(async (req) => {
         console.error(`[country-risk-agent] ${event_type} publishEvent failed for ${key}:`, (err as Error).message);
       }
     };
+
+    // Live country news from Trade Credit Monitor (production only; the demo reads its seed).
+    const tcm = DEMO_MODE ? null : tcmBase((k) => Deno.env.get(k));
+    if (tcm) {
+      const client = tradeCreditMonitor(tcm);
+      for (const code of codes) {
+        const items = await client.news({ category: "country-risk", country: code, minSeverity: 4, hours: 48, limit: 50 });
+        const exp = exposureFor(code);
+        const expText = exp > 0 ? ` Portfolio exposure in ${code}: ${usd(exp)}.` : "";
+        for (const sig of countrySignals(code, items)) {
+          const a = sig.article;
+          const summary = `${a.title} (${a.source}, ${a.publishedAt.slice(0, 10)}).${expText}`;
+          const title = sig.event_type === "COUNTRY_ECONOMIC_SHOCK" ? `${code}: economic shock reported` : `${code}: political risk reported`;
+          await emit(`${code}:${sig.event_type}`, sig.event_type, sig.severity, title, summary,
+            sig.event_type === "COUNTRY_ECONOMIC_SHOCK"
+              ? { country_code: code, shock_type: sig.kind, evidence_url: a.url, exposure_usd: exp }
+              : { country_code: code, risk_type: sig.kind, evidence_url: a.url, exposure_usd: exp });
+        }
+        scanned++;
+      }
+    }
 
     for (const r of rows) {
       const exp = exposureFor(r.country_code);
