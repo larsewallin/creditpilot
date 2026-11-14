@@ -183,80 +183,17 @@ Credit scores from D&B, Coface, Experian, and other providers are normalised to 
 
 ## Getting Started
 
-### Prerequisites
-
-- [Node.js](https://nodejs.org) 18+
-- [Supabase CLI](https://supabase.com/docs/guides/cli) — `npm install -g supabase`
-- A Supabase project ([supabase.com](https://supabase.com), free tier works)
-- An [Anthropic API key](https://console.anthropic.com)
-
-### 1. Clone and install
+The demo on your own computer is one command (Docker and Node.js needed):
 
 ```bash
-git clone https://github.com/larsewallin/Creditpilot.git
-cd Creditpilot
-npm install
+git clone https://github.com/larsewallin/creditpilot.git
+cd creditpilot
+scripts/setup-local.sh
 ```
 
-### 2. Configure environment variables
+It starts a local Supabase stack, applies the schema, loads the demo data and prints sign-in accounts; then run `npx supabase@3.1.0 functions serve --env-file supabase/functions/.env.local` and `npm run dev`, and open http://localhost:5173.
 
-```bash
-cp .env.example .env
-```
-
-Edit `.env` with your Supabase project URL and anon key (Settings → API in the Supabase dashboard).
-
-### 3. Apply the database schema
-
-```bash
-supabase login
-supabase link --project-ref your-project-ref
-supabase db push
-```
-
-This applies the schema baseline in `supabase/migrations/`, creating the complete database structure (tables, functions, triggers, views, and row-level security policies). It does **not** load any data — a fresh deployment starts empty, ready for your own customers and invoices.
-
-### 3a. (Optional) Load the demo dataset
-
-To explore CreditPilot with sample data — 59 fictional customers across seven credit scenarios, with invoices, payments, AR aging, and news/SEC signals — load the demo seed:
-
-```bash
-psql "$DATABASE_URL" -f supabase/seed.sql
-```
-
-Skip this step for a production deployment; your real data enters via the AR aging CSV upload. The demo seed and your production data are mutually exclusive — a clean clone has no demo rows to remove.
-
-> **Note:** A hosted demo is also available at [creditpilot.vercel.app](https://creditpilot.vercel.app) — no setup required.
-
-### 4. Set Supabase function secrets
-
-In the Supabase dashboard → Edge Functions → Manage secrets, add:
-
-```
-ANTHROPIC_API_KEY = sk-ant-...
-DEMO_MODE         = false
-TAVILY_API_KEY    = tvly-...   # optional — enables live news search
-```
-
-To try the demo first, set `DEMO_MODE = true` and leave `TAVILY_API_KEY` unset.
-
-### 5. Deploy the edge functions
-
-```bash
-supabase functions deploy ar-aging-agent
-supabase functions deploy ar-csv-upload
-supabase functions deploy news-monitor-agent
-supabase functions deploy sec-monitor-agent
-supabase functions deploy cia-agent
-```
-
-### 6. Run the frontend
-
-```bash
-npm run dev
-```
-
-Open [http://localhost:5173](http://localhost:5173).
+For your own production install on a Supabase project (`DEMO_MODE=false`, agent schedules, score sources), follow **[docs/RUN_IT_YOURSELF.md](docs/RUN_IT_YOURSELF.md)**.
 
 > To try the demo without any setup, visit [creditpilot.vercel.app](https://creditpilot.vercel.app).
 
