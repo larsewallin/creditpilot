@@ -52,7 +52,7 @@ export const NewsEventPayload = z.object({
   article_url: z.string().url().nullable(),
   published_at: z.string().datetime(),
   source: z.string(),  // free-form publication name (e.g. "Reuters", "Seeking Alpha")
-  provider: z.enum(["tavily", "google_news", "manual"]),  // fetch mechanism, not publication
+  provider: z.enum(["tavily", "google_news", "manual", "trade_credit_monitor"]),  // fetch mechanism, not publication
   key_phrases: z.array(z.string()),
   summary: z.string(),
 });

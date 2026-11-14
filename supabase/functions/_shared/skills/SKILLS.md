@@ -231,9 +231,18 @@ CIA will detect the delta automatically on the next briefing run.
 - published_date maps to news_date in negative_news table (documented in code)
 - Returns [] on complete failure — never throws
 
-**Current providers:** TavilyProvider (live), stub pattern ready for Google News, Reuters
+**Current providers:** TavilyProvider (live, TAVILY_API_KEY), TradeCreditMonitorProvider (live, on by default; see `trade-credit-monitor.ts`)
 **Outputs:** RawArticle[] — headline, summary, url, source, published_date, relevance_score, provider
 **Tests:** covered by news monitor agent integration
+
+---
+
+### `trade-credit-monitor.ts`
+**Purpose:** Connector to Trade Credit Monitor (MIT, `docs/API.md` in its repo): trade-credit stories tagged by category, country, sector, company and severity, including UK Gazette insolvency notices.
+**Called by:** News monitor agent (`TradeCreditMonitorProvider`: stories that name the customer, exact name match after removing punctuation and legal suffixes), Country risk agent (`countrySignals`: the strongest severity-4+ country-risk story per country becomes COUNTRY_POLITICAL_RISK or COUNTRY_ECONOMIC_SHOCK with its link). Production only; the demo reads its seed tables.
+**Settings:** `TCM_API_URL` (default the hosted copy; `off` switches it off; a local copy on port 3000).
+**Key design decisions:** tags are keyword or AI output, so every item is a signal with its source link; a failure returns [].
+**Tests:** `__tests__/trade-credit-monitor.test.ts`
 
 ---
 

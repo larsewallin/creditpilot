@@ -2,7 +2,8 @@
  * News Monitor Agent — supabase/functions/news-monitor-agent/index.ts
  *
  * Full live news pipeline: searches for negative news about each customer via
- * Tavily, classifies articles with Claude Haiku (falling back to keywords),
+ * Tavily and Trade Credit Monitor (insolvency notices and trade-credit stories that
+ * name the customer; TCM_API_URL, on by default), classifies articles with Claude Haiku (falling back to keywords),
  * deduplicates by content fingerprint, writes credit events, and composes
  * Microsoft Teams alerts for medium/high/critical findings.
  *
@@ -34,6 +35,7 @@ import {
   searchSeedNews,
   TavilyProvider,
 } from "../_shared/skills/integration/search-news.ts";
+import { TradeCreditMonitorProvider, tcmBase } from "../_shared/skills/integration/trade-credit-monitor.ts";
 import { publishEvent } from "../_shared/publishEvent.ts";
 import { severityToScore } from "../_shared/event_schemas.ts";
 
@@ -119,10 +121,18 @@ Deno.serve(async (req) => {
     const tavilyKey = Deno.env.get("TAVILY_API_KEY");
     const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
 
-    // ── Backward-compat: no Tavily key → process existing unreviewed rows ─────
+    // Live sources: Tavily (TAVILY_API_KEY) and Trade Credit Monitor (TCM_API_URL; on by
+    // default: insolvency notices and trade-credit stories that name the customer).
+    const tcm = tcmBase((k) => Deno.env.get(k));
+    const liveProviders = [
+      ...(tavilyKey ? [new TavilyProvider(tavilyKey)] : []),
+      ...(tcm ? [new TradeCreditMonitorProvider(tcm)] : []),
+    ];
 
-    if (!tavilyKey && !DEMO_MODE) {
-      console.log("[news-monitor-agent] No TAVILY_API_KEY — falling back to existing unreviewed rows");
+    // ── Backward-compat: no live source → process existing unreviewed rows ─────
+
+    if (!liveProviders.length && !DEMO_MODE) {
+      console.log("[news-monitor-agent] No TAVILY_API_KEY and Trade Credit Monitor off — falling back to existing unreviewed rows");
       return await legacyPath(supabase, run_id, agent_name, corsHeaders);
     }
 
@@ -165,7 +175,7 @@ Deno.serve(async (req) => {
             company_name: customer.company_name,
             days_back: 7,
             max_results: 10,
-            providers: [new TavilyProvider(tavilyKey!)],
+            providers: liveProviders,
           });
 
       console.log(`[news-monitor-agent]   ${articles.length} articles found`);
