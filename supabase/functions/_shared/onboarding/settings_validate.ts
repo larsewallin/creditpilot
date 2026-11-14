@@ -6,6 +6,7 @@
  * onboarding.approval has no code default yet (Phase 2): it accepts any object.
  */
 import { ONBOARDING_DEFAULTS } from "./settings.ts";
+import { SCORE_PROVIDERS } from "./score_providers.ts";
 
 export const SETTING_KEYS = [
   "onboarding.template",
@@ -19,7 +20,7 @@ export type SettingKey = typeof SETTING_KEYS[number];
 
 /** Score sources the pipeline can call, in no particular order. A company's
  *  score_order lists the ones it uses, most trusted first; the first with a score counts. */
-export const SCORE_SOURCES = ["keen", "bureau_report"] as const;
+export const SCORE_SOURCES = [...SCORE_PROVIDERS.map((p) => p.id), "bureau_report"] as const;
 
 type Json = unknown;
 const isObj = (v: Json): v is Record<string, Json> => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -52,6 +53,7 @@ export function validateSetting(key: string, value: Json): string[] {
   check(ONBOARDING_DEFAULTS[section], value, key, errors);
   if (key === "onboarding.sources" && Array.isArray((value as Record<string, Json>).score_order)) {
     const order = (value as Record<string, Json>).score_order as unknown[];
+    if (new Set(order).size !== order.length) errors.push(`${key}.score_order: a source is listed twice`);
     for (const s of order) if (!(SCORE_SOURCES as readonly unknown[]).includes(s)) errors.push(`${key}.score_order: unknown score source "${s}" (known: ${SCORE_SOURCES.join(", ")})`);
     if (order.length === 0) errors.push(`${key}.score_order: list at least one score source`);
   }

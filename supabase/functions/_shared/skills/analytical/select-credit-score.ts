@@ -24,6 +24,8 @@ export interface ScoreCandidate {
   max_credit_recommendation_usd?: number;
   /** Keen's label, 10-K and reasons, carried through untouched. */
   keen?: unknown;
+  /** Date of the provider's report, when it gives one. */
+  as_of?: string;
 }
 
 export type FetchOutcome = ScoreCandidate | { error: string };

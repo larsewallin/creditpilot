@@ -134,6 +134,30 @@ export async function callOnboarding<T = Record<string, unknown>>(body: Record<s
   return data as T;
 }
 
+export interface ScoreProviderInfo { id: string; name: string; scale: string }
+export interface SettingsAnswer {
+  settings: { sources: { score_order: string[] }; financials: Record<string, number>; [k: string]: unknown };
+  overrides: Record<string, unknown>;
+  score_providers: ScoreProviderInfo[];
+}
+
+/** Company policy settings (any signed-in user can read; admins and credit managers save). */
+export async function getSettings(): Promise<SettingsAnswer> {
+  const { data, error } = await supabase.functions.invoke("settings", { method: "GET" });
+  if (error) throw new Error(error.message);
+  return data as SettingsAnswer;
+}
+
+export async function saveSetting(key: string, value: unknown): Promise<void> {
+  const { data, error } = await supabase.functions.invoke("settings", { body: { key, value } });
+  if (error) {
+    const ctx = (error as { context?: Response }).context;
+    const j = ctx && typeof ctx.json === "function" ? await ctx.json().catch(() => null) : null;
+    throw new Error(j?.error ?? error.message);
+  }
+  if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+}
+
 export const SEVERITY_CLASS: Record<string, string> = {
   critical: "bg-destructive/15 text-destructive",
   high: "bg-orange-500/15 text-orange-700",

@@ -1,7 +1,7 @@
 /**
  * settings — protected gateway for company policy settings.
  *
- *   GET  (any signed-in user)  -> { settings: effective, overrides }
+ *   GET  (any signed-in user)  -> { settings: effective, overrides, score_providers }
  *   POST { key, value }        -> admin or credit_manager only; validates, saves, logs history
  *   POST { key, reset: true }  -> admin or credit_manager only; removes the override (back to defaults)
  *
@@ -10,6 +10,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.98.0";
 import { AuthError, requireUser } from "../_shared/auth.ts";
 import { effectiveSettings, validateSetting } from "../_shared/onboarding/settings_validate.ts";
+import { PROVIDER_LIST } from "../_shared/onboarding/score_providers.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -36,7 +37,7 @@ Deno.serve(async (req) => {
     if (req.method === "GET") {
       await requireUser(req);
       const overrides = await load();
-      return json({ settings: effectiveSettings(overrides), overrides });
+      return json({ settings: effectiveSettings(overrides), overrides, score_providers: PROVIDER_LIST });
     }
 
     if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);

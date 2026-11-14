@@ -17,6 +17,7 @@ import { callOnboarding } from "@/lib/onboarding";
 import { SAMPLE_APPLICATIONS } from "@/lib/onboardingSamples";
 import { CompanyLookupSearch, type LookupPrefill } from "@/components/onboarding/CompanyLookupSearch";
 import { KeenStatementsForm, type KeenStatements } from "@/components/onboarding/KeenStatementsForm";
+import { ProviderScoresForm, toProviderScores, fromProviderScores, type ProviderScoreRow } from "@/components/onboarding/ProviderScoresForm";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -33,8 +34,10 @@ type Form = typeof EMPTY & {
   keen: KeenStatements | null;
   /** statements a sample carries in the older short form (kept as given, used for the caps only) */
   legacy_statements: any[];
+  /** scores typed from third-party providers' reports */
+  provider_scores: ProviderScoreRow[];
 };
-const EMPTY_FORM: Form = { ...EMPTY, keen: null, legacy_statements: [] };
+const EMPTY_FORM: Form = { ...EMPTY, keen: null, legacy_statements: [], provider_scores: [] };
 
 function fromApplication(a: any): Form {
   return {
@@ -47,7 +50,7 @@ function fromApplication(a: any): Form {
     monthly_purchases_usd: String(a.credit_request?.monthly_purchases_usd ?? ""), invoicing_currency: a.credit_request?.invoicing_currency ?? "USD",
     people: (a.people ?? []).map((p: any) => `${p.name}, ${p.role}${p.ownership_pct ? `, ${p.ownership_pct}` : ""}`).join("\n"),
     trade_references: (a.trade_references ?? []).map((t: any) => t.company_name).join("\n"),
-    keen: a.keen_statements ?? null, legacy_statements: a.financial_statements ?? [],
+    keen: a.keen_statements ?? null, legacy_statements: a.financial_statements ?? [], provider_scores: fromProviderScores(a.provider_scores),
     terms: a.signatures?.terms ?? true, credit_check_consent: a.signatures?.credit_check_consent ?? true, personal_guarantee: !!a.signatures?.personal_guarantee,
   };
 }
@@ -75,6 +78,7 @@ function toApplication(f: Form) {
     trade_references: f.trade_references.split("\n").map((l) => l.trim()).filter(Boolean).map((company_name) => ({ company_name })),
     financial_statements: filing || keen ? [] : f.legacy_statements,
     keen_statements: keen,
+    provider_scores: toProviderScores(f.provider_scores),
     signatures: { terms: f.terms, credit_check_consent: f.credit_check_consent, personal_guarantee: f.personal_guarantee },
   };
 }
@@ -182,6 +186,11 @@ export default function NewApplication() {
           <KeenStatementsForm key={formKey} initial={f.keen} onChange={(keen) => setF((x) => ({ ...x, keen }))} />
         </section>
         )}
+
+        <section className="bg-card rounded-xl border p-4 space-y-3">
+          <h2 className="text-sm font-semibold">Scores from other credit providers (optional)</h2>
+          <ProviderScoresForm rows={f.provider_scores} onChange={(provider_scores) => setF((x) => ({ ...x, provider_scores }))} />
+        </section>
 
         <section className="bg-card rounded-xl border p-4 space-y-2">
           <h2 className="text-sm font-semibold">Signed by the customer</h2>
