@@ -30,6 +30,18 @@ export const ONBOARDING_DEFAULTS: OnboardingSettings = {
     higher_limit_note_ratio: 1.2,
     rounding_usd: 5_000,
   },
+  // Months a financial year end may be old before newer accounts are asked for. Lower score, stricter:
+  // annual accounts usually arrive 90-120 days after year end (12 + 3-4 months), Keen itself holds a
+  // score at 69 once the year end is over 15 months old, and riskier accounts are commonly reviewed
+  // every six months or quarterly (half-year or quarterly accounts).
+  financials: {
+    max_age_months_70_plus: 15,
+    max_age_months_55_to_69: 12,
+    max_age_months_40_to_54: 9,
+    max_age_months_below_40: 6,
+    max_age_months_no_score: 12,
+    due_soon_months: 2,
+  },
   sources: {
     score_order: ["keen", "bureau_report"],
   },

@@ -18,6 +18,7 @@ import type {
   OnboardingProviders, OnboardingSettings, Person, ScreeningHit,
 } from "./types.ts";
 import { ONBOARDING_DEFAULTS } from "./settings.ts";
+import { financialsAge, statementFromKeen } from "./keen_statements.ts";
 import { selectCreditScore } from "../skills/analytical/select-credit-score.ts";
 import { calculateOnboardingLimit, scoreToBand } from "../skills/analytical/calculate-onboarding-limit.ts";
 import { matchSanctionsName, normalize, prepareSanctionsList, type PreparedEntry } from "../skills/analytical/match-sanctions-name.ts";
@@ -37,12 +38,18 @@ export interface RunOptions {
 const REG_B_INCOMPLETE_DAYS = 30;
 
 export async function runOnboarding(
-  app: CreditApplication,
+  appIn: CreditApplication,
   providers: OnboardingProviders,
   opts: RunOptions = {},
 ): Promise<OnboardingOutcome> {
+  let app = appIn;
   const settings = opts.settings ?? ONBOARDING_DEFAULTS;
   const asOf = opts.asOf ?? new Date().toISOString().slice(0, 10);
+  // A private company's statements entered for Keen also give the limit caps their figures.
+  if (!app.financial_statements?.length && app.keen_statements) {
+    const st = statementFromKeen(app.keen_statements);
+    if (st) app = { ...app, financial_statements: [st] };
+  }
   const out: OnboardingOutcome = {
     application_id: app.application_id,
     stopped_at: "application",
@@ -140,7 +147,14 @@ export async function runOnboarding(
     fx: !!currency && currency !== "USD" && macro_context.some((e) => e.source_agent === "fx_risk_agent" && e.key === currency && severe(e)),
   };
 
+  // How old the accounts are: Keen's year end when Keen scored them, else the statement used.
+  const fin = settings.financials ?? ONBOARDING_DEFAULTS.financials;
+  const financials_age = financialsAge(
+    (picked.source === "keen" ? (picked.result?.keen as { as_of?: string } | undefined)?.as_of : undefined) ?? statement?.period_end,
+    asOf, score, fin);
+
   out.analysis = {
+    financials_age,
     financials_source,
     statement_quality: statement?.statement_quality,
     score_source, score, score_raw: picked.result?.raw, band: band ?? undefined,
@@ -161,6 +175,7 @@ export async function runOnboarding(
   });
   const reason_codes = [...limit.reason_codes];
   if (picked.used_fallback) reason_codes.push("SCORE_FALLBACK");
+  if (financials_age?.status === "stale") reason_codes.push("FINANCIALS_STALE");
 
   out.stopped_at = "decision";
   out.events.push("CREDIT_ANALYSIS_COMPLETE");

@@ -85,6 +85,8 @@ export interface CreditApplication {
   trade_references: TradeReference[];
   bank_reference?: { bank_name: string };
   financial_statements: FinancialStatement[];
+  /** A private company's statements in Keen's template shape (keen_statements.ts); Keen scores them. */
+  keen_statements?: import("./keen_statements.ts").KeenStatements;
   bureau_report?: BureauReport;   // uploaded PDF, already parsed
   signatures: {
     terms?: boolean;
@@ -227,6 +229,16 @@ export interface OnboardingSettings {
     higher_limit_note_ratio: number;            // supportable ≥ ratio × requested
     rounding_usd: number;                       // round down to this step
   };
+  financials: {
+    /** Newer accounts are needed once the financial year end is this many months old, by score. */
+    max_age_months_70_plus: number;
+    max_age_months_55_to_69: number;
+    max_age_months_40_to_54: number;
+    max_age_months_below_40: number;
+    max_age_months_no_score: number;
+    /** "Due soon" this many months before the limit. */
+    due_soon_months: number;
+  };
   sources: {
     score_order: string[];                      // e.g. ["keen", "bureau_report"]; first with a score wins
   };
@@ -289,6 +301,8 @@ export interface OnboardingOutcome {
     keen?: KeenDetail;
     fallbacks: { provider: string; reason: string }[];
     macro_context: MacroContextEvent[];
+    /** How old the accounts scored are, against the limit for this score. */
+    financials_age?: import("./keen_statements.ts").FinancialsAge;
   };
   proposal?: {
     decision: "approve_as_requested" | "counteroffer" | "decline_review";

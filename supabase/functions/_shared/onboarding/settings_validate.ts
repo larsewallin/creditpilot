@@ -11,6 +11,7 @@ export const SETTING_KEYS = [
   "onboarding.template",
   "onboarding.screening",
   "onboarding.limits",
+  "onboarding.financials",
   "onboarding.sources",
   "onboarding.approval",
 ] as const;

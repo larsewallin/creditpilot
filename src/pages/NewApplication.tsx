@@ -1,7 +1,8 @@
 /**
- * Key in a credit application (the demo path: the credit team enters it).
- * "Load sample" fills a ready-made applicant. Submitting runs the whole
- * pipeline and opens the prospect page.
+ * The credit team keys in a new customer's application (customers do not use CreditPilot).
+ * "Load sample" fills a ready-made applicant. Submitting runs the whole pipeline and opens
+ * the prospect page. Financials: a US-listed company's 10-K is read by Keen; any other
+ * company's statements are entered here in Keen's lines and scored by Keen.
  */
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -15,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { callOnboarding } from "@/lib/onboarding";
 import { SAMPLE_APPLICATIONS } from "@/lib/onboardingSamples";
 import { CompanyLookupSearch, type LookupPrefill } from "@/components/onboarding/CompanyLookupSearch";
+import { KeenStatementsForm, type KeenStatements } from "@/components/onboarding/KeenStatementsForm";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -24,15 +26,19 @@ const EMPTY = {
   line1: "", city: "", postal_code: "",
   amount_usd: "", terms_days: "30", monthly_purchases_usd: "", invoicing_currency: "USD",
   people: "", trade_references: "",
-  fs_period_end: "", fs_quality: "reviewed", fs_current_assets: "", fs_current_liabilities: "", fs_total_assets: "", fs_total_liabilities: "", fs_equity: "",
   terms: true, credit_check_consent: true, personal_guarantee: false,
 };
-type Form = typeof EMPTY;
+type Form = typeof EMPTY & {
+  /** a private company's statements in Keen's lines */
+  keen: KeenStatements | null;
+  /** statements a sample carries in the older short form (kept as given, used for the caps only) */
+  legacy_statements: any[];
+};
+const EMPTY_FORM: Form = { ...EMPTY, keen: null, legacy_statements: [] };
 
 function fromApplication(a: any): Form {
-  const fs = a.financial_statements?.[0];
   return {
-    ...EMPTY,
+    ...EMPTY_FORM,
     legal_name: a.legal_name ?? "", trade_name: a.trade_name ?? "", country_code: a.country_code ?? "US", registration_no: a.registration_no ?? "",
     tax_id: a.tax_id ?? "", website: a.website ?? "", sector: a.sector ?? "", entity_type: a.entity_type ?? "corporation",
     date_established: a.date_established ?? "", is_public: !!a.is_public, ticker: a.ticker ?? "", cik: a.cik ?? "", lei: a.lei ?? "", company_id: a.company_id ?? "", address_type: a.address_type ?? "commercial",
@@ -41,10 +47,7 @@ function fromApplication(a: any): Form {
     monthly_purchases_usd: String(a.credit_request?.monthly_purchases_usd ?? ""), invoicing_currency: a.credit_request?.invoicing_currency ?? "USD",
     people: (a.people ?? []).map((p: any) => `${p.name}, ${p.role}${p.ownership_pct ? `, ${p.ownership_pct}` : ""}`).join("\n"),
     trade_references: (a.trade_references ?? []).map((t: any) => t.company_name).join("\n"),
-    fs_period_end: fs?.period_end ?? "", fs_quality: fs?.statement_quality ?? "reviewed",
-    fs_current_assets: fs?.current_assets != null ? String(fs.current_assets) : "", fs_current_liabilities: fs?.current_liabilities != null ? String(fs.current_liabilities) : "",
-    fs_total_assets: fs?.total_assets != null ? String(fs.total_assets) : "", fs_total_liabilities: fs?.total_liabilities != null ? String(fs.total_liabilities) : "",
-    fs_equity: fs?.equity != null ? String(fs.equity) : "",
+    keen: a.keen_statements ?? null, legacy_statements: a.financial_statements ?? [],
     terms: a.signatures?.terms ?? true, credit_check_consent: a.signatures?.credit_check_consent ?? true, personal_guarantee: !!a.signatures?.personal_guarantee,
   };
 }
@@ -56,11 +59,8 @@ const keenReadsFiling = (f: Pick<Form, "is_public" | "country_code" | "ticker" |
   f.is_public && f.country_code.toUpperCase() === "US" && !!(f.ticker.trim() || f.cik.trim());
 
 function toApplication(f: Form) {
-  const statements = f.fs_period_end && !keenReadsFiling(f) ? [{
-    period_end: f.fs_period_end, statement_quality: f.fs_quality, currency: "USD",
-    current_assets: num(f.fs_current_assets), current_liabilities: num(f.fs_current_liabilities),
-    total_assets: num(f.fs_total_assets), total_liabilities: num(f.fs_total_liabilities), equity: num(f.fs_equity),
-  }] : [];
+  const filing = keenReadsFiling(f);
+  const keen = !filing && f.keen?.answers?.fiscalYearEnd ? f.keen : undefined;
   return {
     legal_name: f.legal_name.trim(), trade_name: f.trade_name || undefined, country_code: f.country_code.toUpperCase(),
     registration_no: f.registration_no || undefined, tax_id: f.tax_id || undefined, website: f.website || undefined,
@@ -73,7 +73,8 @@ function toApplication(f: Form) {
     }),
     credit_request: { amount_usd: num(f.amount_usd), terms_days: num(f.terms_days), monthly_purchases_usd: num(f.monthly_purchases_usd), invoicing_currency: f.invoicing_currency },
     trade_references: f.trade_references.split("\n").map((l) => l.trim()).filter(Boolean).map((company_name) => ({ company_name })),
-    financial_statements: statements,
+    financial_statements: filing || keen ? [] : f.legacy_statements,
+    keen_statements: keen,
     signatures: { terms: f.terms, credit_check_consent: f.credit_check_consent, personal_guarantee: f.personal_guarantee },
   };
 }
@@ -81,7 +82,8 @@ function toApplication(f: Form) {
 export default function NewApplication() {
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const [f, setF] = useState<Form>(EMPTY);
+  const [f, setF] = useState<Form>(EMPTY_FORM);
+  const [formKey, setFormKey] = useState(0);
   const [sample, setSample] = useState<string>("");
   const set = (k: keyof Form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setF((x) => ({ ...x, [k]: e.target.type === "checkbox" ? (e.target as HTMLInputElement).checked : e.target.value }));
@@ -124,7 +126,7 @@ export default function NewApplication() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <h1 className="text-xl font-semibold text-foreground">New credit application</h1>
         <div className="flex items-center gap-2">
-          <Select value={sample} onValueChange={(v) => { setSample(v); const s = SAMPLE_APPLICATIONS.find((x) => x.key === v); if (s) setF(fromApplication(s.application)); }}>
+          <Select value={sample} onValueChange={(v) => { setSample(v); const s = SAMPLE_APPLICATIONS.find((x) => x.key === v); if (s) { setF(fromApplication(s.application)); setFormKey((k) => k + 1); } }}>
             <SelectTrigger className="h-8 w-72 text-xs"><SelectValue placeholder="Load sample application…" /></SelectTrigger>
             <SelectContent>{SAMPLE_APPLICATIONS.map((s) => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}</SelectContent>
           </Select>
@@ -171,31 +173,21 @@ export default function NewApplication() {
         <section className="bg-card rounded-xl border p-4 space-y-1">
           <h2 className="text-sm font-semibold">Financials</h2>
           <p className="text-xs">From the company's latest 10-K at the SEC, scored by Keen. Nothing to enter.</p>
-          <p className="text-xs text-muted-foreground">The score, its label and the reasons behind it appear on the prospect page after you submit.</p>
+          <p className="text-xs text-muted-foreground">The score, the financial year end and how old the accounts are appear on the prospect page after you submit.</p>
         </section>
         ) : (
-        <section className="bg-card rounded-xl border p-4 grid gap-3 sm:grid-cols-3">
-          <h2 className="sm:col-span-3 text-sm font-semibold">Latest financial statement (USD)</h2>
-          <p className="sm:col-span-3 text-xs text-muted-foreground">Used for the limit caps (working capital and net worth). Keen scores US-listed companies from their 10-K; scoring private companies' accounts comes later.</p>
-          {field("fs_period_end", "Period end (YYYY-MM-DD)")}
-          <label className="block text-xs space-y-1"><span className="text-muted-foreground">Quality</span>
-            <Select value={f.fs_quality} onValueChange={(v) => setF((x) => ({ ...x, fs_quality: v }))}>
-              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>{["audited", "reviewed", "compiled", "tax_return", "management"].map((q) => <SelectItem key={q} value={q}>{q}</SelectItem>)}</SelectContent>
-            </Select></label>
-          {field("fs_current_assets", "Current assets")}
-          {field("fs_current_liabilities", "Current liabilities")}
-          {field("fs_total_assets", "Total assets")}
-          {field("fs_total_liabilities", "Total liabilities")}
-          {field("fs_equity", "Equity")}
+        <section className="bg-card rounded-xl border p-4 space-y-3">
+          <h2 className="text-sm font-semibold">Financial statements</h2>
+          <p className="text-xs text-muted-foreground">From the accounts the customer sent you. Keen scores them; the same figures set the limit caps.{f.legacy_statements.length > 0 && !f.keen ? " This sample carries short-form figures for the caps only." : ""}</p>
+          <KeenStatementsForm key={formKey} initial={f.keen} onChange={(keen) => setF((x) => ({ ...x, keen }))} />
         </section>
         )}
 
         <section className="bg-card rounded-xl border p-4 space-y-2">
-          <h2 className="text-sm font-semibold">Signatures</h2>
-          {check("terms", "Terms and conditions accepted")}
-          {check("credit_check_consent", "Consent to credit checks")}
-          {check("personal_guarantee", "Personal guarantee signed (needed for companies under 24 months old)")}
+          <h2 className="text-sm font-semibold">Signed by the customer</h2>
+          {check("terms", "Customer has accepted the terms and conditions")}
+          {check("credit_check_consent", "Customer has consented to credit checks")}
+          {check("personal_guarantee", "Customer has signed a personal guarantee (needed for companies under 24 months old)")}
         </section>
 
         <Button type="submit" disabled={submit.isPending || !f.legal_name || !f.amount_usd}>
