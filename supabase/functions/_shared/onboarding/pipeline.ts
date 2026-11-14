@@ -209,6 +209,8 @@ async function screen(app: CreditApplication, providers: OnboardingProviders, s:
   if (registry.unavailable) checks.push(registry.unavailable_reason ? `registry_unavailable:${registry.unavailable_reason}` : "registry_unavailable");
   else if (!registry.found) fraud_flags.push("REGISTRY_NOT_FOUND");
   if (registry.found && registry.status && registry.status !== "active") fraud_flags.push("REGISTRY_INACTIVE");
+  // A stop-level flag on the Company Lookup card is a prompt for a person, never a decline.
+  if (registry.lookup?.flags.some((f) => f.level === "stop")) fraud_flags.push("COMPANY_LOOKUP_STOP");
 
   const tax = await providers.checkTaxId(app);
   if (tax) { checks.push(`tax_id:${tax.source}`); if (!tax.valid) fraud_flags.push("TAX_ID_INVALID"); }
@@ -258,7 +260,7 @@ async function screen(app: CreditApplication, providers: OnboardingProviders, s:
   // entity; for a person, country and year of birth. Anything less is a review.
   const hardHit = open.some((h) => h.similarity >= s.screening.name_match_hit_threshold && h.country_match &&
     (h.subject_type === "entity" || h.dob_match === true));
-  const forceReview = flagsOpen && fraud_flags.includes("REGISTRY_INACTIVE");
+  const forceReview = flagsOpen && (fraud_flags.includes("REGISTRY_INACTIVE") || fraud_flags.includes("COMPANY_LOOKUP_STOP"));
   const status: "pass" | "review" | "fail" = hardHit ? "fail"
     : open.length || forceReview || (flagsOpen && fraud_flags.length >= s.screening.fraud_flags_for_review) ? "review"
     : "pass";
@@ -269,6 +271,7 @@ async function screen(app: CreditApplication, providers: OnboardingProviders, s:
     people_screened: people.length,
     hits: hits.map(({ country_match: _c, ...h }) => (isCleared(h) ? { ...h, status: "cleared" as const } : h)),
     fraud_flags,
+    ...(registry.lookup ? { lookup: registry.lookup } : {}),
   };
 }
 

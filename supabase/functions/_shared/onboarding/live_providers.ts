@@ -6,6 +6,7 @@
  * stale, screening throws and the application waits at Screening.
  *
  * Sources (free or already licensed):
+ *   Company Lookup (registers, GLEIF, VIES, domain; one card) COMPANY_LOOKUP_URL (default: the hosted copy)
  *   Companies House (GB registry, officers, PSC owners)   COMPANIES_HOUSE_API_KEY
  *   SEC EDGAR (US public: submissions + XBRL companyfacts) keyless, User-Agent required
  *   GLEIF (LEI registry, any country; absence is not evidence)
@@ -22,6 +23,7 @@ import type {
   Person, ProviderError, RegistryRecord, SanctionsEntry, ScoreResult, TaxIdCheck,
 } from "./types.ts";
 import { normalize } from "../skills/analytical/match-sanctions-name.ts";
+import { companyLookup, isCompanyId, type LookupCard } from "./company_lookup.ts";
 
 export interface LiveDeps {
   db: SupabaseClient;
@@ -32,6 +34,8 @@ export interface LiveDeps {
   timeoutMs?: number;
   /** The application's own prospect: never report it as an existing customer of itself. */
   excludeCustomerId?: string;
+  /** Company Lookup client (tests inject one; default: COMPANY_LOOKUP_URL or the hosted copy). */
+  lookup?: Pick<ReturnType<typeof companyLookup>, "card">;
 }
 
 const SEC_UA = "CreditPilot onboarding (contact: credit-ops@creditpilot.app)";
@@ -77,8 +81,23 @@ export function liveProviders(deps: LiveDeps): OnboardingProviders {
     },
 
     // ─── Registry ─────────────────────────────────────────────────────────────
+    // A company picked in Company Lookup is checked on its card first (one call:
+    // register, GLEIF, VIES, domain). The direct sources below are the fallback,
+    // and for the UK they still supply the officers and owners screened for sanctions.
     async lookupRegistry(app): Promise<RegistryRecord> {
       const cc = app.country_code?.toUpperCase();
+      if (isCompanyId(app.company_id)) {
+        const client = deps.lookup ?? companyLookup({ baseUrl: deps.env("COMPANY_LOOKUP_URL") || undefined, fetch: f });
+        const card = await client.card(app.company_id, app.website);
+        if (!("error" in card)) {
+          const rec = recordFromCard(app.company_id, card);
+          if (cc === "GB" && rec.found) {
+            const ch = await companiesHouse({ ...app, registration_no: rec.registration_no ?? app.registration_no });
+            if (ch.found) { rec.officers = ch.officers; rec.owners = ch.owners; }
+          }
+          return rec;
+        }
+      }
       if (cc === "GB") return companiesHouse(app);
       if (app.is_public && (app.cik || app.ticker)) {
         const sec = await secRegistry(app);
@@ -373,6 +392,37 @@ export function liveProviders(deps: LiveDeps): OnboardingProviders {
 }
 
 // ─── Pure helpers (exported for tests) ─────────────────────────────────────────
+
+/** A Company Lookup card as a registry record. Only what the card states; a status
+ *  the card does not give stays blank (never read as active). */
+export function recordFromCard(id: string, card: LookupCard): RegistryRecord {
+  const idn = card.identity ?? {};
+  return {
+    source: "company_lookup",
+    found: !!idn.legal_name,
+    status: registerStatus(idn.status),
+    legal_name: idn.legal_name ?? undefined,
+    formation_date: idn.incorporated ? idn.incorporated.slice(0, 10) : undefined,
+    registration_no: idn.register?.number ?? card.ids?.national ?? undefined,
+    lookup: {
+      company_id: card.id ?? id,
+      verdict: card.verdict,
+      as_of: card.as_of,
+      flags: (card.flags ?? []).map((x) => ({ level: x.level, label: x.label, detail: x.detail, source: x.source })),
+      sources: (card.sources ?? []).map((x) => ({ name: x.name, result: x.result, url: x.url })),
+    },
+  };
+}
+
+/** Register status words to the three states screening uses; anything unclear stays blank. */
+export function registerStatus(s?: string | null): RegistryRecord["status"] {
+  if (!s) return undefined;
+  const t = s.toLowerCase();
+  if (/dormant/.test(t)) return "dormant";
+  if (/dissolv|struck|inactive|liquidat|revoked|cancel|closed|ceased|forfeit|withdrawn|terminated|lapsed/.test(t)) return "dissolved";
+  if (/active|registered|live|good standing|current|in existence/.test(t)) return "active";
+  return undefined;
+}
 
 export function normId(raw: string): string {
   return raw.toUpperCase().replace(/[^A-Z0-9]/g, "");
