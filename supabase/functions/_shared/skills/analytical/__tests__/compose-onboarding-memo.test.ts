@@ -30,7 +30,7 @@ describe("composeOnboardingMemo", () => {
     expect(w.lines.join(" ")).toContain("bound by working capital");
   });
   it("cites its sources", () => {
-    expect(m.sections.find((s) => s.title === "Credit analysis")!.sources).toEqual(["Statements uploaded with the application", "Keen"]);
+    expect(m.sections.find((s) => s.title === "Credit analysis")!.sources).toEqual(["Statements entered from the customer's accounts", "Keen"]);
     expect(m.sections.find((s) => s.title === "Market context")!.sources).toEqual(["Country Risk agent"]);
     expect(m.sections.find((s) => s.title === "Screening")!.sources).toContain("EU VIES VAT check");
   });

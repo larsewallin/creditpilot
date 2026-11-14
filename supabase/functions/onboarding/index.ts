@@ -88,6 +88,10 @@ Deno.serve(async (req) => {
         await requireUser(req, [...RUNNERS]);
         return json(await lookupCard(body));
       }
+      case "keen_template": {
+        await requireUser(req, [...RUNNERS]);
+        return json(await keenTemplate());
+      }
       case "decide": {
         const user = await requireUser(req, [...DISPOSERS]);
         return json(await decide(db, user, body));
@@ -130,6 +134,24 @@ function lookupMessage(code: string, message?: string): string {
   if (code === "not_found") return message || "Company not found";
   if (code === "timeout") return "Company Lookup took too long; try again";
   return "Company Lookup is unavailable; fill the fields by hand";
+}
+
+// ─── Keen statement template ──────────────────────────────────────────────────
+// The lines and answers Keen reads for a company without a ticker, straight from Keen,
+// so the form cannot drift from what Keen scores. Kept for an hour per function instance.
+
+let keenTemplateCache: { at: number; body: unknown } | null = null;
+async function keenTemplate() {
+  if (keenTemplateCache && Date.now() - keenTemplateCache.at < 3_600_000) return keenTemplateCache.body;
+  const base = Deno.env.get("KEEN_API_URL"), key = Deno.env.get("KEEN_API_KEY");
+  if (!base || !key) throw new UserError("Keen is not connected; enter the figures used for the limit caps instead");
+  let r: Response;
+  try { r = await fetch(`${base.replace(/\/$/, "")}/v1/template`, { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(15_000) }); }
+  catch { throw new UserError("Keen did not answer; try again"); }
+  if (!r.ok) throw new UserError(`Keen's statement template is unavailable (HTTP ${r.status})`);
+  const body = await r.json();
+  keenTemplateCache = { at: Date.now(), body };
+  return body;
 }
 
 // ─── Actions ──────────────────────────────────────────────────────────────────
@@ -548,7 +570,7 @@ function providersFor(db: SupabaseClient, excludeCustomerId?: string) {
 async function loadSettings(db: SupabaseClient): Promise<OnboardingSettings> {
   const { data } = await db.from("company_settings").select("key, value").like("key", "onboarding.%");
   const eff = effectiveSettings(Object.fromEntries((data ?? []).map((r: { key: string; value: unknown }) => [r.key, r.value]))) as Record<string, unknown>;
-  return { template: eff.template, screening: eff.screening, limits: eff.limits, sources: eff.sources } as OnboardingSettings;
+  return { template: eff.template, screening: eff.screening, limits: eff.limits, financials: eff.financials, sources: eff.sources } as OnboardingSettings;
 }
 
 function mergeCleared(a?: RunOptions["cleared"], b?: RunOptions["cleared"]): RunOptions["cleared"] {

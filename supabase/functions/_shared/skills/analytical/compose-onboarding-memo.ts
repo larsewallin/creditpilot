@@ -36,10 +36,11 @@ export const REASON_TEXT: Record<string, string> = {
   NO_CAP_BASIS: "There are no financial statements or bureau recommendation to base a limit on.",
   SCORE_BAND_E: "The score is in band E (below 60), which supports no unsecured limit.",
   NO_SUPPORTABLE_LIMIT: "The evidence supports no limit.",
+  FINANCIALS_STALE: "The accounts are older than this score allows; ask the customer for newer (or interim) accounts.",
 };
 
 const usd = (n?: number) => (n === undefined || n === null ? "n/a" : `$${Math.round(n).toLocaleString("en-US")}`);
-const FIN_SOURCE: Record<string, string> = { sec_edgar: "SEC EDGAR (10-K, XBRL)", uploaded_statements: "Statements uploaded with the application", none: "None" };
+const FIN_SOURCE: Record<string, string> = { sec_edgar: "SEC EDGAR (10-K, XBRL)", uploaded_statements: "Statements entered from the customer's accounts", none: "None" };
 const SCORE_SOURCE: Record<string, string> = { keen: "Keen", file: "Keen", bureau_report: "Uploaded bureau report" };
 const AGENT: Record<string, string> = { country_risk_agent: "Country Risk agent", fx_risk_agent: "FX Risk agent", industry_risk_agent: "Industry Risk agent", news_agent: "News agent" };
 const CHECK: Record<string, string> = {
@@ -92,7 +93,8 @@ export function composeOnboardingMemo(app: CreditApplication, o: OnboardingOutco
     const a = o.analysis;
     const lines = [
       `Financials: ${FIN_SOURCE[a.financials_source ?? "none"] ?? a.financials_source}${a.statement_quality ? ` (${a.statement_quality})` : ""}.`,
-      a.score !== undefined ? `Score: ${a.score} (band ${a.band}) from ${SCORE_SOURCE[a.score_source ?? ""] ?? a.score_source}.` : "Score: none available.",
+      a.score !== undefined ? `Score: ${a.score}${a.keen?.label ? ` ${a.keen.label}` : ""} (band ${a.band}) from ${SCORE_SOURCE[a.score_source ?? ""] ?? a.score_source}.` : "Score: none available.",
+      ...(a.financials_age ? [`Accounts: financial year end ${a.financials_age.fye}, ${a.financials_age.months} months old (newer accounts needed after ${a.financials_age.max_months} months at this score${a.financials_age.status === "stale" ? "; out of date" : a.financials_age.status === "due_soon" ? "; due soon" : ""}).`] : []),
       ...a.fallbacks.map((f) => `Fallback: ${f.provider.replace(/_/g, " ")} was ${f.reason.replace(/_/g, " ")}.`),
     ];
     const sources = [FIN_SOURCE[a.financials_source ?? "none"], a.score_source ? SCORE_SOURCE[a.score_source] ?? a.score_source : undefined]

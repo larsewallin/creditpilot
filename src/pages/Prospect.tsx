@@ -305,7 +305,14 @@ function ApplicationView({ a }: { a: any }) {
         </dl>
       </Panel>
       <Panel title="Financial statements">
-        {(a.financial_statements ?? []).length ? (
+        {a.keen_statements ? (
+          <dl>
+            <Row k="Financial year end" v={a.keen_statements.answers?.fiscalYearEnd} />
+            <Row k="Basis" v={a.keen_statements.answers?.basis} />
+            <Row k="Framework and currency" v={`${a.keen_statements.answers?.framework ?? "?"}, ${a.keen_statements.answers?.currency ?? "?"}`} />
+            <Row k="Lines entered" v={`${Object.values(a.keen_statements.current ?? {}).filter((c: any) => typeof c?.value === "number").length} this year, ${Object.values(a.keen_statements.prior ?? {}).filter((c: any) => typeof c?.value === "number").length} prior year (in ${a.keen_statements.answers?.units ?? "dollars"})`} />
+          </dl>
+        ) : (a.financial_statements ?? []).length ? (
           <table className="w-full">
             <thead><tr className="text-muted-foreground text-left"><th className="py-1">Period</th><th>Quality</th><th className="text-right">Current assets</th><th className="text-right">Current liabilities</th><th className="text-right">Equity</th></tr></thead>
             <tbody>{a.financial_statements.map((s: any, i: number) => (
@@ -448,7 +455,10 @@ function ScreeningView({ app, runs, checks, hits, canDispose }: { app: any; runs
 
 /** Why Keen gave no score, in words (Keen API v1 reason codes). */
 const KEEN_REASON: Record<string, string> = {
-  "no-ticker": "scores US-listed companies from their 10-K; this company has no ticker or SEC number",
+  "no-ticker": "needs a US-listed company's ticker or the company's statements; neither was entered",
+  framework: "only US GAAP accounts are scored", currency: "only accounts in US dollars are scored",
+  blocked: "the statements need correcting (they do not balance, a period is not a full year, or a question is unanswered)",
+  "needs-confirmation": "the units of the figures need confirming", "not-enough-data": "not enough lines were entered to score",
   "unknown-ticker": "the ticker was not found at the SEC", "no-10k": "no 10-K on file at the SEC",
   "foreign-filer": "the company files abroad, not a 10-K", "non-usd": "the accounts are not in US dollars",
   "missing-required": "the 10-K lacks lines the score needs", bank: "banks are not scored",
@@ -463,6 +473,18 @@ function keenGap(an: any): string | null {
   if (kind === "unavailable") return "not reachable, another source was used";
   if (kind === "timeout") return "did not answer in time, another source was used";
   return kind.replace(/_/g, " ");
+}
+
+/** The financial year end, how old the accounts are, and the limit for this score. */
+function AccountsAge({ age }: { age: { fye: string; months: number; max_months: number; status: string } }) {
+  const cls = age.status === "stale" ? "bg-destructive/10 text-destructive" : age.status === "due_soon" ? "bg-amber-500/10 text-amber-700" : "bg-muted text-muted-foreground";
+  const note = age.status === "stale" ? `Out of date: ask the customer for newer${age.max_months <= 9 ? " (half-year or quarterly)" : ""} accounts.`
+    : age.status === "due_soon" ? "Due soon: newer accounts will be needed." : "Current.";
+  return (
+    <p className={cn("rounded-md px-2 py-1 mb-2", cls)}>
+      Financial year end {age.fye}, {age.months} {age.months === 1 ? "month" : "months"} old. At this score newer accounts are needed after {age.max_months} months. {note}
+    </p>
+  );
 }
 
 function KeenScore({ an }: { an: any }) {
@@ -537,6 +559,7 @@ function AnalysisView({ o, scores, memo, a }: { o: any; scores: any[]; memo?: an
         </div>
       </Panel>
       <Panel title="Score">
+        {an.financials_age && <AccountsAge age={an.financials_age} />}
         {an.keen ? <KeenScore an={an} /> : (
           <p>{an.score != null ? `${an.score} (band ${an.band}) from ${an.score_source === "keen" || an.score_source === "file" ? "Keen" : an.score_raw ? `the uploaded ${an.score_raw}` : "the uploaded bureau report"}` : "No score could be obtained."}</p>
         )}
