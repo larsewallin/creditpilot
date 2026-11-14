@@ -8,6 +8,17 @@ const signed = { terms: true, credit_check_consent: true };
 
 export const SAMPLE_APPLICATIONS: { key: string; label: string; expect: string; application: Record<string, unknown> }[] = [
   {
+    key: "fastenal", label: "Fastenal Company (US-listed)", expect: "Keen scores it from its latest 10-K; no statements to enter",
+    application: {
+      legal_name: "Fastenal Company", country_code: "US", entity_type: "corporation", website: "fastenal.com", sector: "Industrial Manufacturing",
+      is_public: true, ticker: "FAST",
+      billing_address: { line1: "2001 Theurer Blvd", city: "Winona", region: "MN", postal_code: "55987", country_code: "US" }, address_type: "commercial",
+      people: [{ name: "Dan Florness", role: "officer" }],
+      credit_request: { amount_usd: 250000, terms_days: 30, monthly_purchases_usd: 120000, invoicing_currency: "USD" },
+      trade_references: refs, signatures: signed, financial_statements: [],
+    },
+  },
+  {
     key: "sap", label: "SAP SE (Germany)", expect: "Approve, with a macro haircut from the Germany and EUR signals",
     application: {
       legal_name: "SAP SE", country_code: "DE", tax_id: "DE143454214", entity_type: "other", website: "sap.com", sector: "Other",

@@ -22,6 +22,8 @@ export interface ScoreCandidate {
   model_version?: string;
   reason_codes?: string[];
   max_credit_recommendation_usd?: number;
+  /** Provider-specific detail, carried through untouched (e.g. Keen's label and reasons). */
+  [extra: string]: unknown;
 }
 
 export type FetchOutcome = ScoreCandidate | { error: string };

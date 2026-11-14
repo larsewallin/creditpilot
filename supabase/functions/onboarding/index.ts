@@ -457,7 +457,9 @@ async function persist(db: SupabaseClient, user: AuthedUser, row: AppRow, app: C
         application_id: row.id, provider: o.analysis.score_source, status: "ok", score: o.analysis.score, band: o.analysis.band ?? null,
         max_credit_recommendation_usd: o.proposal?.caps?.bureau_recommendation ?? null,
         inputs: { financials_source: o.analysis.financials_source, statement_quality: o.analysis.statement_quality },
-        as_of: now.toISOString().slice(0, 10),
+        // Keen: its label, 10-K and reasons; as_of is the fiscal year end it scored.
+        detail: o.analysis.keen ? { keen: o.analysis.keen, raw: o.analysis.score_raw ?? null } : null,
+        as_of: o.analysis.keen?.as_of ?? now.toISOString().slice(0, 10),
       });
     }
     if (rows.length) await db.from("score_results").insert(rows);

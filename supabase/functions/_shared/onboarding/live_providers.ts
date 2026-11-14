@@ -169,7 +169,10 @@ export function liveProviders(deps: LiveDeps): OnboardingProviders {
     async keenScore(app, financials): Promise<ScoreResult | ProviderError> {
       const base = deps.env("KEEN_API_URL"), key = deps.env("KEEN_API_KEY");
       if (!base || !key) return { error: "unavailable" };
-      return keenScore(base.replace(/\/$/, ""), key, app, financials ?? app.financial_statements);
+      // Keen v1 finds a company's 10-K by ticker. A company picked in Company Lookup
+      // arrives with its SEC number (CIK) only, so the ticker is looked up from it.
+      const ticker = app.ticker || (app.cik ? await cikToTicker(app.cik) : undefined);
+      return keenScore(base.replace(/\/$/, ""), key, { ...app, ticker }, financials ?? app.financial_statements);
     },
 
     // ─── Macro context from the existing agents ───────────────────────────────
@@ -301,6 +304,15 @@ export function liveProviders(deps: LiveDeps): OnboardingProviders {
     } catch { return null; }
   }
 
+  async function cikToTicker(cik: string): Promise<string | undefined> {
+    const want = Number(cik.replace(/\D/g, ""));
+    if (!want) return undefined;
+    const map = await getJson<Record<string, { cik_str: number; ticker: string }>>(
+      "https://www.sec.gov/files/company_tickers.json", { headers: { "User-Agent": SEC_UA } });
+    // The SEC list gives the main ticker of each company first.
+    return map ? Object.values(map).find((v) => v.cik_str === want)?.ticker : undefined;
+  }
+
   async function tickerToCik(ticker: string): Promise<string | undefined> {
     const map = await getJson<Record<string, { cik_str: number; ticker: string }>>(
       "https://www.sec.gov/files/company_tickers.json", { headers: { "User-Agent": SEC_UA } });
@@ -379,19 +391,45 @@ export function liveProviders(deps: LiveDeps): OnboardingProviders {
       }
       if (r.status === 202) return { error: "timeout" };
     }
-    if (r.status === 422) return { error: "insufficient_data" };
+    if (r.status === 422) {
+      const j = await r.json().catch(() => ({})) as { reason?: string };
+      return { error: "insufficient_data", reason: typeof j.reason === "string" ? j.reason : undefined };
+    }
     if (!r.ok) return { error: "unavailable" };
-    const j = await r.json() as { score: number; model_version?: string; recommended_limit?: number; reason_codes?: { code: string }[] };
-    if (typeof j.score !== "number") return { error: "unavailable" };
-    return {
-      provider: "keen", score: j.score, model_version: j.model_version,
-      reason_codes: (j.reason_codes ?? []).map((c) => c.code),
-      max_credit_recommendation_usd: j.recommended_limit,
-    };
+    return keenResult(await r.json());
   }
 }
 
 // ─── Pure helpers (exported for tests) ─────────────────────────────────────────
+
+type KeenBody = {
+  score?: unknown; label?: string | null; model_version?: string; as_of?: string | null; recommended_limit?: number;
+  company?: { ticker?: string | null; name?: string | null };
+  filing?: { form?: string | null; fiscal_year?: number | null; filed?: string | null; accession?: string | null };
+  reason_codes?: { code: string; text?: string; direction?: string }[];
+  warnings?: string[];
+};
+
+/** A Keen API v1 answer as a score result. Only what Keen sent; nothing filled in. */
+export function keenResult(j: KeenBody): ScoreResult | ProviderError {
+  if (typeof j?.score !== "number" || !Number.isFinite(j.score)) return { error: "unavailable" };
+  const codes = Array.isArray(j.reason_codes) ? j.reason_codes.filter((c) => c && typeof c.code === "string") : [];
+  return {
+    provider: "keen", score: j.score, model_version: j.model_version,
+    reason_codes: codes.map((c) => c.code),
+    max_credit_recommendation_usd: j.recommended_limit,
+    keen: {
+      label: j.label ?? undefined,
+      as_of: j.as_of ?? undefined,
+      company_name: j.company?.name ?? undefined,
+      ticker: j.company?.ticker ?? undefined,
+      filing: j.filing ? { form: j.filing.form ?? undefined, fiscal_year: j.filing.fiscal_year ?? undefined,
+        filed: j.filing.filed ?? undefined, accession: j.filing.accession ?? undefined } : undefined,
+      reasons: codes.map((c) => ({ code: c.code, text: c.text ?? c.code, direction: c.direction ?? "negative" })),
+      warnings: Array.isArray(j.warnings) ? j.warnings.filter((w) => typeof w === "string") : [],
+    },
+  };
+}
 
 /** A Company Lookup card as a registry record. Only what the card states; a status
  *  the card does not give stays blank (never read as active). */

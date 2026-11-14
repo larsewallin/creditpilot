@@ -51,8 +51,12 @@ function fromApplication(a: any): Form {
 
 const num = (s: string) => (s.trim() === "" ? undefined : Number(s.replace(/[^0-9.-]/g, "")));
 
+/** A US-listed company with a ticker or SEC number: Keen reads its latest 10-K, so nothing is typed in. */
+const keenReadsFiling = (f: Pick<Form, "is_public" | "country_code" | "ticker" | "cik">) =>
+  f.is_public && f.country_code.toUpperCase() === "US" && !!(f.ticker.trim() || f.cik.trim());
+
 function toApplication(f: Form) {
-  const statements = f.fs_period_end ? [{
+  const statements = f.fs_period_end && !keenReadsFiling(f) ? [{
     period_end: f.fs_period_end, statement_quality: f.fs_quality, currency: "USD",
     current_assets: num(f.fs_current_assets), current_liabilities: num(f.fs_current_liabilities),
     total_assets: num(f.fs_total_assets), total_liabilities: num(f.fs_total_liabilities), equity: num(f.fs_equity),
@@ -142,7 +146,7 @@ export default function NewApplication() {
           {field("date_established", "Established (YYYY-MM-DD)")}
           {field("line1", "Billing address")}
           <div className="grid grid-cols-2 gap-3">{field("city", "City")}{field("postal_code", "Postcode")}</div>
-          <div className="flex items-center gap-4 sm:col-span-2">{check("is_public", "Publicly listed")}{f.is_public && field("ticker", "Ticker")}</div>
+          <div className="flex items-center gap-4 sm:col-span-2">{check("is_public", "Publicly listed")}{f.is_public && field("ticker", "Ticker (found from the SEC number if left blank)")}</div>
           {field("lei", "LEI (Legal Entity Identifier)")}
           {f.cik && field("cik", "SEC number (CIK)")}
         </section>
@@ -163,8 +167,16 @@ export default function NewApplication() {
             <Textarea value={f.trade_references} onChange={set("trade_references")} className="text-xs min-h-[90px]" /></label>
         </section>
 
+        {keenReadsFiling(f) ? (
+        <section className="bg-card rounded-xl border p-4 space-y-1">
+          <h2 className="text-sm font-semibold">Financials</h2>
+          <p className="text-xs">From the company's latest 10-K at the SEC, scored by Keen. Nothing to enter.</p>
+          <p className="text-xs text-muted-foreground">The score, its label and the reasons behind it appear on the prospect page after you submit.</p>
+        </section>
+        ) : (
         <section className="bg-card rounded-xl border p-4 grid gap-3 sm:grid-cols-3">
           <h2 className="sm:col-span-3 text-sm font-semibold">Latest financial statement (USD)</h2>
+          <p className="sm:col-span-3 text-xs text-muted-foreground">Used for the limit caps (working capital and net worth). Keen scores US-listed companies from their 10-K; scoring private companies' accounts comes later.</p>
           {field("fs_period_end", "Period end (YYYY-MM-DD)")}
           <label className="block text-xs space-y-1"><span className="text-muted-foreground">Quality</span>
             <Select value={f.fs_quality} onValueChange={(v) => setF((x) => ({ ...x, fs_quality: v }))}>
@@ -177,6 +189,7 @@ export default function NewApplication() {
           {field("fs_total_liabilities", "Total liabilities")}
           {field("fs_equity", "Equity")}
         </section>
+        )}
 
         <section className="bg-card rounded-xl border p-4 space-y-2">
           <h2 className="text-sm font-semibold">Signatures</h2>
