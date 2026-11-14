@@ -4,7 +4,7 @@
 // Requires: SUPABASE_URL and SUPABASE_ANON_KEY env vars
 // Optional: CIA_INTERNAL_TEST_SECRET (must match the Supabase Edge Function
 //   secret of the same name) -- bypasses cia-agent's per-IP daily question
-//   rate limit, which this harness's 8 questions/run would otherwise exceed.
+//   rate limit, which this harness's questions per run would otherwise exceed.
 //   Without it, the harness runs against the real limit like any visitor.
 
 import { readFile, writeFile, mkdir } from "fs/promises";
@@ -122,12 +122,12 @@ let failed = 0;
 
 console.log(`\nCIA Regression Test — ${new Date().toISOString()}`);
 console.log(`Endpoint: ${ENDPOINT}`);
-// The 8/8 commit gate is defined against prod's demo data (2026-10-13: a run
+// The all-pass commit gate is defined against prod's demo data (2026-10-13: a run
 // against staging after switching to it showed 7/8 purely from data differences).
 const PROD_REF = "yxqudytimmxufypothis";
 if (!SUPABASE_URL.includes(PROD_REF)) {
   console.log("\n⚠️  NOT PROD: this run uses " + SUPABASE_URL + ".");
-  console.log("   The commit gate is 8/8 against prod. Run via: npm run db:prod -- node tests/cia/run.mjs\n");
+  console.log("   The commit gate is every question passing against prod. Run via: npm run db:prod -- node tests/cia/run.mjs\n");
 }
 console.log(`Running ${questions.length} questions sequentially...\n`);
 

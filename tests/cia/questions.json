@@ -6,9 +6,19 @@
       "question": "Which customers have the highest credit risk right now?",
       "expected": {
         "min_sources": 0,
-        "must_mention": ["McDermott", "Rite Aid", "Proterra", "Yellow"],
-        "must_not_say": ["I don't have"],
-        "expected_confidence": ["High", "Medium"]
+        "must_mention": [
+          "McDermott",
+          "Rite Aid",
+          "Proterra",
+          "Yellow"
+        ],
+        "must_not_say": [
+          "I don't have"
+        ],
+        "expected_confidence": [
+          "High",
+          "Medium"
+        ]
       },
       "consistency_check": {
         "min_pass_rate": 0.75
@@ -19,9 +29,16 @@
       "question": "What's Triumph Group's current exposure and what's driving the risk?",
       "expected": {
         "min_sources": 1,
-        "must_mention": ["Triumph", "CCC+"],
-        "must_not_say": ["I don't have"],
-        "expected_confidence": ["High"]
+        "must_mention": [
+          "Triumph",
+          "CCC+"
+        ],
+        "must_not_say": [
+          "I don't have"
+        ],
+        "expected_confidence": [
+          "High"
+        ]
       }
     },
     {
@@ -29,9 +46,17 @@
       "question": "Are any customers approaching their credit limits?",
       "expected": {
         "min_sources": 1,
-        "must_mention": ["Ironwood", "Kaman"],
-        "must_not_say": ["I don't have"],
-        "expected_confidence": ["High", "Medium"]
+        "must_mention": [
+          "Ironwood",
+          "Kaman"
+        ],
+        "must_not_say": [
+          "I don't have"
+        ],
+        "expected_confidence": [
+          "High",
+          "Medium"
+        ]
       },
       "consistency_check": {}
     },
@@ -40,9 +65,25 @@
       "question": "What recent negative news affects our portfolio?",
       "expected": {
         "min_sources": 1,
-        "must_mention": ["Arconic"],
-        "must_not_say": ["outside the main portfolio", "outside your active portfolio", "outside the portfolio", "outside portfolio", "outside our portfolio", "outside our direct portfolio", "outside our main portfolio", "outside main portfolio", "not in our portfolio", "not in the portfolio"],
-        "expected_confidence": ["High", "Medium"]
+        "must_mention": [
+          "Arconic"
+        ],
+        "must_not_say": [
+          "outside the main portfolio",
+          "outside your active portfolio",
+          "outside the portfolio",
+          "outside portfolio",
+          "outside our portfolio",
+          "outside our direct portfolio",
+          "outside our main portfolio",
+          "outside main portfolio",
+          "not in our portfolio",
+          "not in the portfolio"
+        ],
+        "expected_confidence": [
+          "High",
+          "Medium"
+        ]
       }
     },
     {
@@ -50,9 +91,16 @@
       "question": "Should I be worried about American Airlines?",
       "expected": {
         "min_sources": 0,
-        "must_mention": ["American Airlines"],
-        "must_not_say": ["I don't have that information in the current data"],
-        "expected_confidence": ["High", "Medium"]
+        "must_mention": [
+          "American Airlines"
+        ],
+        "must_not_say": [
+          "I don't have that information in the current data"
+        ],
+        "expected_confidence": [
+          "High",
+          "Medium"
+        ]
       }
     },
     {
@@ -60,9 +108,17 @@
       "question": "What's our total exposure to the aerospace sector?",
       "expected": {
         "min_sources": 0,
-        "must_mention": ["aerospace"],
-        "must_not_say": ["I don't have", "supplier"],
-        "expected_confidence": ["High", "Medium"]
+        "must_mention": [
+          "aerospace"
+        ],
+        "must_not_say": [
+          "I don't have",
+          "supplier"
+        ],
+        "expected_confidence": [
+          "High",
+          "Medium"
+        ]
       },
       "consistency_check": {}
     },
@@ -71,8 +127,12 @@
       "question": "Has Boeing had any SEC filings recently?",
       "expected": {
         "min_sources": 0,
-        "must_mention": ["Boeing"],
-        "expected_confidence": ["High"]
+        "must_mention": [
+          "Boeing"
+        ],
+        "expected_confidence": [
+          "High"
+        ]
       }
     },
     {
@@ -80,9 +140,34 @@
       "question": "What does our customer ZyloCorp look like?",
       "expected": {
         "max_sources": 2,
-        "must_say": ["I don't have"],
-        "must_not_mention_inline": ["ZyloCorp credit score", "ZyloCorp rating"],
-        "expected_confidence": ["High"]
+        "must_say": [
+          "I don't have"
+        ],
+        "must_not_mention_inline": [
+          "ZyloCorp credit score",
+          "ZyloCorp rating"
+        ],
+        "expected_confidence": [
+          "High"
+        ]
+      }
+    },
+    {
+      "id": "q9_score_sources",
+      "question": "Which credit score providers do our customers' scores come from?",
+      "expected": {
+        "min_sources": 0,
+        "must_mention": [
+          "S&P"
+        ],
+        "must_not_say": [
+          "I don't have",
+          "supplier"
+        ],
+        "expected_confidence": [
+          "High",
+          "Medium"
+        ]
       }
     }
   ]
