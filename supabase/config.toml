@@ -1,5 +1,10 @@
 project_id = "yxqudytimmxufypothis"
 
+# The demo data is loaded by scripts/setup-local.sh (psql), not by `supabase start`: the
+# dump's pg_dump 18 \restrict lines are not SQL. A production install loads no demo data.
+[db.seed]
+enabled = false
+
 [functions.ar-aging-agent]
 verify_jwt = false
 
