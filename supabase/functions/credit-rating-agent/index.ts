@@ -36,7 +36,7 @@
  *
  * Rate limit: 60 minutes between runs (HTTP 429 if exceeded).
  */
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.98.0";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.98.0";
 import { detectRatingChange } from "../_shared/skills/analytical/detect-rating-change.ts";
 import { publishEvent } from "../_shared/publishEvent.ts";
 import { severityToScore } from "../_shared/event_schemas.ts";
@@ -61,7 +61,7 @@ const RECENCY_DAYS = 30;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const EVENT_TYPES = ["CREDIT_RATING_DOWNGRADE", "CREDIT_RATING_UPGRADE"];
 
-type Db = ReturnType<typeof createClient>;
+type Db = SupabaseClient;
 
 /** Company settings the agent follows: score order and accounts-age months. */
 async function loadSettings(db: Db): Promise<{ order: string[]; financials: OnboardingSettings["financials"] }> {
