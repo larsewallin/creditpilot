@@ -373,6 +373,18 @@ export const CreditRatingDowngradePayload = z.object({
 
 export const CreditRatingUpgradePayload = CreditRatingDowngradePayload;
 
+// A customer's accounts are older than its score allows (Settings › How old accounts may be).
+// Emitted by credit-rating-agent; informational for the credit team (cia_processed = true).
+export const FinancialsStalePayload = z.object({
+  severity_score: SeverityScore,
+  fye: z.string(),                     // financial year end of the accounts the score uses
+  months_old: z.number().min(0),
+  max_months: z.number().min(0),       // the limit for the customer's score
+  score: z.number().min(0).max(100).nullable(),
+  score_source: z.string().nullable(),
+  summary: z.string(),
+});
+
 // ============================================================================
 // Event type registry
 // ============================================================================
@@ -506,6 +518,7 @@ export const EVENT_TYPES = [
   "CREDIT_ANALYSIS_COMPLETE",
   "CREDIT_DECISION",
   "CUSTOMER_ACTIVATED",
+  "FINANCIALS_STALE",
 ] as const;
 
 export type EventType = typeof EVENT_TYPES[number];
@@ -552,6 +565,7 @@ const payloadSchemas: Record<EventType, z.ZodTypeAny> = {
   CREDIT_ANALYSIS_COMPLETE: CreditAnalysisCompletePayload,
   CREDIT_DECISION: CreditDecisionPayload,
   CUSTOMER_ACTIVATED: CustomerActivatedPayload,
+  FINANCIALS_STALE: FinancialsStalePayload,
 };
 
 export function getPayloadSchema(eventType: string): z.ZodTypeAny {

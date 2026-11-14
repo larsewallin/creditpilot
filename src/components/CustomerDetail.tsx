@@ -117,6 +117,12 @@ export function CustomerDetail({ customer }: { customer: any }) {
             ) : score == null ? (
               <p className="text-[10px] text-muted-foreground mt-0.5">Provider: N/A</p>
             ) : null}
+            {customer.financials_fye && (() => {
+              const [y1, m1, d1] = String(customer.financials_fye).slice(0, 10).split("-").map(Number);
+              const t = new Date();
+              const months = Math.max(0, (t.getFullYear() - y1) * 12 + (t.getMonth() + 1 - m1) - (t.getDate() < d1 ? 1 : 0));
+              return <p className="text-[10px] text-muted-foreground mt-0.5">Financial year end {String(customer.financials_fye).slice(0, 10)}, {months} {months === 1 ? "month" : "months"} old</p>;
+            })()}
           </div>
 
           {/* Utilization Bar */}

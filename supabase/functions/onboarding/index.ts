@@ -394,10 +394,18 @@ async function decide(db: SupabaseClient, user: AuthedUser, body: Record<string,
   const scoreFields = an?.score != null && an.score_source ? {
     credit_rating_score: Math.round(an.score), credit_rating_source: an.score_source,
     credit_rating_raw: an.score_raw ?? String(an.score), credit_rating_previous_score: null, credit_rating_updated_at: now,
+    credit_rating_checked_at: now,
+  } : {};
+  // The accounts behind the decision: their year end, so the Credit Rating agent can say when newer ones are due.
+  const fye = an?.financials_age?.fye;
+  const financialsFields = fye ? {
+    financials_fye: fye,
+    financials_source: an?.score_source === "keen" && an?.keen ? (an.keen.ticker ? "sec_10k" : "statements")
+      : an?.financials_source === "sec_edgar" ? "sec_10k" : an?.financials_source === "uploaded_statements" ? "statements" : "entered",
   } : {};
   const { error: cErr } = await db.from("customers").update({
     lifecycle_status: "active", credit_limit: approved, payment_terms_days: app.credit_request.terms_days ?? 30,
-    customer_since: now.slice(0, 10), last_reviewed: now.slice(0, 10), updated_at: now, ...scoreFields,
+    customer_since: now.slice(0, 10), last_reviewed: now.slice(0, 10), updated_at: now, ...scoreFields, ...financialsFields,
   }).eq("id", row.customer_id);
   if (cErr) throw new Error(`Could not activate the customer: ${cErr.message}`);
 
