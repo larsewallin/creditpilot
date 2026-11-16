@@ -12,5 +12,5 @@ export const DEMO_PERSONAS = {
 export type DemoPersonaKey = keyof typeof DEMO_PERSONAS;
 
 export function personaOf(key: unknown) {
-  return typeof key === "string" && Object.hasOwn(DEMO_PERSONAS, key) ? DEMO_PERSONAS[key as DemoPersonaKey] : null;
+  return typeof key === "string" && Object.prototype.hasOwnProperty.call(DEMO_PERSONAS, key) ? DEMO_PERSONAS[key as DemoPersonaKey] : null;
 }
