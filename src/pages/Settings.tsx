@@ -29,7 +29,7 @@ const AGE_FIELDS: [string, string][] = [
 
 export default function Settings() {
   const { appUser } = useAuth();
-  const canEdit = !!appUser && ["admin", "credit_manager"].includes(appUser.role);
+  const canEdit = !!appUser && !appUser.is_demo && ["admin", "credit_manager"].includes(appUser.role);
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ["settings"], queryFn: getSettings });
   const [order, setOrder] = useState<string[]>([]);
@@ -160,7 +160,7 @@ export default function Settings() {
 
       {canEdit
         ? <Button onClick={() => save.mutate()} disabled={save.isPending || order.length === 0}>{save.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Save settings</Button>
-        : <p className="text-xs text-muted-foreground">Admins and credit managers can change these settings.</p>}
+        : <p className="text-xs text-muted-foreground">{appUser?.is_demo ? "You are in a shared demo account: you can look at the settings but not change them." : "Admins and credit managers can change these settings."}</p>}
     </div>
   );
 }
