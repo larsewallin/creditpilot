@@ -31,7 +31,11 @@ interface AuthState {
   loading: boolean;
   signIn: (email: string, password: string) => Promise<string | null>;
   signOut: () => Promise<void>;
+  /** Demo only: sign in as a shared demo persona. Returns an error message or null. */
+  tryDemo: (persona: DemoPersona) => Promise<string | null>;
 }
+
+export type DemoPersona = "credit_manager" | "credit_analyst" | "sales";
 
 const AuthContext = createContext<AuthState | null>(null);
 
@@ -96,12 +100,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return null;
   };
 
+  const tryDemo = async (persona: DemoPersona) => {
+    const { data, error } = await supabase.functions.invoke("demo-signin", { body: { persona } });
+    const tokenHash = (data as { token_hash?: string } | null)?.token_hash;
+    if (error || !tokenHash) return "Could not start the demo. Try again in a moment.";
+    const { data: v, error: vErr } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: "magiclink" });
+    if (vErr || !v.user) return "Could not start the demo. Try again in a moment.";
+    const u = await loadAppUser(v.user.id);
+    if (!u) {
+      await supabase.auth.signOut();
+      return "Could not start the demo. Try again in a moment.";
+    }
+    return null;
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
   };
 
   return (
-    <AuthContext.Provider value={{ session, appUser, loading, signIn, signOut }}>
+    <AuthContext.Provider value={{ session, appUser, loading, signIn, signOut, tryDemo }}>
       {children}
     </AuthContext.Provider>
   );

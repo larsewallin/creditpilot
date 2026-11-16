@@ -25,3 +25,7 @@ verify_jwt = false
 # Called every 15 minutes by pg_cron with x-scheduler-secret, or by a signed-in admin for a dry run; auth is checked in code.
 [functions.agent-scheduler]
 verify_jwt = false
+
+# The sign-in page's "Try it as" buttons: anyone may call it, only while DEMO_MODE=true; checked in code.
+[functions.demo-signin]
+verify_jwt = false

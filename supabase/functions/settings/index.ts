@@ -4,6 +4,7 @@
  *   GET  (any signed-in user)  -> { settings: effective, overrides, score_providers }
  *   POST { key, value }        -> admin or credit_manager only; validates, saves, logs history
  *   POST { key, reset: true }  -> admin or credit_manager only; removes the override (back to defaults)
+ *   Demo accounts (app_users.is_demo) get 403 on every POST: the demo's settings are shared.
  *
  * The browser never writes company_settings directly (no write policy).
  */
@@ -48,6 +49,7 @@ Deno.serve(async (req) => {
     if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
     const user = await requireUser(req, ["admin", "credit_manager"]);
+    if (user.is_demo) return json({ error: "Demo accounts can look at the settings but not change them." }, 403);
     const body = await req.json();
     const key = String(body?.key ?? "");
 
