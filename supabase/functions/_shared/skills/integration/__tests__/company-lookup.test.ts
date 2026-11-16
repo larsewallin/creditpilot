@@ -36,7 +36,7 @@ describe("Company Lookup connector", () => {
     const lookup = companyLookup({ fetch: f });
     expect(await lookup.search("T")).toEqual({ error: "bad_request", message: "Type at least 2 characters" });
     await lookup.search("Siemens");
-    expect(calls).toEqual(["https://larsewallin.com/api/search?q=Siemens"]);
+    expect(calls).toEqual(["https://open-company-lookup.vercel.app/api/search?q=Siemens"]);
   });
 
   it("maps errors: 404, 502, network failure, timeout", async () => {
@@ -54,7 +54,7 @@ describe("Company Lookup connector", () => {
     const { f, calls } = recorder(() => ok(CARD));
     expect(await companyLookup({ fetch: f }).card("../../etc")).toEqual({ error: "bad_request", message: "Not a Company Lookup id" });
     await companyLookup({ fetch: f }).card("gb:00445790", "tesco.com");
-    expect(calls).toEqual(["https://larsewallin.com/api/company?id=gb%3A00445790&website=tesco.com"]);
+    expect(calls).toEqual(["https://open-company-lookup.vercel.app/api/company?id=gb%3A00445790&website=tesco.com"]);
     expect(isCompanyId("lei:2138002P5RNKC5W2JZ46")).toBe(true);
     expect(isCompanyId("us:sec-0000320193")).toBe(true);
     expect(isCompanyId("GB 00445790")).toBe(false);

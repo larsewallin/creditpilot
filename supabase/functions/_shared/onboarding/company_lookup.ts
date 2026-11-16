@@ -6,7 +6,7 @@
  * on a card carries its source and the date it was checked.
  *
  * COMPANY_LOOKUP_URL sets the API's address (default: the hosted copy at
- * https://larsewallin.com; a local copy runs with `node server.js`, port 3000).
+ * https://open-company-lookup.vercel.app; a local copy runs with `node server.js`, port 3000).
  *
  * The company ID is the card's own id, built from an official number:
  *   gb:00445790        national register number (country + number)
@@ -15,7 +15,7 @@
  * It is the same in CreditPilot, Company Lookup and (from Keen API v2) Keen.
  */
 
-export const DEFAULT_COMPANY_LOOKUP_URL = "https://larsewallin.com";
+export const DEFAULT_COMPANY_LOOKUP_URL = "https://open-company-lookup.vercel.app";
 
 export interface LookupResult {
   id: string;
