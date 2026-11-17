@@ -32,7 +32,9 @@ function formatRatingSource(source: string): string {
     other: "Other provider",
     bureau_report: "Bureau report",
   };
-  return labels[source] ?? source;
+  const label = labels[source] ?? source;
+  // Demo scores are invented: never present them as a real agency's or bureau's score.
+  return DEMO_MODE ? `${label} scale, sample score` : label;
 }
 
 // ── Customer Detail Drawer ────────────────────────────────────────────────────
@@ -62,6 +64,7 @@ export function CustomerDetail({ customer }: { customer: any }) {
         .select("id, event_type, source_agent, severity, created_at")
         .eq("customer_id", customer.id)
         .eq("is_demo", DEMO_MODE)
+        .is("archived_at", null)
         .order("created_at", { ascending: false })
         .limit(3);
       return data ?? [];
@@ -73,7 +76,7 @@ export function CustomerDetail({ customer }: { customer: any }) {
     queryFn: async () => {
       const [news, events, actions] = await Promise.all([
         supabase.from("negative_news").select("*").eq("customer_id", customer.id).eq("is_demo", DEMO_MODE).order("created_at", { ascending: false }),
-        supabase.from("credit_events").select("*").eq("customer_id", customer.id).eq("is_demo", DEMO_MODE).order("created_at", { ascending: false }),
+        supabase.from("credit_events").select("*").eq("customer_id", customer.id).eq("is_demo", DEMO_MODE).is("archived_at", null).order("created_at", { ascending: false }),
         supabase.from("credit_actions").select("*").eq("customer_id", customer.id).order("created_at", { ascending: false }),
       ]);
       const items = [

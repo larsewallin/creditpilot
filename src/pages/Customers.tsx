@@ -1,3 +1,4 @@
+import { DemoDataNotice } from "@/components/DemoDataNotice";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { ScenarioBadge } from "@/components/ScenarioBadge";
@@ -65,6 +66,7 @@ export default function Customers() {
           </SelectContent>
         </Select>
       </div>
+      <DemoDataNotice message="Demo portfolio. Real company names are used for illustration only: limits, balances, scores and payment figures are fictional, not real ratings or bureau scores." />
 
       {isLoading ? <SkeletonTable rows={15} /> : (
         <div className="bg-card rounded-xl border overflow-hidden">

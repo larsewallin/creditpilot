@@ -86,6 +86,7 @@ export default function CreditEvents() {
         .from("credit_events")
         .select("*, customers(company_name)")
         .eq("is_demo", DEMO_MODE)
+        .is("archived_at", null)
         // Portfolio-wide briefings aren't a per-event signal and render poorly
         // in this unified feed (no customer, long free-text body). Excluded
         // here pending a dedicated surface for them.
@@ -129,7 +130,7 @@ export default function CreditEvents() {
         </p>
       </div>
 
-      <DemoDataNotice message="All events, companies, and figures below are fictional, generated for illustration only. Not real credit signals." />
+      <DemoDataNotice message="Demo portfolio. Real company names are used for illustration only: every event, figure, score and news item below is fictional and says nothing about those companies." />
 
       {filterCustomerId && (
         <Badge variant="secondary" className="text-xs gap-1.5 w-fit">

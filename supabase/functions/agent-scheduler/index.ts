@@ -6,9 +6,12 @@
  * Called every 15 minutes by pg_cron (migration 20261114000000_agent_scheduler.sql)
  * with x-scheduler-secret, or by a signed-in admin / credit manager for a dry run.
  *
- * Demo (DEMO_MODE=true): starts nothing. The demo's agents run on Reset Demo only, so
- * its seeded scores, events and actions never shift. A dry run still reports what
- * production would start now, which is how the production path is checked on the demo.
+ * Demo (DEMO_MODE=true): never runs the production schedule. Once a day (from 04:00
+ * New York time) it runs the same sequence as the Reset Demo button: reset, the
+ * monitoring agents, the Risk agent, CIA's decisioning. The reset rebuilds the same
+ * seeded story (scores, events, actions) with dates rolled to today, so the demo never
+ * looks a month old and no score changes. A dry run still reports what production
+ * would start now, which is how the production path is checked on the demo.
  *
  * Production: each tick starts one stage of Reset Demo's pipeline: the monitoring
  * agents that are due; else the Risk agent after new Country / Industry / FX results;
@@ -74,6 +77,11 @@ Deno.serve(async (req) => {
   for (const r of (runs ?? []) as (LastRun & { agent_name: string })[]) if (!last[r.agent_name]) last[r.agent_name] = r;
 
   const p = plan(settings, last, now);
+
+  if (demo && !dryRun) {
+    const demoRefresh = await maybeRefreshDemo(db, url, anonKey, secret, now);
+    return json({ mode: "demo", dry_run: false, now: now.toISOString(), timezone: settings.timezone, due: p.due, waiting: p.waiting, started: [], demo_refresh: demoRefresh });
+  }
   const answer = { mode: demo ? "demo" : "production", dry_run: dryRun, now: now.toISOString(), timezone: settings.timezone, due: p.due, waiting: p.waiting, started: [] as string[] };
   if (demo || dryRun || !p.due.length) return json(answer);
 
@@ -98,3 +106,49 @@ Deno.serve(async (req) => {
   answer.started = p.due.map((d) => d.key);
   return json(answer);
 });
+
+
+const DEMO_REFRESH = "scheduler:demo_refresh";
+const DEMO_REFRESH_HOUR_NY = 4;
+const DEMO_AGENTS = [
+  "ar-aging-agent", "news-monitor-agent", "sec-monitor-agent", "payment-behaviour-agent",
+  "industry-risk-agent", "credit-rating-agent", "country-risk-agent", "fx-risk-agent",
+];
+
+function newYorkParts(d: Date): { day: string; hour: number } {
+  const f = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23" });
+  const parts = Object.fromEntries(f.formatToParts(d).map((x) => [x.type, x.value]));
+  return { day: `${parts.year}-${parts.month}-${parts.day}`, hour: Number(parts.hour) };
+}
+
+/** Once per New York day: the Reset Demo sequence, server side. Returns what it did. */
+// deno-lint-ignore no-explicit-any
+async function maybeRefreshDemo(db: any, url: string, anonKey: string, secret: string, now: Date): Promise<string> {
+  const ny = newYorkParts(now);
+  if (ny.hour < DEMO_REFRESH_HOUR_NY) return "not yet today";
+  const since = new Date(now.getTime() - 26 * 3_600_000).toISOString();
+  const { data: recent } = await db.from("agent_runs").select("started_at").eq("agent_name", DEMO_REFRESH).gte("started_at", since);
+  if ((recent ?? []).some((r: { started_at: string }) => newYorkParts(new Date(r.started_at)).day === ny.day)) return "done today";
+
+  await db.from("agent_runs").insert({
+    agent_name: DEMO_REFRESH, status: "completed", started_at: now.toISOString(), completed_at: now.toISOString(),
+    triggered_by: "schedule", summary: "Daily demo refresh (same as Reset Demo)",
+  });
+  const headers = { Authorization: `Bearer ${anonKey}`, apikey: anonKey, "x-scheduler-secret": secret, "Content-Type": "application/json" };
+  const call = async (fn: string, body: unknown) => {
+    try {
+      const r = await fetch(`${url}/functions/v1/${fn}`, { method: "POST", headers, body: JSON.stringify(body) });
+      if (!r.ok && r.status !== 429) console.error(`[agent-scheduler] demo refresh: ${fn} answered ${r.status}`);
+      await r.body?.cancel();
+    } catch (e) { console.error(`[agent-scheduler] demo refresh: ${fn} failed:`, e instanceof Error ? e.message : String(e)); }
+  };
+  const run = (async () => {
+    await call("demo-actions", { action: "reset" });
+    await Promise.all(DEMO_AGENTS.map((fn) => call(fn, { triggered_by: "schedule" })));
+    await call("risk-agent", { triggered_by: "schedule" });
+    await call("cia-agent", { skip_briefing: true, triggered_by: "schedule" });
+  })();
+  if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(run);
+  else await run;
+  return "started";
+}

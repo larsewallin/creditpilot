@@ -113,7 +113,7 @@ export default function Settings() {
       <section className="bg-card rounded-xl border p-4 space-y-3 text-xs">
         <h2 className="text-sm font-semibold">Agent schedules</h2>
         {q.data.demo
-          ? <p className="rounded-md bg-amber-500/10 text-amber-800 px-2 py-1">This is the demo: its agents run only when you press Reset Demo, so the sample scores, events and actions stay as they are. These schedules apply when CreditPilot runs on your own data.</p>
+          ? <p className="rounded-md bg-amber-500/10 text-amber-800 px-2 py-1">This is the demo: once a day (and when someone presses Reset Demo) it replays the same sample story with today's dates, so the sample scores, events and actions stay as they are. These schedules apply when CreditPilot runs on your own data.</p>
           : <p className="text-muted-foreground">CreditPilot checks every 15 minutes which agents are due. The Risk agent and CIA's decisioning follow the others: they run once new results are in.</p>}
         <label className="block space-y-1 max-w-xs"><span className="text-muted-foreground">Time zone (e.g. America/New_York, Europe/London)</span>
           <Input value={tz} disabled={!canEdit} onChange={(e) => setTz(e.target.value)} className="h-8 text-xs" /></label>
@@ -150,7 +150,7 @@ export default function Settings() {
               {runPreview.isPending && <Loader2 className="h-3 w-3 animate-spin mr-1" />}What would run now?</Button>
             {preview && (
               <div className="rounded-md border p-2 space-y-1">
-                <p className="text-muted-foreground">{preview.mode === "demo" ? "Demo: nothing is started. On your own data, at " : "At "}{new Date(preview.now).toLocaleString()} ({preview.timezone}) the saved schedules would start:</p>
+                <p className="text-muted-foreground">{preview.mode === "demo" ? "Demo: these schedules start nothing here. On your own data, at " : "At "}{new Date(preview.now).toLocaleString()} ({preview.timezone}) the saved schedules would start:</p>
                 {preview.due.length ? <ul className="list-disc pl-4">{preview.due.map((d) => <li key={d.key}>{d.label} <span className="text-muted-foreground">({d.reason})</span></li>)}</ul> : <p>Nothing: every agent has run since its last scheduled time.</p>}
               </div>
             )}

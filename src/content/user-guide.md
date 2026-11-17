@@ -10,7 +10,7 @@ CreditPilot is an open-source project exploring how AI agents can automate credi
 
 Think of it as a team of always-on analysts, each watching one specific thing.
 
-One reads the news. Every few hours it scans for stories about every company in a portfolio, and the moment something concerning shows up, it writes a short, sourced note. Another reads SEC filings, catching covenant breaches, going-concern language, or executive departures the moment a public customer files one. A third watches accounts receivable: who's over their credit limit, who's overdue and by how much, who's quietly drifting from paying on time to paying late. A fourth watches payment timing itself, comparing a customer's most recent month of payments against the month before to catch a deteriorating or improving trend before it shows up anywhere else. A fifth watches the economic and news environment around each industry sector in the portfolio — not any single customer. It knows the difference between a falling commodity price being bad news for the sector that sells it and good news for the sector that buys it, and adjusts what it reports accordingly.
+One reads the news. On a schedule the credit team sets, it scans for stories about every company in a portfolio, and the moment something concerning shows up, it writes a short, sourced note. Another reads SEC filings, catching covenant breaches, going-concern language, or executive departures the moment a public customer files one. A third watches accounts receivable: who's over their credit limit, who's overdue and by how much, who's quietly drifting from paying on time to paying late. A fourth watches payment timing itself, comparing a customer's most recent month of payments against the month before to catch a deteriorating or improving trend before it shows up anywhere else. A fifth watches the economic and news environment around each industry sector in the portfolio — not any single customer. It knows the difference between a falling commodity price being bad news for the sector that sells it and good news for the sector that buys it, and adjusts what it reports accordingly. Others watch credit scores (a customer's score falling, or its financial statements getting too old), countries (ratings, policy rates, tariffs, political and economic shocks), and currencies (invoices in a currency that is moving against you). A Risk analyst then maps those country, industry and currency findings onto the customers actually exposed to them.
 
 None of these analysts talk to each other. They all just write what they find into one shared log, called Credit Events. That's the raw feed of everything happening across a portfolio, in real time.
 
@@ -24,7 +24,7 @@ The CIA will become more powerful as more analysts get hired. It only shows info
 
 ## Deploying it, and keeping data secure
 
-The live demo runs on a fictional company with fictional data, hosted on this project's own infrastructure, so anyone can try it without any setup. The real design, though, is for a company to run this on its own data, in its own environment: its own Supabase project, deployed under its own account. None of that data would ever touch this project's infrastructure or anyone else's. It can also run entirely locally. Either way, the analysis happens on a company's own data, for its own eyes only.
+The live demo runs on a fictional portfolio, hosted on this project's own infrastructure, so anyone can try it without any setup: on the sign-in page, choose to try it as a credit manager, a credit analyst or a sales rep. The customer names are real companies used for illustration only; every score, limit, invoice, payment, event and news item about them is invented. The demo is shared by every visitor and replays the same story each day with today's dates. Two things in it are real: New customers looks companies up in real registers and sanctions lists and scores US-listed companies from their real SEC filings with Keen, and the CIA's answers are written live by an AI model (limited to 10 questions a day per visitor). The real design, though, is for a company to run this on its own data, in its own environment: its own Supabase project, deployed under its own account. None of that data would ever touch this project's infrastructure or anyone else's. It can also run entirely locally. Either way, the analysis happens on a company's own data, for its own eyes only.
 
 ---
 
@@ -46,7 +46,7 @@ The team of analysts described above isn't a fixed team. It's a pattern, documen
 
 A new agent is just a new watcher that follows the shared contract. It's a self-contained function that watches one thing: a data source, an API, a feed. It writes what it finds into the same shared event log every other agent uses, in the same standard shape. It respects the same demo and live separation, so it's safe to test without touching real data. Once it's writing events correctly, the CIA can already read and reason about its findings, with no changes needed to the CIA itself.
 
-That last point is the real payoff of the design. The CIA gets smarter automatically as more analysts are added, because it already knows how to read the shared event format. New agents such as a Country Risk Analyst or an FX Exposure Analyst would each plug into the same slot the existing five occupy.
+That last point is the real payoff of the design. The CIA gets smarter automatically as more analysts are added, because it already knows how to read the shared event format. That is how the Country Risk, FX and Risk analysts were added: each plugged into the same slot the first five occupy.
 
 The repo's CONTRIBUTING.md walks through the exact steps and conventions — how to write events, how rate-limiting and audit logging are handled — so a new agent behaves consistently with the existing ones from day one. Anyone can also help shape the roadmap by opening an issue describing what kind of risk signal they'd want CreditPilot to watch, which becomes a candidate for the next analyst.
 
@@ -64,9 +64,15 @@ AR Aging shows accounts receivable broken down by age bucket, credit utilization
 
 News Monitor, SEC Filings, and Customers are filtered views into the underlying data each analyst produces.
 
-Payment Behaviour shows every customer's payment timing — the last 90 days against the 90 days before that — sorted worst-first, and opens up to the individual payments behind each figure.
+Payment Behaviour shows every customer's payment timing — the recent period against the one before — sorted worst-first, and opens up to the individual payments behind each figure.
 
 Industry Risk is the one page that isn't organized by customer. It lists the sectors your portfolio is actually exposed to, and what each analyst found about them: the economic series being watched, and the news that moved them.
+
+Country Risk and FX Risk show the countries and currencies the portfolio is exposed to, and what changed.
+
+New customers is where the credit team onboards a new account: the company is looked up in official registers (Company Lookup), screened against sanctions lists, scored (Keen by default, or another provider such as D&B, Creditsafe, Coface, Allianz Trade or Experian), and given a proposed credit limit that a credit manager approves. Customers never use CreditPilot themselves.
+
+Settings holds the company's own rules: which score providers come first, how old a customer's financial statements may get, and when each agent runs.
 
 Every one of these pages can be opened directly from a Credit Events card, landing on the exact customer or sector that event was about.
 

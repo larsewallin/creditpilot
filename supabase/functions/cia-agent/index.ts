@@ -590,6 +590,7 @@ async function fetchRelevantData(
         .from("credit_events")
         .select("id, customer_id, event_type, severity, source_agent, title, description, payload, created_at, customers!left(company_name, credit_limit, current_exposure)")
         .eq("is_demo", demoMode)
+        .is("archived_at", null)
         .gte("created_at", ninetyDaysAgoISOString)
         .order("severity_score", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false })
@@ -1804,6 +1805,21 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one sentence statin
   }
 
   if (assessmentEvents.length > 0) {
+    // A new multi-signal assessment supersedes the customer's previous one: archive the
+    // older COMPOSITE_RISK_* rows (kept, never deleted) so feeds and CIA answers see one
+    // current assessment per customer instead of one per run.
+    const reassessed = assessmentEvents.map((e) => e.customer_id).filter((id): id is string => !!id);
+    if (reassessed.length > 0) {
+      const { error: archiveError } = await supabaseClient
+        .from("credit_events")
+        .update({ archived_at: new Date().toISOString() })
+        .eq("source_agent", "cia-agent")
+        .in("event_type", ["COMPOSITE_RISK_CRITICAL", "COMPOSITE_RISK_ELEVATED"])
+        .eq("is_demo", DEMO_MODE)
+        .is("archived_at", null)
+        .in("customer_id", reassessed);
+      if (archiveError) console.error("Composite archive error:", archiveError.message);
+    }
     const { error: insertError } = await supabaseClient
       .from("credit_events")
       .insert(assessmentEvents);
