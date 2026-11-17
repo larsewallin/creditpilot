@@ -142,6 +142,15 @@ export interface SettingsAnswer {
   score_providers: ScoreProviderInfo[];
   agents: { key: string; label: string; stage: "sense" | "risk" | "decide" }[];
   demo: boolean;
+  connectors?: ConnectorInfo[];
+  connector_categories?: { key: string; label: string; blurb: string }[];
+  sanctions_lists?: { list: string; last_success_at: string | null; entry_count: number | null }[];
+}
+
+export interface ConnectorInfo {
+  key: string; category: string; name: string; feeds: string; settings: string[];
+  kind: "key" | "default_url" | "built_in" | "manual" | "planned"; optional?: boolean; code?: string; demo_sample?: boolean;
+  status: "connected" | "default" | "built_in" | "not_set" | "manual" | "planned"; missing: string[];
 }
 
 export interface SchedulerPreview {

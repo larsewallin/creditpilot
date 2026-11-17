@@ -13,6 +13,8 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth";
 import { getSettings, saveSetting, previewScheduler, type AgentSchedule, type SchedulerPreview } from "@/lib/onboarding";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ConnectorsPanel } from "@/components/settings/ConnectorsPanel";
 
 const FREQUENCIES: [number, string][] = [[1, "Every hour"], [2, "Every 2 hours"], [3, "Every 3 hours"], [4, "Every 4 hours"], [6, "Every 6 hours"],
   [8, "Every 8 hours"], [12, "Every 12 hours"], [24, "Daily"], [168, "Weekly (Mondays)"]];
@@ -70,6 +72,13 @@ export default function Settings() {
   return (
     <div className="space-y-5 max-w-3xl pb-24">
       <h1 className="text-xl font-semibold text-foreground">Settings</h1>
+      <Tabs defaultValue="rules">
+        <TabsList className="h-8">
+          <TabsTrigger value="rules" className="text-xs h-7">Credit rules and schedules</TabsTrigger>
+          <TabsTrigger value="connectors" className="text-xs h-7">Connectors</TabsTrigger>
+        </TabsList>
+        <TabsContent value="connectors" className="mt-4"><ConnectorsPanel data={q.data} /></TabsContent>
+        <TabsContent value="rules" className="mt-4 space-y-5">
 
       <section className="bg-card rounded-xl border p-4 space-y-3 text-xs">
         <h2 className="text-sm font-semibold">Credit score source</h2>
@@ -161,6 +170,8 @@ export default function Settings() {
       {canEdit
         ? <Button onClick={() => save.mutate()} disabled={save.isPending || order.length === 0}>{save.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Save settings</Button>
         : <p className="text-xs text-muted-foreground">{appUser?.is_demo ? "You are in a shared demo account: you can look at the settings but not change them." : "Admins and credit managers can change these settings."}</p>}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
