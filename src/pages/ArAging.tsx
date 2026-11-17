@@ -1,3 +1,4 @@
+import { DemoDataNotice } from "@/components/DemoDataNotice";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { RiskTierBadge } from "@/components/RiskTierBadge";
@@ -203,6 +204,8 @@ export default function ArAging() {
           </Button>
         </div>
       </div>
+
+      <DemoDataNotice message="Invoices and balances shown here are fictional, generated for illustration only." />
 
       {/* Portfolio Bar */}
       <div className="bg-card rounded-xl border p-5">

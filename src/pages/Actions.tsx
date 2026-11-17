@@ -1,3 +1,4 @@
+import { DemoDataNotice } from "@/components/DemoDataNotice";
 import { useState } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -162,7 +163,7 @@ export default function Actions() {
               <AlertDialogHeader>
                 <AlertDialogTitle>Reset the demo?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This will restore all pending actions, SEC alerts, credit limits, and news reviewed state.
+                  This replays the demo for everyone: it clears approvals and rejections, restores the credit limits and reruns every agent on the sample data with today's dates.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -180,6 +181,7 @@ export default function Actions() {
           </AlertDialog>
         )}
       </div>
+      <DemoDataNotice message="Proposed actions here come from the demo's fictional data. Approving one changes the shared demo for every visitor until the next daily refresh or Reset Demo." />
 
       {/* Pending Actions */}
       <div>

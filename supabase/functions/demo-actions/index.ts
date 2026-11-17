@@ -167,6 +167,16 @@ Deno.serve(async (req) => {
 
       await supabase.from("agent_messages").update({ status: "pending" }).eq("is_demo", true);
 
+      // cia-agent rebuilds its multi-signal assessments after every reset; archive the
+      // previous ones (kept, not deleted) so there is one current assessment per customer.
+      await supabase
+        .from("credit_events")
+        .update({ archived_at: new Date().toISOString() })
+        .eq("is_demo", true)
+        .eq("source_agent", "cia-agent")
+        .in("event_type", ["COMPOSITE_RISK_CRITICAL", "COMPOSITE_RISK_ELEVATED"])
+        .is("archived_at", null);
+
       // Put back every limit a demo approval lowered: the limit before the first
       // demo approval for that customer (credit_actions keeps it), then the seed list.
       const restore = new Map<string, number>(SEED_CREDIT_LIMITS.map(({ id, limit }) => [id, limit]));
