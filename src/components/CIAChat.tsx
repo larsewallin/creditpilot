@@ -61,7 +61,7 @@ export function CIAChat() {
 
   const placeholder = isOnCIAPage
     ? "Ask a follow-up…"
-    : "Ask CIA anything about your portfolio…";
+    : "Ask anything about your portfolio…";
 
   return (
     <>
