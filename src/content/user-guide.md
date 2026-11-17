@@ -80,6 +80,34 @@ And in the middle of all of it is the CIA, accessible from anywhere through a se
 
 ---
 
+## How severity works
+
+Every finding in CreditPilot carries one of the same severity levels, wherever it appears: Credit Events, Actions, News, a customer's page and the assistant's answers.
+
+| Severity | What it means | What to do |
+|---|---|---|
+| **Critical** | A serious problem now: the customer could fail to pay. | Act today: review the limit, hold new orders, call the customer. |
+| **High** | A clear warning sign. | Review this week. |
+| **Medium** | Something to watch. | Keep an eye on it; it counts if other signs appear. |
+| **Low** | Minor or early. | Noted; no action needed on its own. |
+
+Good news, such as a customer starting to pay faster, is recorded as low or as information only.
+
+Each agent decides the severity of what it finds by fixed rules, so the same facts always give the same severity. Some examples:
+
+- **AR aging:** critical when a customer is over its credit limit or has invoices more than 90 days overdue; high at 61–90 days, or close to the limit (over 80%) when other signs are weak; medium at 31–60 days; low at 1–30 days.
+- **Payments:** critical when a customer pays 20 or more days later than in the period before; high at 10–20 days later; medium when slightly later.
+- **SEC filings:** critical for a going-concern doubt; high for a covenant waiver or a CEO departure; medium for other warnings.
+- **Credit score:** critical when a score falls 30 points or more; high at 20 or more; medium at 10 or more; low below that.
+- **Exchange rates:** critical when an invoice currency moved 10% or more against you in 30 days; high at 6% or more.
+- **News:** each story is rated on how directly it threatens the customer's ability to pay.
+
+When several agents flag the same customer, the assistant writes one summary card, **Several warning signs**, rated at the severity of the most serious signal behind it. It proposes an **Action** (for example a lower credit limit) when the signs add up: three or more agents, two agents with a critical signal, or very high use of the credit limit. Nothing changes until a person approves it.
+
+On Credit Events, choose **Critical** in the severity filter to see every critical event at once, or **Customer summaries** to see only the summary cards.
+
+---
+
 ## Who's building this
 
 Hi, I'm Lars. I've spent the last two decades in trade and receivables finance. I started this project to try to push the limits of what's possible to build. I'm not married to a specific model, but this project has been built mainly using Claude Code.
