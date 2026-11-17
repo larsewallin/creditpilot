@@ -38,6 +38,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.98.0";
 import { fetchSecFilings, fetchSeedSecFilings } from "../_shared/skills/integration/fetch-sec-filing.ts";
 import { deliverMessage, LogProvider } from "../_shared/skills/integration/deliver-message.ts";
 import { publishEvent } from "../_shared/publishEvent.ts";
+import { agentCallerProblem } from "../_shared/agent_gate.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -59,6 +60,8 @@ const CREDIT_TEAM_EMAIL = Deno.env.get("CREDIT_TEAM_EMAIL") ?? "credit-team@comp
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  const notAllowed = await agentCallerProblem(req);
+  if (notAllowed) return notAllowed;
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,

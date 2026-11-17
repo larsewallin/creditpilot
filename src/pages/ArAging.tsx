@@ -17,9 +17,11 @@ import { DEMO_MODE } from "@/lib/constants";
 
 interface UploadResult {
   inserted: number;
+  preview?: boolean;
+  would_insert?: number;
   skipped_rows: number;
   errors: { row: number; message: string }[];
-  unmatched_customers: string[];
+  unmatched_customers: ({ customer_name: string; reason: string } | string)[];
   column_map: Record<string, string>;
   validation_warnings: { row: number; field: string; message: string }[];
   currency_warnings: { row: number; invoice_number: string; invoice_currency: string; expected_currency: string }[];
@@ -430,13 +432,16 @@ export default function ArAging() {
               {uploadStep === "success" && uploadResult && (
                 <>
                   <DialogHeader>
-                    <DialogTitle>Upload Complete</DialogTitle>
+                    <DialogTitle>{uploadResult.preview ? "Upload checked (demo preview)" : "Upload Complete"}</DialogTitle>
                   </DialogHeader>
                   <div className="space-y-3 py-2">
+                    {uploadResult.preview && (
+                      <p className="text-xs text-muted-foreground">This is the shared demo, so nothing was saved: the file was read and matched to the demo customers only. On your own install the invoices replace each matched customer's open invoices.</p>
+                    )}
                     <div className="grid grid-cols-2 gap-3">
                       <div className="bg-secondary/50 rounded-lg p-3">
-                        <p className="text-[10px] text-muted-foreground uppercase">Invoices Imported</p>
-                        <p className="text-2xl font-bold text-foreground">{uploadResult.inserted}</p>
+                        <p className="text-[10px] text-muted-foreground uppercase">{uploadResult.preview ? "Invoices that would be imported" : "Invoices Imported"}</p>
+                        <p className="text-2xl font-bold text-foreground">{uploadResult.preview ? uploadResult.would_insert ?? 0 : uploadResult.inserted}</p>
                       </div>
                       <div className="bg-secondary/50 rounded-lg p-3">
                         <p className="text-[10px] text-muted-foreground uppercase">Rows Skipped</p>
@@ -447,7 +452,7 @@ export default function ArAging() {
                       <div className="bg-secondary/30 rounded-lg p-3">
                         <p className="text-xs font-medium mb-1">Unmatched customers</p>
                         <p className="text-[10px] text-muted-foreground">
-                          {uploadResult.unmatched_customers.join(", ")}
+                          {uploadResult.unmatched_customers.map((u) => typeof u === "string" ? u : u.customer_name).join(", ")}
                         </p>
                       </div>
                     )}

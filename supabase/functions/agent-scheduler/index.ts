@@ -86,7 +86,7 @@ Deno.serve(async (req) => {
     const payload = d.key === "cia_decisioning" ? { skip_briefing: true, triggered_by: "schedule" } : { triggered_by: "schedule" };
     try {
       const r = await fetch(`${url}/functions/v1/${d.fn}`, {
-        method: "POST", headers: { Authorization: `Bearer ${anonKey}`, apikey: anonKey, "Content-Type": "application/json" }, body: JSON.stringify(payload),
+        method: "POST", headers: { Authorization: `Bearer ${anonKey}`, apikey: anonKey, "x-scheduler-secret": secret, "Content-Type": "application/json" }, body: JSON.stringify(payload),
       });
       if (!r.ok && r.status !== 429) console.error(`[agent-scheduler] ${d.fn} answered ${r.status}`);
       await r.body?.cancel();

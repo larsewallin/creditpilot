@@ -33,6 +33,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.98.0";
 import { analysePaymentBehaviour } from "../_shared/skills/analytical/analyse-payment-behaviour.ts";
 import { publishEvent } from "../_shared/publishEvent.ts";
 import { severityToScore } from "../_shared/event_schemas.ts";
+import { agentCallerProblem } from "../_shared/agent_gate.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -47,6 +48,8 @@ const MAX_CUSTOMERS = 25;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  const notAllowed = await agentCallerProblem(req);
+  if (notAllowed) return notAllowed;
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,

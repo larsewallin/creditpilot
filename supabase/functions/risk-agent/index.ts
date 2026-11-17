@@ -28,6 +28,7 @@ import {
   type MacroCustomer,
   type MacroEvent,
 } from "../_shared/skills/analytical/correlate-macro-exposure.ts";
+import { agentCallerProblem } from "../_shared/agent_gate.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -45,6 +46,8 @@ function usd(n: number): string {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  const notAllowed = await agentCallerProblem(req);
+  if (notAllowed) return notAllowed;
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,

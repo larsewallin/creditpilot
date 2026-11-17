@@ -1,3 +1,4 @@
+import { DEMO_MODE } from "@/lib/constants";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { SeverityBadge } from "@/components/SeverityBadge";
@@ -22,7 +23,7 @@ export default function NewsMonitor() {
       const { data } = await supabase
         .from("negative_news")
         .select("*, customers!inner(company_name)")
-        .eq("is_demo", true)
+        .eq("is_demo", DEMO_MODE)
         .order("news_date", { ascending: false });
       return data ?? [];
     },

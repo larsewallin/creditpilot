@@ -31,6 +31,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.98.0";
 import { countrySignals, tcmBase, tradeCreditMonitor } from "../_shared/skills/integration/trade-credit-monitor.ts";
 import { publishEvent } from "../_shared/publishEvent.ts";
 import { severityToScore } from "../_shared/event_schemas.ts";
+import { agentCallerProblem } from "../_shared/agent_gate.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -104,6 +105,8 @@ function usd(n: number): string {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  const notAllowed = await agentCallerProblem(req);
+  if (notAllowed) return notAllowed;
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,

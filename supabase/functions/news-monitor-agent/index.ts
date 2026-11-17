@@ -38,6 +38,7 @@ import {
 import { TradeCreditMonitorProvider, tcmBase } from "../_shared/skills/integration/trade-credit-monitor.ts";
 import { publishEvent } from "../_shared/publishEvent.ts";
 import { severityToScore } from "../_shared/event_schemas.ts";
+import { agentCallerProblem } from "../_shared/agent_gate.ts";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -55,6 +56,8 @@ const MAX_CUSTOMERS = 10;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  const notAllowed = await agentCallerProblem(req);
+  if (notAllowed) return notAllowed;
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
