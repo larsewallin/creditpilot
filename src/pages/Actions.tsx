@@ -1,5 +1,7 @@
 import { DemoDataNotice } from "@/components/DemoDataNotice";
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { X } from "lucide-react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { DEMO_MODE } from "@/lib/constants";
@@ -32,17 +34,20 @@ export default function Actions() {
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectNote, setRejectNote] = useState("");
   const [resetting, setResetting] = useState(false);
+  const [params, setParams] = useSearchParams();
+  const filterCustomerId = params.get("customer_id");
 
   // ── Pending Actions ─────────────────────────────────────────────────────────
   const { data: pendingActions, isLoading: pendingLoading, refetch: refetchPending } = useQuery({
-    queryKey: ["actions-pending"],
+    queryKey: ["actions-pending", filterCustomerId],
     queryFn: async () => {
-      const { data } = await supabase
+      let query = supabase
         .from("pending_actions")
         .select("*, customers(company_name, credit_limit)")
         .eq("status", "pending")
-        .eq("is_demo", DEMO_MODE)
-        .order("created_at", { ascending: false });
+        .eq("is_demo", DEMO_MODE);
+      if (filterCustomerId) query = query.eq("customer_id", filterCustomerId);
+      const { data } = await query.order("created_at", { ascending: false });
       return data ?? [];
     },
     refetchInterval: 30000,
@@ -181,6 +186,12 @@ export default function Actions() {
           </AlertDialog>
         )}
       </div>
+      {filterCustomerId && (
+        <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs w-fit">
+          Customer: {(pendingActions as { customers?: { company_name?: string } }[] | undefined)?.[0]?.customers?.company_name ?? "one customer"}
+          <button type="button" aria-label="Show all actions" onClick={() => setParams(new URLSearchParams(), { replace: true })}><X className="h-3 w-3" /></button>
+        </span>
+      )}
       <DemoDataNotice message="Proposed actions here come from the demo's fictional data. Approving one changes the shared demo for every visitor until the next daily refresh or Reset Demo." />
 
       {/* Pending Actions */}
