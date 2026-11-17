@@ -46,10 +46,18 @@ openviews="$(q "select string_agg(c.relname, ', ') from pg_class c join pg_names
 writable="$(q "select string_agg(distinct table_name, ', ') from information_schema.role_table_grants where table_schema='public' and grantee in ('anon','authenticated') and privilege_type in ('INSERT','UPDATE','DELETE','TRUNCATE')")"
 [ -z "$writable" ] || err "anon / authenticated may write: $writable"
 execs="$(q "select string_agg(p.proname, ', ') from pg_proc p join pg_namespace n on n.oid=p.pronamespace
-  where n.nspname='public' and p.prokind='f' and has_function_privilege('anon', p.oid, 'EXECUTE')
-  and p.proname not in ('is_public_demo','is_app_user','current_app_role')
+  where n.nspname='public' and p.prokind='f'
+  and (has_function_privilege('anon', p.oid, 'EXECUTE') or has_function_privilege('authenticated', p.oid, 'EXECUTE'))
   and not exists (select 1 from pg_depend d where d.objid=p.oid and d.deptype='e')")"
-[ -n "$execs" ] && echo "Functions anon may execute (policy / view helpers only): $execs"
+[ -z "$execs" ] || err "API functions callable signed out or by signed-in users: $execs"
+# Supabase Security Advisor lints, so they are caught here first.
+nopath="$(q "select string_agg(p.proname, ', ') from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+  where n.nspname in ('public','private') and p.prokind='f'
+  and not exists (select 1 from pg_depend d where d.objid=p.oid and d.deptype='e')
+  and not exists (select 1 from unnest(coalesce(p.proconfig, '{}')) c where c like 'search_path=%')")"
+[ -z "$nopath" ] || err "functions without a fixed search_path: $nopath"
+pubext="$(q "select string_agg(e.extname, ', ') from pg_extension e join pg_namespace n on n.oid=e.extnamespace where n.nspname='public'")"
+[ -z "$pubext" ] || err "extensions installed in the public schema: $pubext"
 
 # What signed-out demo visitors could read before the lock-down (hosted demo, 2026-11-17).
 DEMO_PUBLIC=" agent_messages agent_runs ar_aging_snapshots bankruptcy_details company credit_actions credit_events credit_metrics customer_identifiers customers fx_currency_status fx_rate_history growth_signals invoices negative_news payment_transactions pending_actions sec_filings sec_monitoring seed_country_risk seed_industry_econ_signals seed_industry_news v_ar_aging_current v_ar_aging_portfolio v_bankruptcy_claims v_customers_at_risk v_fx_exposure_by_invoice v_growth_opportunities v_overdue_invoices v_payment_behaviour v_payment_behaviour_current v_payment_behaviour_portfolio v_portfolio_overview "
@@ -77,3 +85,4 @@ for mode in true false; do
 done
 q "update public.instance_settings set public_demo = true" >/dev/null
 exit $fail
+
