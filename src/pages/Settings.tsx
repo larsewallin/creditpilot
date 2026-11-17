@@ -72,6 +72,9 @@ export default function Settings() {
   return (
     <div className="space-y-5 max-w-3xl pb-24">
       <h1 className="text-xl font-semibold text-foreground">Settings</h1>
+      {q.data?.instance_warning && (
+        <p role="alert" className="rounded-md border border-severity-critical/40 bg-severity-critical/10 px-3 py-2 text-xs text-severity-critical">{q.data.instance_warning}</p>
+      )}
       <Tabs defaultValue="rules">
         <TabsList className="h-8">
           <TabsTrigger value="rules" className="text-xs h-7">Credit rules and schedules</TabsTrigger>

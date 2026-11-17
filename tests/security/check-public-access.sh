@@ -23,7 +23,7 @@ count() { # <object> <bearer>  -> row count visible, or ERR. A portfolio total o
     return
   fi
   curl -s -m 20 -o /dev/null -D - "$API/rest/v1/$1?select=*&limit=1" -H "apikey: $ANON" -H "Authorization: Bearer $2" -H 'Prefer: count=exact' \
-    | tr -d '\r' | sed -n 's/^[Cc]ontent-[Rr]ange: .*\/\([0-9*]*\)$/\1/p' | sed 's/^\*$/0/;s/^$/ERR/'
+    | tr -d '\r' | sed -n 's/^[Cc]ontent-[Rr]ange: .*\/\([0-9*]*\)$/\1/p' | sed 's/^\*$/0/' | { read -r n || true; echo "${n:-ERR}"; }
 }
 token_for() { # <email> -> access token (creates the auth user if needed; no email sent)
   local th

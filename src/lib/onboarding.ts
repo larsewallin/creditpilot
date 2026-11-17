@@ -143,6 +143,7 @@ export interface SettingsAnswer {
   agents: { key: string; label: string; stage: "sense" | "risk" | "decide" }[];
   demo: boolean;
   connectors?: ConnectorInfo[];
+  instance_warning?: string | null;
   connector_categories?: { key: string; label: string; blurb: string }[];
   sanctions_lists?: { list: string; last_success_at: string | null; entry_count: number | null }[];
 }
