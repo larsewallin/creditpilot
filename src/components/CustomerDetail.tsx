@@ -29,12 +29,12 @@ function formatRatingSource(source: string): string {
     creditsafe: "Creditsafe",
     allianz_trade: "Allianz Trade",
     experian: "Experian",
-    other: "Other provider",
+    other: "Third-party rating",
     bureau_report: "Bureau report",
   };
   const label = labels[source] ?? source;
   // Demo scores are invented: never present them as a real agency's or bureau's score.
-  return DEMO_MODE ? `${label} scale, sample score` : label;
+  return DEMO_MODE ? `${label} (sample)` : label;
 }
 
 // ── Customer Detail Drawer ────────────────────────────────────────────────────

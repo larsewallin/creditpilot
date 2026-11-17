@@ -238,7 +238,7 @@ describe("Keen adapter", () => {
     const slow: typeof fetch = ((_u: unknown, init?: RequestInit) => new Promise((_r, rej) => {
       init?.signal?.addEventListener("abort", () => rej(Object.assign(new Error("aborted"), { name: "AbortError" })));
     })) as typeof fetch;
-    expect(await liveProviders({ db: fakeDb(), env, fetch: slow, timeoutMs: 20 }).keenScore(app())).toEqual({ error: "timeout" });
+    expect(await liveProviders({ db: fakeDb(), env, fetch: slow, timeoutMs: 20, keenTimeoutMs: 20 }).keenScore(app())).toEqual({ error: "timeout" });
   });
 });
 

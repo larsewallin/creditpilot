@@ -32,6 +32,8 @@ export interface LiveDeps {
   asOf?: string;            // ISO date, for staleness and domain age
   isDemo?: boolean;         // which credit_events to read for macro context
   timeoutMs?: number;
+  /** Keen's own limit (it reads the 10-K from SEC on its first request); default 45 s. */
+  keenTimeoutMs?: number;
   /** The application's own prospect: never report it as an existing customer of itself. */
   excludeCustomerId?: string;
   /** Company Lookup client (tests inject one; default: COMPANY_LOOKUP_URL or the hosted copy). */
@@ -47,9 +49,9 @@ export function liveProviders(deps: LiveDeps): OnboardingProviders {
   const f = deps.fetch ?? fetch;
   const timeoutMs = deps.timeoutMs ?? 15_000;
 
-  async function get(url: string, init: RequestInit = {}): Promise<Response> {
+  async function get(url: string, init: RequestInit = {}, ms = timeoutMs): Promise<Response> {
     const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), timeoutMs);
+    const t = setTimeout(() => ctrl.abort(), ms);
     try { return await f(url, { ...init, signal: ctrl.signal }); }
     finally { clearTimeout(t); }
   }
@@ -382,13 +384,16 @@ export function liveProviders(deps: LiveDeps): OnboardingProviders {
     };
     const headers = { Authorization: `Bearer ${key}`, "Content-Type": "application/json" };
     let r: Response;
-    try { r = await get(`${base}/v1/score`, { method: "POST", headers, body: JSON.stringify(body) }); }
+    // Keen reads the 10-K from SEC on its first request for a company (and can start cold):
+    // measured 2026-11-17, Fastenal timed out at 15 s on the first call and took 6 s warm.
+    const keenMs = deps.keenTimeoutMs ?? 45_000;
+    try { r = await get(`${base}/v1/score`, { method: "POST", headers, body: JSON.stringify(body) }, keenMs); }
     catch (e) { return { error: (e as Error).name === "AbortError" ? "timeout" : "unavailable" }; }
     if (r.status === 202) {
       const { job_id } = await r.json() as { job_id: string };
       for (let i = 0; i < 5; i++) {
         await new Promise((res) => setTimeout(res, 2_000));
-        try { r = await get(`${base}/v1/score/${job_id}`, { headers }); } catch { return { error: "timeout" }; }
+        try { r = await get(`${base}/v1/score/${job_id}`, { headers }, keenMs); } catch { return { error: "timeout" }; }
         if (r.status !== 202) break;
       }
       if (r.status === 202) return { error: "timeout" };
