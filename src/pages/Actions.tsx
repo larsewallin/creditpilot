@@ -38,8 +38,9 @@ export default function Actions() {
   const [params, setParams] = useSearchParams();
   const filterCustomerId = params.get("customer_id");
   const { appUser } = useAuth();
-  // Approving or rejecting needs a signed-in credit manager (in the demo: "Try it as credit manager").
-  const canDecide = !!appUser && ["admin", "credit_manager"].includes(appUser.role);
+  // Demo: anyone can try approving or rejecting (Reset Demo puts it back). Production: a
+  // signed-in credit manager or admin.
+  const canDecide = DEMO_MODE || (!!appUser && ["admin", "credit_manager"].includes(appUser.role));
 
   // ── Pending Actions ─────────────────────────────────────────────────────────
   const { data: pendingActions, isLoading: pendingLoading, refetch: refetchPending } = useQuery({
