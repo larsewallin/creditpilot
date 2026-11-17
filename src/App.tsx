@@ -94,7 +94,8 @@ const App = () => (
         <AuthProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route element={<SidebarLayout />}>
+          {/* Outside the demo every page needs a signed-in CreditPilot user; the database enforces the same. */}
+          <Route element={DEMO_MODE ? <SidebarLayout /> : <RequireAuth><SidebarLayout /></RequireAuth>}>
             <Route path="/" element={<Navigate to="/events" replace />} />
             <Route path="/events" element={<CreditEvents />} />
             <Route path="/actions" element={<Actions />} />
