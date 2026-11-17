@@ -1,62 +1,193 @@
 import type { CIAAnswer } from "@/pages/CIA";
 
+// Fixed answers for the demo's suggested questions (saves AI tokens). Written from live
+// CIA answers on the demo data on 2026-11-17 and checked against that data. No dates:
+// the demo replays daily with today's dates. Re-check when the demo data changes.
 export const DEMO_ANSWERS: Record<string, CIAAnswer> = {
   "Why is Triumph Group flagged across multiple agents?": {
-    answer: "Triumph Group is flagged across multiple agents due to **three concurrent risk signals**:\n\n1. **OVERDUE_AR (high)** — $1,100,000 overdue across 3 invoices, worst bucket 61–90 days, oldest 90 days past due (ar_aging_agent, 2026-08-03)\n\n2. **NEWS_EVENT (high)** — Secured a **covenant waiver** after breaching financial covenants; faces margin pressure and elevated leverage raising liquidity concerns (news_monitor_agent, 2026-08-03)\n\n3. **SEC_OTHER (high)** — Covenant waiver disclosed in 10-Q filing dated 2025-02-06 (sec_monitor_agent, 2026-08-03)\n\nAdditionally, the **customers table** shows Triumph Group has a **credit score of 32/100 (CCC+)**, **payment_health=at_risk**, **credit utilization at 55%** of its $2M limit, and risk tags including **MULTI_SIGNAL_RISK, SEC_ALERT, NEGATIVE_NEWS** under a **credit_deterioration scenario** (customers table).",
-    sources: [
-      { customer_name: "Triumph Group Inc", event_type: "OVERDUE_AR", severity: "high", date: "2026-08-03", agent: "ar_aging_agent", static: true },
-      { customer_name: "Triumph Group Inc", event_type: "NEWS_EVENT", severity: "high", date: "2026-08-03", agent: "news_monitor_agent", static: true },
-      { customer_name: "Triumph Group Inc", event_type: "SEC_OTHER", severity: "high", date: "2026-08-03", agent: "sec_monitor_agent", static: true },
+    "answer": "Triumph Group is flagged by **5 agents** due to converging credit deterioration signals:\n\n1. **News monitoring** – Covenant waiver disclosed; lenders waived financial covenants due to breached leverage ratios \n2. **AR aging** – $800,000 overdue across 2 invoices, with worst bucket 61–90 days past due \n3. **Payment behavior** – Average days late worsened from 12 to 28 days (+16.0 day swing) over 90 days \n4. **SEC filings** – Covenant waiver confirmed in 10-Q filing \n5. **Credit rating** – Score downgraded 15 points to CCC+ (32/100) ",
+    "sources": [
+      {
+        "customer_name": "Triumph Group Inc",
+        "event_type": "NEWS_EVENT",
+        "severity": "high",
+        "agent": "news_monitor_agent",
+        "static": true
+      },
+      {
+        "customer_name": "Triumph Group Inc",
+        "event_type": "OVERDUE_AR",
+        "severity": "high",
+        "agent": "ar_aging_agent",
+        "static": true
+      },
+      {
+        "customer_name": "Triumph Group Inc",
+        "event_type": "PAYMENT_DETERIORATION",
+        "severity": "high",
+        "agent": "payment_behaviour_agent",
+        "static": true
+      },
+      {
+        "customer_name": "Triumph Group Inc",
+        "event_type": "SEC_OTHER",
+        "severity": "high",
+        "agent": "sec_monitor_agent",
+        "static": true
+      },
+      {
+        "customer_name": "Triumph Group Inc",
+        "event_type": "CREDIT_RATING_DOWNGRADE",
+        "severity": "high",
+        "agent": "credit_rating_agent",
+        "static": true
+      }
     ],
-    confidence: "High",
-    confidence_reason: "Every specific claim in the answer maps directly to the provided data: Triumph Group's OVERDUE_AR event ($1,100,000, 3 invoices, 61–90 days worst bucket, 90 days oldest) is in the credit_events table; NEWS_EVENT and SEC_OTHER events with covenant waiver details are present in credit_events; and all customer attributes (credit_score 32/100 CCC+, payment_health at_risk, utilization 55%, risk_tags, scenario) are verified in the customers table. No unsupported claims are made.",
-    relatedQuestions: [
-      "Given Triumph Group's covenant breach and recent waiver, what are the specific financial covenants they violated, and when is the next covenant compliance date or waiver expiration?",
-      "Of the $1.1M overdue AR across those 3 invoices, which customer accounts are responsible for the largest amounts, and have they indicated payment plans or disputes?",
-      "Can you list every individual overdue invoice for Triumph Group with exact invoice numbers and days overdue?",
-    ],
+    "confidence": "High",
+    "confidence_reason": "Every claim maps to the demo data: five agents flag Triumph Group (news, AR aging, payment behaviour, SEC filings, credit score); $800,000 overdue across 2 invoices in the 61–90 day bucket; average days late 12 → 28; score 32/100 (CCC+).",
+    "relatedQuestions": [
+      "Given the covenant waiver and leverage ratio breach, what are Triumph Group's current liquidity levels and cash flow projections for the next 2 quarters?",
+      "Of the $800,000 in overdue AR, do we know if these invoices are tied to specific contract performance issues or are they indicative of broader cash flow problems across their business?",
+      "Has Triumph Group provided any restructuring plan or timeline for covenant compliance, and should we consider reducing credit limits or requiring additional collateral immediately?"
+    ]
   },
   "Which customers have the highest credit risk right now?": {
-    answer: "# Highest Credit Risk Customers\n\nSeven customers carry **RISK_FLAG=HIGH** status (customers table):\n\n**Bankruptcy Scenario (Credit Score D/5):**\n- **Rite Aid Corporation**: 97% utilization, $487k balance (customers table)\n- **Proterra Inc**: 76% utilization, $378k balance (customers table)\n- **Yellow Corporation**: 50% utilization, $298k balance (customers table)\n\n**Severe Credit Deterioration (Credit Score CCC/28):**\n- **McDermott International Ltd**: 92% utilization, $1.38M balance (customers table)\n- **Spirit Airlines Inc**: 90% utilization, $1.08M balance (customers table)\n\n**Payment Stress:**\n- **Brixton Fasteners Ltd**: 147% utilization (over limit by $70k), credit score 22/100 (customers table; credit_events table)\n- **Heliogen Inc**: 30% utilization but flagged GOING_CONCERN, credit score 22/100 (customers table)\n\nMost critical: **Rite Aid** (D-rated, 97% utilization), **Brixton Fasteners** (146.7% over-limit), and **McDermott/Spirit** (CCC-rated, 90%+ utilization). Rite Aid, Proterra, and Yellow face **bankruptcy scenarios** (customers table).",
-    sources: [
-      { customer_name: "Rite Aid Corporation", event_type: "UTILIZATION_THRESHOLD_BREACH", severity: "high", date: "2026-08-03", agent: "ar_aging_agent", static: true },
-      { customer_name: "McDermott International Ltd", event_type: "UTILIZATION_THRESHOLD_BREACH", severity: "high", date: "2026-08-03", agent: "ar_aging_agent", static: true },
-      { customer_name: "Spirit Airlines Inc", event_type: "UTILIZATION_THRESHOLD_BREACH", severity: "high", date: "2026-08-03", agent: "ar_aging_agent", static: true },
-      { customer_name: "Brixton Fasteners Ltd", event_type: "UTILIZATION_THRESHOLD_BREACH", severity: "critical", date: "2026-08-03", agent: "ar_aging_agent", static: true },
+    "answer": "**19 customers** currently meet the high-risk criteria (combined credit limit $18,300,000, combined exposure $16,233,000):\n- **Arconic Corporation** — credit_score=58/100, scenario=credit_deterioration, exposure $2,750,000 \n- **General Electric Company (Power segment)** — credit_score=60/100, scenario=credit_deterioration, exposure $2,200,000 \n- **McDermott International Ltd** — credit_score=28/100, scenario=credit_deterioration, exposure $1,380,000 \n- **Maxar Technologies Inc** — credit_score=52/100, scenario=negative_news, exposure $1,250,000 \n- **Atlas Precision Manufacturing** — credit_score=32/100, scenario=credit_deterioration, exposure $1,200,000 \n- **Spirit Airlines Inc** — credit_score=28/100, scenario=negative_news, exposure $1,080,000 \n- **Cascade Industrial Systems** — credit_score=38/100, scenario=payment_issues, exposure $980,000 \n- **Coeur Mining Inc** — credit_score=42/100, scenario=credit_deterioration, exposure $890,000 \n- **Superior Industries International Inc** — credit_score=42/100, scenario=credit_deterioration, exposure $720,000 \n- **Orbital Energy Group Inc** — credit_score=32/100, scenario=payment_issues, exposure $680,000 \n- **Mistras Group Inc** — credit_score=45/100, scenario=credit_deterioration, exposure $545,000 \n- **Rite Aid Corporation** — credit_score=5/100, scenario=bankruptcy, exposure $487,000 \n- **Vertex Energy Inc** — credit_score=32/100, scenario=payment_issues, exposure $445,000 \n- **Proterra Inc** — credit_score=5/100, scenario=bankruptcy, exposure $378,000 \n- **Liqtech International AS** — credit_score=42/100, scenario=negative_news, exposure $365,000 \n- **Yellow Corporation** — credit_score=5/100, scenario=bankruptcy, exposure $298,000 \n- **Brixton Fasteners Ltd** — credit_score=22/100, scenario=payment_issues, exposure $220,000 \n- **Ironwood Machine Works** — credit_score=33/100, scenario=payment_issues, exposure $185,000 \n- **Heliogen Inc** — credit_score=22/100, scenario=sec_filing_monitoring, exposure $180,000 \n\nThe portfolio carries **combined exposure of $16.23M against $18.3M in credit limits** across this high-risk set. Critical concerns include three **bankruptcy-scenario accounts** and two customers **over their credit limits**: Cascade Industrial Systems at 196% utilization and Brixton Fasteners Ltd at 147%.",
+    "sources": [
+      {
+        "customer_name": "Arconic Corporation",
+        "severity": "high",
+        "static": true,
+        "source_type": "customers",
+        "event_type": null,
+        "agent": null
+      },
+      {
+        "customer_name": "McDermott International Ltd",
+        "severity": "high",
+        "static": true,
+        "source_type": "customers",
+        "event_type": null,
+        "agent": null
+      },
+      {
+        "customer_name": "Rite Aid Corporation",
+        "severity": "high",
+        "static": true,
+        "source_type": "customers",
+        "event_type": null,
+        "agent": null
+      },
+      {
+        "customer_name": "Cascade Industrial Systems",
+        "severity": "high",
+        "static": true,
+        "source_type": "customers",
+        "event_type": null,
+        "agent": null
+      },
+      {
+        "customer_name": "Brixton Fasteners Ltd",
+        "severity": "high",
+        "static": true,
+        "source_type": "customers",
+        "event_type": null,
+        "agent": null
+      }
     ],
-    confidence: "High",
-    confidence_reason: "Every specific claim in the answer—all seven HIGH-flag customers, their utilization percentages, balance amounts, credit scores, scenarios, and payment_health statuses—maps directly to rows in the customers table; utilization breaches and event dates are corroborated by the credit_events table; no relationship-status qualifiers mischaracterize any company.",
-    relatedQuestions: [
-      "For Rite Aid Corporation with 97% utilization and $487k balance, have we established a payment plan or do we need to consider reducing their credit limit immediately?",
-      "McDermott International Ltd shows the highest balance at $1.38M with 92% utilization - what is their current payment history and when is their next scheduled payment due?",
-      "Should we implement enhanced monitoring or require additional collateral/guarantees from these seven HIGH risk customers before they increase their balances further?",
-    ],
+    "confidence": "High",
+    "confidence_reason": "Every specific claim in the answer (all 19 company names, credit scores, scenarios, exposures, credit limits, utilization percentages, and aggregate figures) maps directly to rows in the CUSTOMERS TABLE and OFFICIAL HIGH-RISK CUSTOMER LIST. The data is internally consistent: combined credit limit $18.3M and combined exposure $16.233M match the official list totals; all individual scores, scenarios, and utilization rates are verified; and the two over-limit accounts (Cascade Industrial Systems at 196%, Brixton Fasteners Ltd at 147%) and three bankruptcy scenarios (Rite Aid, Proterra, Yellow) are all confirmed in the source data.",
+    "relatedQuestions": [
+      "Given Arconic's credit_score of 58 and $2.75M exposure, what specific collateral or payment term adjustments should we implement to mitigate the credit deterioration risk?",
+      "McDermott International has a critically low score of 28—should we consider reducing their credit limit or requiring a third-party guarantee before additional shipments?",
+      "With 19 customers at high-risk totaling $16.2M in exposure, do we have concentration limits being breached, and should we escalate any accounts for immediate collection review?"
+    ]
   },
   "Should I reduce Arconic's credit limit?": {
-    answer: "**Yes, consider reducing Arconic's credit limit.** \n\nArconic shows **multiple warning signs** (customers table):\n\n- **Credit utilization at 92%** ($2,750,000 of $3,000,000 limit) — flagged as HIGH_UTILIZATION (ar_aging_agent, 2026-08-03)\n- **Credit score 58/100 (BB- rating)** indicating elevated risk\n- **Payment health marked \"at_risk\"** \n- **Scenario: credit deterioration**\n- **Risk tags: HIGH_UTILIZATION, NEGATIVE_NEWS**\n\nA reduction would align utilization with healthier benchmarks and mitigate exposure given the deteriorating credit profile. Monitor payment patterns closely before implementing changes.",
-    sources: [
-      { customer_name: "Arconic Corporation", event_type: "UTILIZATION_THRESHOLD_BREACH", severity: "high", date: "2026-08-03", agent: "ar_aging_agent", static: true },
+    "answer": "Yes, **reducing Arconic's credit limit is prudent**. The company exhibits converging, high-severity risk signals:\n\n**Credit utilization:** 92%, with utilization flagged at 91.7%.\n\n**Payment deterioration:** Average days late rose from 20.3 to 40 days over the past 90 days (+19.7 day swing). Recent payments show worsening timeliness: 46 days late, 39 days late, 35 days late. On-time rate is only 12.5%.\n\n**Credit rating & news:** Credit score of 58/100 (BB-). News reports Arconic was placed on negative watch, citing weakening margins and elevated leverage.\n\n**Overdue AR:** $2,250,000 overdue across 3 invoices (oldest 75 days past due).\n\n**Multi-signal convergence:** Flagged by 3 agents (ar_aging, news_monitor, payment_behaviour). The account is marked at_risk with MULTI_SIGNAL_RISK flagging.\n\nConsider reducing the limit proportionally to recent drawdown patterns and implement enhanced monitoring.",
+    "sources": [
+      {
+        "customer_name": "Arconic Corporation",
+        "event_type": "UTILIZATION_THRESHOLD_BREACH",
+        "severity": "high",
+        "agent": "ar_aging_agent",
+        "static": true
+      },
+      {
+        "customer_name": "Arconic Corporation",
+        "event_type": "PAYMENT_DETERIORATION",
+        "severity": "high",
+        "agent": "payment_behaviour_agent",
+        "static": true
+      },
+      {
+        "customer_name": "Arconic Corporation",
+        "event_type": "OVERDUE_AR",
+        "severity": "high",
+        "agent": "ar_aging_agent",
+        "static": true
+      },
+      {
+        "customer_name": "Arconic Corporation",
+        "event_type": "NEWS_EVENT",
+        "severity": "high",
+        "agent": "news_monitor_agent",
+        "static": true
+      }
     ],
-    confidence: "Medium",
-    confidence_reason: "The answer correctly cites Arconic's utilization (92%), credit score (58/100, BB-), payment_health (at_risk), scenario (credit_deterioration), and risk_tags (HIGH_UTILIZATION, NEGATIVE_NEWS) from the customers table. However, the answer claims the HIGH_UTILIZATION flag was 'flagged as HIGH_UTILIZATION (ar_aging_agent, 2026-08-03)' — this date and agent appear in the credit_events table for Arconic's UTILIZATION_THRESHOLD_BREACH event, but HIGH_UTILIZATION is a risk_tag from the customers table, not a credit event type. The answer conflates the risk_tag with the credit event, creating a minor but specific misattribution of the source of that flag.",
-    relatedQuestions: [
-      "What is Arconic's current revenue trend, and has the NEGATIVE_NEWS tag been linked to a specific event like the recent bankruptcy filing or operational disruption?",
-      "Before reducing the credit limit, should we contact Arconic to understand if the 92% utilization is temporary due to a large order, and what timeline they project for bringing balances down?",
-      "If we reduce Arconic's limit from $3,000,000, what level would you recommend, and should we implement a stepped reduction or hold it at a lower threshold pending improvement in their BB- credit score?",
-    ],
+    "confidence": "High",
+    "confidence_reason": "Every claim maps to the demo data: 92% utilization ($2.75M of $3M), days late 20.3 → 40 with a 12.5% on-time rate, score 58/100 (BB-), $2,250,000 overdue across 3 invoices, and three agents flagging the account.",
+    "relatedQuestions": [
+      "What limit would bring Arconic's utilization back below 75%?",
+      "Which of Arconic's overdue invoices are the oldest?",
+      "Which other customers are flagged by three or more agents?"
+    ]
   },
   "What negative news have we seen recently?": {
-    answer: "## Recent Negative News (as of 2026-08-03)\n\n**Critical severity events:**\n- **Northgate Fabrication** faces insolvency risk after its largest customer terminated a multi-year contract, representing a substantial share of annual revenue (credit_events: NEWS_EVENT) (news_monitor_agent on 2026-08-03)\n- **Heliogen Inc** liquidity concerns mounting; cash runway may fall below three quarters absent new financing with no announced capital raise (credit_events: NEWS_EVENT)\n- **Arconic Corporation** placed on negative watch by Moody's citing weakening margins and elevated leverage; potential downgrade could trigger covenant pressure (negative_news_table, 2026-04-30; credit_events: NEWS_EVENT)\n\n**High severity:**\n- **Atlas Precision Manufacturing** cash flow under pressure from prolonged supply chain disruptions and inflated input costs; heavy revolving credit facility draws over past two quarters (credit_events: NEWS_EVENT)\n\n**Combined with overdue AR and credit utilization breaches** across multiple accounts (credit_events: OVERDUE_AR, UTILIZATION_THRESHOLD_BREACH).",
-    sources: [
-      { customer_name: "Arconic Corporation", event_type: "NEWS_EVENT", severity: "high", date: "2026-08-03", agent: "news_monitor_agent", static: true },
-      { customer_name: "Arconic Corporation", event_type: "NEGATIVE_NEWS", severity: "high", date: "2026-04-30", agent: "news_monitor_agent", static: true },
+    "answer": "## Recent negative news\n\nFive news items flag portfolio customers (news monitoring agent):\n\n**Critical**\n- **Northgate Fabrication**: insolvency risk after its largest customer ended a multi-year supply contract, a substantial share of annual revenue.\n- **Heliogen Inc**: liquidity concerns; its cash runway may fall below three quarters without new financing, and no capital raise has been announced.\n\n**High**\n- **Triumph Group Inc**: covenant waiver from lenders after breaching financial covenants, with continued margin pressure and elevated leverage.\n- **Arconic Corporation**: placed on negative watch, citing weakening margins and elevated leverage; a downgrade could trigger covenant pressure.\n- **Atlas Precision Manufacturing**: cash flow under pressure from supply chain disruption and higher input costs, after heavy revolving credit draws over the past two quarters.\n\nFour of the five are also flagged by other agents: Heliogen, Triumph Group, Arconic and Atlas Precision show overdue invoices, slower payments or a lower credit score as well. Northgate Fabrication is flagged by the news only.",
+    "sources": [
+      {
+        "customer_name": "Northgate Fabrication",
+        "event_type": "NEWS_EVENT",
+        "severity": "critical",
+        "agent": "news_monitor_agent",
+        "static": true
+      },
+      {
+        "customer_name": "Heliogen Inc",
+        "event_type": "NEWS_EVENT",
+        "severity": "critical",
+        "agent": "news_monitor_agent",
+        "static": true
+      },
+      {
+        "customer_name": "Triumph Group Inc",
+        "event_type": "NEWS_EVENT",
+        "severity": "high",
+        "agent": "news_monitor_agent",
+        "static": true
+      },
+      {
+        "customer_name": "Arconic Corporation",
+        "event_type": "NEWS_EVENT",
+        "severity": "high",
+        "agent": "news_monitor_agent",
+        "static": true
+      },
+      {
+        "customer_name": "Atlas Precision Manufacturing",
+        "event_type": "NEWS_EVENT",
+        "severity": "high",
+        "agent": "news_monitor_agent",
+        "static": true
+      }
     ],
-    confidence: "High",
-    confidence_reason: "Every specific claim in the answer maps directly to the provided credit_events table: Northgate Fabrication NEWS_EVENT (critical, 2026-08-03), Heliogen Inc NEWS_EVENT (critical, 2026-08-03), Arconic Corporation negative watch NEWS_EVENT (high, 2026-08-03) plus OVERDUE_AR and UTILIZATION_THRESHOLD_BREACH, and Atlas Precision Manufacturing NEWS_EVENT (high, 2026-08-03) plus UTILIZATION_THRESHOLD_BREACH and OVERDUE_AR all appear with matching dates, severities, and event types in the data.",
-    relatedQuestions: [
-      "What was the stated reason for Northgate Fabrication's largest customer terminating the contract, and do we have visibility into whether other major customers are at risk?",
-      "For Heliogen Inc, what is their current cash position in absolute terms, and have they engaged with any potential financing partners or investors?",
-      "Regarding Arconic Corporation, what specific event or development triggered the critical severity alert, and what is their current liquidity status?",
-    ],
-  },
+    "confidence": "High",
+    "confidence_reason": "The five items are the demo's news records, with their severities; the other-agent flags come from the same customers' events.",
+    "relatedQuestions": [
+      "Why is Triumph Group flagged across multiple agents?",
+      "How much do we have outstanding with Northgate Fabrication?",
+      "Should I reduce Arconic's credit limit?"
+    ]
+  }
 };

@@ -184,9 +184,11 @@ Deno.serve(async (req) => {
       console.log(`[news-monitor-agent]   ${articles.length} articles found`);
 
       for (const article of articles) {
-        const articleDate = article.published_date
-          ? article.published_date.slice(0, 10)
-          : new Date().toISOString().slice(0, 10);
+        const articleDate = DEMO_MODE
+          ? rollSeedNewsDate(article.published_date)
+          : article.published_date
+            ? article.published_date.slice(0, 10)
+            : new Date().toISOString().slice(0, 10);
 
         const fingerprint = generateFingerprint(customer.id, article.headline, articleDate);
 
@@ -462,4 +464,16 @@ async function legacyPath(
     JSON.stringify({ run_id, status: "completed", mode: "legacy" }),
     { headers: { ...headers, "Content-Type": "application/json" } }
   );
+}
+
+
+// Demo seed news is dated around SEED_NEWS_ANCHOR (2026-05-02, the newest seed article).
+// Each demo run keeps every article's age relative to that anchor but ends it today, so
+// "recent" news in the demo is recent (the daily refresh replays it).
+const SEED_NEWS_ANCHOR = Date.UTC(2026, 4, 2);
+function rollSeedNewsDate(published?: string): string {
+  const today = new Date();
+  if (!published) return today.toISOString().slice(0, 10);
+  const daysBefore = Math.max(0, Math.round((SEED_NEWS_ANCHOR - Date.parse(published.slice(0, 10))) / 86_400_000));
+  return new Date(today.getTime() - daysBefore * 86_400_000).toISOString().slice(0, 10);
 }
