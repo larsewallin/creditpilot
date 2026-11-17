@@ -15,9 +15,8 @@
  *
  * Response: { ok: true } | { error: string }
  *
- * Approve / reject need a signed-in admin or credit manager, in the demo too (demo
- * personas sign in with "Try it as"). Reset: demo only, 10 a day per address;
- * production answers 404.
+ * Production (DEMO_MODE not "true"): approve / reject need a signed-in admin or credit
+ * manager; reset answers 404.
  *
  * Tables written: pending_actions, customers, credit_actions, credit_events,
  *                 negative_news, agent_messages, invoices (via RPC)
@@ -53,8 +52,9 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 
-  // Approve / reject: a signed-in admin or credit manager (demo personas included), values
-  // from the stored proposal, recorded under their name in production. Reset: demo only.
+  // Demo: anyone may approve, reject or reset (shared demo data, values from the stored
+  // proposal). Production: approve / reject need a signed-in admin or credit manager,
+  // recorded under their name, and reset does not exist.
   const DEMO = Deno.env.get("DEMO_MODE") === "true";
 
   try {
@@ -62,23 +62,16 @@ Deno.serve(async (req) => {
     const action = body?.action;
     let reviewer = "demo_user";
     if (!DEMO && action === "reset") return json({ error: "Not found" }, 404);
-    if (action === "approve" || action === "reject") {
-      // A signed-in credit manager decides, in the demo too ("Try it as credit manager"):
-      // a signed-out visitor or a script cannot change the shared demo.
+    if (!DEMO && (action === "approve" || action === "reject")) {
+      // Production: a signed-in admin or credit manager, recorded under their name.
+      // Demo (by design, founder 2026-11-17): anyone may try approving or rejecting; the
+      // values always come from the stored proposal, and Reset Demo / the daily refresh
+      // put everything back.
       try {
         const u = await requireUser(req, ["admin", "credit_manager"]);
-        reviewer = DEMO ? "demo_user" : u.email;
+        reviewer = u.email;
       } catch (e) {
         return json({ error: e instanceof AuthError ? e.message : "Sign in required" }, e instanceof AuthError ? e.status : 401);
-      }
-    }
-    if (DEMO && action === "reset") {
-      // Reset only replays the demo story, but limit it per visitor (same budget as the
-      // briefing replay: 10 a day).
-      const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
-      const { data: n, error: rlErr } = await supabase.rpc("fn_increment_ip_reset_count", { p_ip_address: ip });
-      if (!rlErr && typeof n === "number" && n > 10) {
-        return json({ error: "The demo has been reset several times from your address today. It resets on its own every morning." }, 429);
       }
     }
 
