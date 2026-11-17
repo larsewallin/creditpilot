@@ -56,6 +56,7 @@ if [ "$MODE" = "demo" ]; then
   fi
   # Signed-out visitors may read the demo (supabase/migrations/20261117010000_lock_down_public_access.sql).
   psql "$DB_URL" -q -c "update public.instance_settings set public_demo = true, updated_at = now()"
+  psql "$DB_URL" -q -v ON_ERROR_STOP=1 -f scripts/demo-third-party-ratings.sql >/dev/null
 else
   say "3/5 Empty database: no sample data loaded."
   # Your own data: nothing is readable without signing in.

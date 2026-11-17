@@ -33,7 +33,7 @@ export const SectorEnum = z.enum([
 export type Sector = z.infer<typeof SectorEnum>;
 
 
-export const RatingAgencyEnum = z.enum(["sp", "moodys", "fitch"]);
+export const RatingAgencyEnum = z.enum(["sp", "moodys", "fitch", "third_party"]);
 
 export const SeverityScore = z.number().int().min(0).max(100);
 

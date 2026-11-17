@@ -158,7 +158,7 @@
       "expected": {
         "min_sources": 0,
         "must_mention": [
-          "S&P"
+          ["third-party", "third party", "S&P"]
         ],
         "must_not_say": [
           "I don't have",

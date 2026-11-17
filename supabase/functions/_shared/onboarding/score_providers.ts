@@ -76,7 +76,7 @@ export const SCORE_PROVIDERS: ScoreProvider[] = [
     normalize: (raw) => { const n = within(num(raw), 1, 10); return n === null ? null : clamp(((10 - n) / 9) * 100); },
   },
   {
-    id: "other", name: "Other provider", scale: "Already on 0–100, higher is safer",
+    id: "other", name: "Other third-party rating", scale: "Already on 0–100, higher is safer",
     normalize: (raw) => { const n = within(num(raw), 0, 100); return n === null ? null : clamp(n); },
   },
 ];

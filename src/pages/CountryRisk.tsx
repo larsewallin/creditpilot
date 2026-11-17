@@ -158,7 +158,7 @@ export default function CountryRisk() {
                 {m && (
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-4">
                     <Metric
-                      label={`Sovereign rating (${String(m.rating_agency).toUpperCase()})`}
+                      label={m.rating_agency === "third_party" ? "Sovereign rating (third-party)" : `Sovereign rating (${String(m.rating_agency).toUpperCase()})`}
                       sub={m.previous_rating !== m.current_rating ? `was ${m.previous_rating} · outlook ${m.rating_outlook}` : `outlook ${m.rating_outlook}`}
                     >
                       {m.current_rating}

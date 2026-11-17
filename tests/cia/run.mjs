@@ -63,9 +63,11 @@ export function evaluate(response, expected) {
   const confidence = response.confidence ?? "";
 
   if (expected.must_mention) {
+    // A term may be a list: any one of them is enough.
     for (const term of expected.must_mention) {
-      if (!answer.includes(term.toLowerCase())) {
-        failures.push(`must_mention: "${term}" not found in answer`);
+      const options = Array.isArray(term) ? term : [term];
+      if (!options.some((t) => answer.includes(t.toLowerCase()))) {
+        failures.push(`must_mention: "${options.join('" or "')}" not found in answer`);
       }
     }
   }

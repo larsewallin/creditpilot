@@ -13,7 +13,7 @@ import type { OnboardingSettings } from "../../onboarding/types.ts";
 export const SOURCE_LABEL: Record<string, string> = {
   keen: "Keen", sp: "S&P", sp_fitch: "S&P / Fitch", moodys: "Moody's", fitch: "Fitch", dnb: "Dun & Bradstreet",
   dnb_paydex: "D&B Paydex", creditsafe: "Creditsafe", coface: "Coface", allianz_trade: "Allianz Trade", experian: "Experian",
-  other: "Other provider", bureau_report: "Bureau report",
+  other: "Third-party rating", bureau_report: "Bureau report",
 };
 
 export interface SummaryCustomer {

@@ -516,7 +516,7 @@ const SOURCE_TILES: { key: string; name: string; note: string }[] = [
   { key: "uploaded_statements", name: "Statements entered", note: "From the customer's accounts" },
 ];
 const PROVIDER_NAME: Record<string, string> = {
-  dnb: "Dun & Bradstreet", creditsafe: "Creditsafe", coface: "Coface", allianz_trade: "Allianz Trade", experian: "Experian", other: "Other provider", bureau_report: "Uploaded bureau report",
+  dnb: "Dun & Bradstreet", creditsafe: "Creditsafe", coface: "Coface", allianz_trade: "Allianz Trade", experian: "Experian", other: "Third-party rating", bureau_report: "Uploaded bureau report",
 };
 
 function AnalysisView({ o, scores, memo, a }: { o: any; scores: any[]; memo?: any; a: any }) {

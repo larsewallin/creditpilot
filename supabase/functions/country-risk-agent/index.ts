@@ -243,7 +243,7 @@ Deno.serve(async (req) => {
         if (r.current_rating !== r.previous_rating) {
           const down = isDowngrade(r.previous_rating, r.current_rating);
           const sev = ratingSeverity(r.rating_outlook, down);
-          const summary = `${r.country_name}: sovereign rating ${r.previous_rating} → ${r.current_rating} (${r.rating_agency.toUpperCase()}, outlook ${r.rating_outlook}).${expText}`;
+          const summary = `${r.country_name}: sovereign rating ${r.previous_rating} → ${r.current_rating} (${r.rating_agency === "third_party" ? "third-party rating" : r.rating_agency.toUpperCase()}, outlook ${r.rating_outlook}).${expText}`;
           await emit(`${r.country_code}:COUNTRY_RATING_CHANGE`, "COUNTRY_RATING_CHANGE", sev,
             `${r.country_name}: sovereign rating ${down ? "downgraded" : "changed"} to ${r.current_rating}`, summary, {
               country_code: r.country_code, country_name: r.country_name, agency: r.rating_agency,
