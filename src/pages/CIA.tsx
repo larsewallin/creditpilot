@@ -18,7 +18,7 @@ export interface Source {
   customer_name: string;
   event_type: string | null;
   severity: "critical" | "high" | "medium" | "low" | "info" | null;
-  date: string;
+  date?: string;
   agent: string | null;
   static?: boolean;
 }
@@ -48,7 +48,8 @@ function agentLabel(agent: string | null | undefined) {
   return agent;
 }
 
-function formatDate(dateStr: string) {
+function formatDate(dateStr?: string) {
+  if (!dateStr) return "";
   try {
     return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
   } catch {
@@ -236,8 +237,10 @@ export default function CIA() {
                       <span className="text-xs text-muted-foreground shrink-0">{agentLabel(s.agent)}</span>
                       <span className="text-gray-300">·</span>
                       <span className="text-xs font-mono text-muted-foreground truncate">{(s.event_type ?? s.source_type ?? "Record").replace(/_/g, " ")}</span>
-                      <span className="text-gray-300 ml-auto">·</span>
-                      <span className="text-xs text-muted-foreground shrink-0">{formatDate(s.date)}</span>
+                      {s.date && <>
+                        <span className="text-gray-300 ml-auto">·</span>
+                        <span className="text-xs text-muted-foreground shrink-0">{formatDate(s.date)}</span>
+                      </>}
                     </div>
                   ) : (
                     <button
