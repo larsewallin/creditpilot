@@ -14,7 +14,14 @@ fail=0
 err() { echo "::error::$1"; fail=1; }
 
 OBJECTS="$(q "select c.relname from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind in ('r','p','v') order by 1")"
-count() { # <object> <bearer>  -> row count visible, or ERR
+AGGREGATES=" v_ar_aging_portfolio v_payment_behaviour_portfolio v_portfolio_overview "
+count() { # <object> <bearer>  -> row count visible, or ERR. A portfolio total over no
+          # visible rows is one row of zeros / nulls: counted as 0.
+  if [[ "$AGGREGATES" == *" $1 "* ]]; then
+    curl -s -m 20 "$API/rest/v1/$1?select=*" -H "apikey: $ANON" -H "Authorization: Bearer $2" \
+      | jq -r 'if type != "array" then "ERR" else ([.[] | to_entries[] | select((.value | type) == "number" and .value != 0)] | if length > 0 then "1" else "0" end) end'
+    return
+  fi
   curl -s -m 20 -o /dev/null -D - "$API/rest/v1/$1?select=*&limit=1" -H "apikey: $ANON" -H "Authorization: Bearer $2" -H 'Prefer: count=exact' \
     | tr -d '\r' | sed -n 's/^[Cc]ontent-[Rr]ange: .*\/\([0-9*]*\)$/\1/p' | sed 's/^\*$/0/;s/^$/ERR/'
 }
