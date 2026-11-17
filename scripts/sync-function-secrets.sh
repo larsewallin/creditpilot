@@ -11,7 +11,10 @@ set -euo pipefail
 # environment secrets.
 
 # KEEN_API_KEY / KEEN_API_URL are installed by scripts/connect-keen.sh (Connect Keen workflow), not here.
-NAMES=(COMPANY_LOOKUP_URL TCM_API_URL)
+# Data-source connectors (Settings › Connectors); each one only if set in GitHub.
+NAMES=(COMPANY_LOOKUP_URL TCM_API_URL
+  TAVILY_API_KEY FRED_API_KEY FMP_API_KEY COMPANIES_HOUSE_API_KEY HMRC_CLIENT_ID HMRC_CLIENT_SECRET
+  SENDGRID_API_KEY CREDIT_TEAM_EMAIL TEAMS_WEBHOOK_URL SLACK_WEBHOOK_URL ANTHROPIC_API_KEY)
 
 ENV="${1:-}"
 case "$ENV" in

@@ -1,7 +1,7 @@
 /**
  * settings — protected gateway for company policy settings.
  *
- *   GET  (any signed-in user)  -> { settings: effective, overrides, score_providers }
+ *   GET  (any signed-in user)  -> { settings: effective, overrides, score_providers, connectors (status from setting names only) }
  *   POST { key, value }        -> admin or credit_manager only; validates, saves, logs history
  *   POST { key, reset: true }  -> admin or credit_manager only; removes the override (back to defaults)
  *   Demo accounts (app_users.is_demo) get 403 on every POST: the demo's settings are shared.
@@ -13,6 +13,7 @@ import { AuthError, requireUser } from "../_shared/auth.ts";
 import { effectiveSettings, validateSetting } from "../_shared/onboarding/settings_validate.ts";
 import { PROVIDER_LIST } from "../_shared/onboarding/score_providers.ts";
 import { AGENTS } from "../_shared/scheduling/schedule.ts";
+import { CATEGORIES, connectorStatuses } from "../_shared/connectors.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -39,7 +40,12 @@ Deno.serve(async (req) => {
     if (req.method === "GET") {
       await requireUser(req);
       const overrides = await load();
+      const { data: lists } = await db.from("sanctions_list_status").select("*");
       return json({
+        // Names only: whether each data source's setting is present, never its value.
+        connectors: connectorStatuses((n) => !!Deno.env.get(n)),
+        connector_categories: CATEGORIES,
+        sanctions_lists: lists ?? [],
         settings: effectiveSettings(overrides), overrides, score_providers: PROVIDER_LIST,
         agents: AGENTS.map(({ key, label, stage }) => ({ key, label, stage })),
         demo: Deno.env.get("DEMO_MODE") === "true",
