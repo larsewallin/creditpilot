@@ -62,6 +62,14 @@ pubext="$(q "select string_agg(e.extname, ', ') from pg_extension e join pg_name
 # What signed-out demo visitors could read before the lock-down (hosted demo, 2026-11-17).
 DEMO_PUBLIC=" agent_messages agent_runs ar_aging_snapshots bankruptcy_details company credit_actions credit_events credit_metrics customer_identifiers customers fx_currency_status fx_rate_history growth_signals invoices negative_news payment_transactions pending_actions sec_filings sec_monitoring seed_country_risk seed_industry_econ_signals seed_industry_news v_ar_aging_current v_ar_aging_portfolio v_bankruptcy_claims v_customers_at_risk v_fx_exposure_by_invoice v_growth_opportunities v_overdue_invoices v_payment_behaviour v_payment_behaviour_current v_payment_behaviour_portfolio v_portfolio_overview "
 
+# A table created later starts closed (event trigger from 20261117040000).
+q "create table public.zz_security_probe (id int)" >/dev/null
+probe="$(q "select c.relrowsecurity and exists (select 1 from pg_policies p where p.tablename='zz_security_probe' and p.policyname='gate_anon')
+  and not has_table_privilege('anon','public.zz_security_probe','INSERT') from pg_class c join pg_namespace n on n.oid=c.relnamespace
+  where n.nspname='public' and c.relname='zz_security_probe'")"
+q "drop table public.zz_security_probe" >/dev/null
+[ "$probe" = t ] || err "a new table in public does not start closed (event trigger close_new_public_tables)"
+
 STRANGER="$(token_for stranger@example.com)"     # signed in, no app_users row
 MEMBER="$(token_for credit.manager@demo.example.com)"   # created by create-demo-users.mjs
 
