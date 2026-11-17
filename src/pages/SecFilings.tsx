@@ -1,3 +1,4 @@
+import { DEMO_MODE } from "@/lib/constants";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { SkeletonCard } from "@/components/SkeletonCard";
@@ -18,7 +19,7 @@ export default function SecFilings() {
       const { data } = await supabase
         .from("sec_monitoring")
         .select("*, customers!inner(company_name)")
-        .eq("is_demo", true)
+        .eq("is_demo", DEMO_MODE)
         .order("alert_triggered", { ascending: false });
       return data ?? [];
     },
@@ -31,7 +32,7 @@ export default function SecFilings() {
         .from("credit_events")
         .select("customer_id, event_type, description, severity")
         .eq("source_agent", "sec_monitor_agent")
-        .eq("is_demo", true);
+        .eq("is_demo", DEMO_MODE);
       return data ?? [];
     },
   });

@@ -9,18 +9,21 @@
  *
  * Request body: { action: "approve" | "reject" | "reset", ... }
  *
- *   approve: { action: "approve", pending_action_id, action_type, customer_id,
- *              proposed_value, current_value, agent_name, rationale, note }
+ *   approve: { action: "approve", pending_action_id, note }   (values read from the stored proposal)
  *   reject:  { action: "reject", pending_action_id, note }
  *   reset:   { action: "reset" }
  *
  * Response: { ok: true } | { error: string }
+ *
+ * Production (DEMO_MODE not "true"): approve / reject need a signed-in admin or credit
+ * manager; reset answers 404.
  *
  * Tables written: pending_actions, customers, credit_actions, credit_events,
  *                 negative_news, agent_messages, invoices (via RPC)
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.98.0";
+import { AuthError, requireUser } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -49,57 +52,72 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 
+  // Demo: anyone may approve, reject or reset (shared demo data, values from the stored
+  // proposal). Production: approve / reject need a signed-in admin or credit manager,
+  // recorded under their name, and reset does not exist.
+  const DEMO = Deno.env.get("DEMO_MODE") === "true";
+
   try {
     const body = await req.json();
     const action = body?.action;
+    let reviewer = "demo_user";
+    if (!DEMO) {
+      if (action === "reset") return json({ error: "Not found" }, 404);
+      try {
+        const u = await requireUser(req, ["admin", "credit_manager"]);
+        reviewer = u.email;
+      } catch (e) {
+        return json({ error: e instanceof AuthError ? e.message : "Sign in required" }, e instanceof AuthError ? e.status : 401);
+      }
+    }
 
     if (action === "approve") {
-      const {
-        pending_action_id,
-        action_type,
-        customer_id,
-        proposed_value,
-        current_value,
-        agent_name,
-        rationale,
-        note,
-      } = body;
+      const { pending_action_id, note } = body;
+      if (!pending_action_id) return json({ error: "Missing pending_action_id" }, 400);
 
-      if (!pending_action_id || !customer_id) {
-        return json({ error: "Missing pending_action_id or customer_id" }, 400);
-      }
-      if (await isNewCustomerProposal(supabase, pending_action_id)) {
+      // Every value comes from the stored proposal, never from the request: a visitor can
+      // approve what an agent proposed, not set any customer's limit to any number.
+      const { data: pa, error: e0 } = await supabase
+        .from("pending_actions")
+        .select("id, status, is_demo, action_type, customer_id, current_value, proposed_value, agent_name, rationale")
+        .eq("id", pending_action_id)
+        .maybeSingle();
+      if (e0) return json({ error: e0.message }, 500);
+      if (!pa || pa.is_demo !== DEMO) return json({ error: "Unknown action" }, 404);
+      if (pa.action_type === "NEW_CREDIT_LIMIT") {
         return json({ error: "New-customer limits are decided through onboarding (signed-in credit manager)" }, 400);
       }
+      if (pa.status !== "pending") return json({ error: `This action is already ${pa.status}` }, 409);
 
       const { error: e1 } = await supabase
         .from("pending_actions")
         .update({
           status: "approved",
-          reviewed_by: "demo_user",
+          reviewed_by: reviewer,
           reviewed_at: new Date().toISOString(),
           review_note: note || null,
         })
-        .eq("id", pending_action_id);
+        .eq("id", pending_action_id)
+        .eq("status", "pending");
       if (e1) return json({ error: e1.message }, 500);
 
-      if (action_type === "CREDIT_LIMIT_REDUCTION" && proposed_value != null) {
+      if (pa.action_type === "CREDIT_LIMIT_REDUCTION" && pa.proposed_value != null && pa.customer_id) {
         const { error: e2 } = await supabase
           .from("customers")
-          .update({ credit_limit: proposed_value })
-          .eq("id", customer_id);
+          .update({ credit_limit: pa.proposed_value })
+          .eq("id", pa.customer_id);
         if (e2) return json({ error: e2.message }, 500);
       }
 
       const { error: e3 } = await supabase.from("credit_actions").insert({
-        customer_id,
+        customer_id: pa.customer_id,
         action_date: new Date().toISOString().split("T")[0],
-        action_type,
-        description: `Approved. ${note ? note + ". " : ""}${rationale ?? ""}`,
-        agent_name,
-        old_limit: current_value,
-        new_limit: proposed_value,
-        performed_by: "demo_user",
+        action_type: pa.action_type,
+        description: `Approved. ${note ? note + ". " : ""}${pa.rationale ?? ""}`,
+        agent_name: pa.agent_name,
+        old_limit: pa.current_value,
+        new_limit: pa.proposed_value,
+        performed_by: reviewer,
       });
       if (e3) return json({ error: e3.message }, 500);
 
@@ -109,6 +127,8 @@ Deno.serve(async (req) => {
     if (action === "reject") {
       const { pending_action_id, note } = body;
       if (!pending_action_id) return json({ error: "Missing pending_action_id" }, 400);
+      const { data: own } = await supabase.from("pending_actions").select("is_demo").eq("id", pending_action_id).maybeSingle();
+      if (!own || own.is_demo !== DEMO) return json({ error: "Unknown action" }, 404);
       if (await isNewCustomerProposal(supabase, pending_action_id)) {
         return json({ error: "New-customer limits are decided through onboarding (signed-in credit manager)" }, 400);
       }
@@ -117,7 +137,7 @@ Deno.serve(async (req) => {
         .from("pending_actions")
         .update({
           status: "rejected",
-          reviewed_by: "demo_user",
+          reviewed_by: reviewer,
           reviewed_at: new Date().toISOString(),
           review_note: note || null,
         })
@@ -147,7 +167,20 @@ Deno.serve(async (req) => {
 
       await supabase.from("agent_messages").update({ status: "pending" }).eq("is_demo", true);
 
-      for (const { id, limit } of SEED_CREDIT_LIMITS) {
+      // Put back every limit a demo approval lowered: the limit before the first
+      // demo approval for that customer (credit_actions keeps it), then the seed list.
+      const restore = new Map<string, number>(SEED_CREDIT_LIMITS.map(({ id, limit }) => [id, limit]));
+      const { data: approvals } = await supabase
+        .from("credit_actions")
+        .select("customer_id, old_limit, created_at")
+        .eq("performed_by", "demo_user")
+        .eq("action_type", "CREDIT_LIMIT_REDUCTION")
+        .not("old_limit", "is", null)
+        .order("created_at", { ascending: true });
+      const firstOld = new Map<string, number>();
+      for (const a of approvals ?? []) if (a.customer_id && !firstOld.has(a.customer_id)) firstOld.set(a.customer_id, Number(a.old_limit));
+      for (const [id, limit] of firstOld) if (!restore.has(id)) restore.set(id, limit);
+      for (const [id, limit] of restore) {
         await supabase.from("customers").update({ credit_limit: limit }).eq("id", id);
       }
 

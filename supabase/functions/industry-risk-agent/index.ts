@@ -68,6 +68,7 @@ import {
 import { getIndicatorsForSector, normalizeChangePercent } from "../_shared/skills/analytical/sector-exposure-direction.ts";
 import { publishEvent } from "../_shared/publishEvent.ts";
 import { severityToScore } from "../_shared/event_schemas.ts";
+import { agentCallerProblem } from "../_shared/agent_gate.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -91,6 +92,8 @@ function disruptionSeverity(disruptionType: RawNewsSignal["disruption_type"]): "
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  const notAllowed = await agentCallerProblem(req);
+  if (notAllowed) return notAllowed;
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,

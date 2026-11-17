@@ -55,6 +55,7 @@ import { createOnboardingAction } from "../_shared/onboarding/decision.ts";
 import { summarizeScoreSources, scoreSourceBlocks, type ScoreSourceSummary } from "../_shared/skills/analytical/score-source-summary.ts";
 import { effectiveSettings } from "../_shared/onboarding/settings_validate.ts";
 import { AuthError, requireUser } from "../_shared/auth.ts";
+import { agentCallerProblem, sameSecret } from "../_shared/agent_gate.ts";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -986,6 +987,22 @@ serve(async (req: Request) => {
   }
 
   const { mode = "briefing", question, force_refresh = false, customer_id, skip_briefing = false } = body;
+
+  // Production (DEMO_MODE not "true"): questions need a signed-in CreditPilot user (the
+  // answers read the whole portfolio with the service role); a briefing run needs the
+  // scheduler or a signed-in admin / credit manager. The demo keeps its per-IP limit.
+  if (!DEMO_MODE) {
+    if (mode === "question" || mode === "suggestions") {
+      const testSecret = Deno.env.get("CIA_INTERNAL_TEST_SECRET") ?? "";
+      if (!sameSecret(req.headers.get("x-internal-test-secret") ?? "", testSecret)) {
+        try { await requireUser(req); }
+        catch (e) { return jsonRes({ error: e instanceof AuthError ? e.message : "Sign in required" }, e instanceof AuthError ? e.status : 401); }
+      }
+    } else if (mode !== "onboarding") {
+      const notAllowed = await agentCallerProblem(req);
+      if (notAllowed) return notAllowed;
+    }
+  }
 
   // ── ONBOARDING mode (New Customer Onboarding) ─────────────────────────────
   // Turns a finished onboarding proposal into a NEW_CREDIT_LIMIT pending action,

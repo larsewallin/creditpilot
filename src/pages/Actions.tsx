@@ -40,7 +40,7 @@ export default function Actions() {
         .from("pending_actions")
         .select("*, customers(company_name, credit_limit)")
         .eq("status", "pending")
-        .eq("is_demo", true)
+        .eq("is_demo", DEMO_MODE)
         .order("created_at", { ascending: false });
       return data ?? [];
     },
@@ -54,7 +54,7 @@ export default function Actions() {
       const { data } = await supabase
         .from("pending_actions")
         .select("*, customers(company_name)")
-        .eq("is_demo", true)
+        .eq("is_demo", DEMO_MODE)
         .in("status", ["approved", "rejected"])
         .order("reviewed_at", { ascending: false });
       return data ?? [];

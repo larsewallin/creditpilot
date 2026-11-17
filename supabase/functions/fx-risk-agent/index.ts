@@ -30,6 +30,7 @@ import {
   type RatePoint,
 } from "../_shared/skills/analytical/analyse-fx-exposure.ts";
 import { fetchLiveFxRates, fetchSeedFxRates, type FxSeries } from "../_shared/skills/integration/fetch-fx-rates.ts";
+import { agentCallerProblem } from "../_shared/agent_gate.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -46,6 +47,8 @@ function usd(n: number): string {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  const notAllowed = await agentCallerProblem(req);
+  if (notAllowed) return notAllowed;
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,

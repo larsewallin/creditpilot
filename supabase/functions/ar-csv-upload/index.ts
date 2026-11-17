@@ -10,7 +10,7 @@
  * Request body: multipart/form-data
  *   file              — CSV file (required)
  *   column_map        — JSON string: { standard_field: csv_header } (optional)
- *   is_demo           — "true" | "false" (optional, defaults to false)
+ *   (is_demo is no longer read: it follows DEMO_MODE; in the demo an upload is a preview only)
  *   as_of_date        — ISO date string for days_overdue calculation (optional, defaults to today)
  *   customer_currency — expected currency code e.g. "USD" (optional, triggers currency mismatch warnings)
  *
@@ -24,6 +24,7 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.98.0";
+import { AuthError, requireUser } from "../_shared/auth.ts";
 import { parseARCsv } from "../_shared/skills/analytical/parse-ar-csv.ts";
 
 const corsHeaders = {
@@ -40,6 +41,21 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
+  // Demo: anyone signed in may try an upload, but it is a preview only (nothing is
+  // written): the demo's invoices are shared by every visitor. Production: a signed-in
+  // admin, credit manager or credit analyst; the rows are production rows.
+  const DEMO = Deno.env.get("DEMO_MODE") === "true";
+  if (!DEMO) {
+    try {
+      await requireUser(req, ["admin", "credit_manager", "credit_analyst"]);
+    } catch (e) {
+      return new Response(
+        JSON.stringify({ error: e instanceof AuthError ? e.message : "Sign in required" }),
+        { status: e instanceof AuthError ? e.status : 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+  }
+
   try {
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
@@ -53,7 +69,7 @@ Deno.serve(async (req) => {
     const columnMapRaw = formData.get("column_map") as string | null;
     const columnMap = columnMapRaw ? JSON.parse(columnMapRaw) : undefined;
 
-    const isDemo = formData.get("is_demo") === "true";
+    const isDemo = DEMO; // never taken from the request
     const as_of_date = (formData.get("as_of_date") as string | null) ?? undefined;
     const customer_currency = (formData.get("customer_currency") as string | null) ?? undefined;
     const dateOrderRaw = formData.get("date_order") as string | null;
@@ -192,6 +208,24 @@ Deno.serve(async (req) => {
     // ── Replace open/overdue invoices per matched customer ─────────────────
 
     const matchedCustomerIds = [...new Set(toInsert.map((r) => r.customer_id as string))];
+
+    if (DEMO) {
+      return new Response(
+        JSON.stringify({
+          inserted: 0,
+          preview: true,
+          would_insert: toInsert.length,
+          matched_customers: matchedCustomerIds.length,
+          skipped_rows:         parseResult.errors.length,
+          errors:               parseResult.errors,
+          unmatched_customers:  unmatchedCustomers,
+          column_map:           parseResult.column_map,
+          validation_warnings:  parseResult.validation_warnings,
+          currency_warnings:    parseResult.currency_warnings,
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     if (matchedCustomerIds.length > 0) {
       const { error: deleteError } = await supabase

@@ -45,6 +45,7 @@ import { financialsAge } from "../_shared/onboarding/keen_statements.ts";
 import { effectiveSettings } from "../_shared/onboarding/settings_validate.ts";
 import { liveProviders } from "../_shared/onboarding/live_providers.ts";
 import type { CreditApplication, OnboardingSettings } from "../_shared/onboarding/types.ts";
+import { agentCallerProblem } from "../_shared/agent_gate.ts";
 
 const REFRESH_MAX = 40;        // Keen calls per run; daily runs cover a portfolio within the month
 const REFRESH_PARALLEL = 4;
@@ -172,6 +173,8 @@ async function staleFinancials(db: Db, financials: OnboardingSettings["financial
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  const notAllowed = await agentCallerProblem(req);
+  if (notAllowed) return notAllowed;
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
