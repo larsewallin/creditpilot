@@ -14,6 +14,7 @@ on:
       - supabase/config.toml
       - scripts/setup-local.sh
       - scripts/create-demo-users.mjs
+      - tests/security/**
       - .github/workflows/fresh-install.yml
   schedule:
     - cron: "17 6 * * 1"
@@ -47,6 +48,10 @@ jobs:
           [ "$(q "select count(*) from customers where id::text like 'c000000%'")" -ge 59 ] || { echo "::error::demo customers missing"; exit 1; }
           [ "$(q "select count(*) from cron.job where jobname = 'agent-scheduler'")" = 1 ] || { echo "::error::agent-scheduler job missing"; exit 1; }
           [ "$(q "select count(*) from information_schema.columns where table_name = 'customers' and column_name = 'financials_fye'")" = 1 ] || { echo "::error::schema incomplete"; exit 1; }
+      - name: Check who can read, write and execute what
+        run: |
+          eval "$(npx --yes supabase@3.1.0 status -o env | grep -E '^(API_URL|ANON_KEY|DB_URL|SERVICE_ROLE_KEY)=')"
+          tests/security/check-public-access.sh "$API_URL" "$ANON_KEY" "$DB_URL" "$SERVICE_ROLE_KEY"
       - name: Check the functions answer
         run: |
           npx --yes supabase@3.1.0 functions serve --env-file supabase/functions/.env.local > /tmp/functions.log 2>&1 &

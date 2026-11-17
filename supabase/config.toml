@@ -5,6 +5,10 @@ project_id = "yxqudytimmxufypothis"
 [db.seed]
 enabled = false
 
+# No self sign-up: every account is created by an admin (scripts/create-demo-users.mjs or the dashboard).
+[auth]
+enable_signup = false
+
 [functions.ar-aging-agent]
 verify_jwt = false
 
