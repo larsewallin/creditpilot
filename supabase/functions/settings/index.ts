@@ -41,7 +41,17 @@ Deno.serve(async (req) => {
       await requireUser(req);
       const overrides = await load();
       const { data: lists } = await db.from("sanctions_list_status").select("*");
+      const { data: inst } = await db.from("instance_settings").select("public_demo").maybeSingle();
+      const demoMode = Deno.env.get("DEMO_MODE") === "true";
+      const publicDemo = !!inst?.public_demo;
       return json({
+        // A production install (DEMO_MODE off) whose database still lets signed-out
+        // visitors read (public_demo on) exposes its data: Settings shows it in red.
+        instance_warning: !demoMode && publicDemo
+          ? "This database is marked as a public demo, so anyone can read it without signing in. Run in the SQL editor: update instance_settings set public_demo = false;"
+          : demoMode && !publicDemo
+            ? "DEMO_MODE is on but the database is private: signed-out demo visitors will see empty pages."
+            : null,
         // Names only: whether each data source's setting is present, never its value.
         connectors: connectorStatuses((n) => !!Deno.env.get(n)),
         connector_categories: CATEGORIES,

@@ -5,6 +5,9 @@
 //
 // Usage:
 //   SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... node scripts/create-demo-users.mjs
+//       the three shared demo personas (is_demo: they can look at Settings, not change them)
+//   SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... node scripts/create-demo-users.mjs --admin you@company.com "Your Name"
+//       your installation's first admin (a real account: can change Settings and add users)
 //
 // Prints each user's email and a newly generated password ONCE. Re-running
 // resets the passwords and keeps roles in sync. Run it for staging and prod
@@ -20,11 +23,18 @@ if (!URL || !KEY) {
 }
 
 // example.com is reserved for examples: these addresses can never belong to a real person.
-const DEMO_USERS = [
+const adminAt = process.argv.indexOf("--admin");
+const ADMIN = adminAt > 0 ? { email: process.argv[adminAt + 1], display_name: process.argv[adminAt + 2] || "Admin", role: "admin", is_demo: false } : null;
+if (adminAt > 0 && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(ADMIN.email ?? "")) {
+  console.error('Usage: ... --admin you@company.com "Your Name"');
+  process.exit(1);
+}
+
+const DEMO_USERS = ADMIN ? [ADMIN] : [
   { email: "credit.manager@demo.example.com", display_name: "Demo Credit Manager", role: "credit_manager" },
   { email: "credit.analyst@demo.example.com", display_name: "Demo Credit Analyst", role: "credit_analyst" },
   { email: "sales.rep@demo.example.com", display_name: "Demo Sales Rep", role: "sales" },
-];
+].map((u) => ({ ...u, is_demo: true }));
 
 const headers = { apikey: KEY, Authorization: `Bearer ${KEY}`, "Content-Type": "application/json" };
 
@@ -55,7 +65,7 @@ for (const u of DEMO_USERS) {
     const created = await call("POST", "/auth/v1/admin/users", { email: u.email, password, email_confirm: true });
     id = created.id;
   }
-  await call("POST", "/rest/v1/app_users?on_conflict=user_id", [{ user_id: id, email: u.email, display_name: u.display_name, role: u.role, is_demo: true, active: true }]);
+  await call("POST", "/rest/v1/app_users?on_conflict=user_id", [{ user_id: id, email: u.email, display_name: u.display_name, role: u.role, is_demo: u.is_demo, active: true }]);
   console.log(`${u.role.padEnd(15)} ${u.email}   password: ${password}`);
 }
 console.log("\nStore these passwords somewhere safe now; they are not shown again.");

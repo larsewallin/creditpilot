@@ -1,6 +1,7 @@
 import { DemoDataNotice } from "@/components/DemoDataNotice";
 import { useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
+import { useAuth } from "@/lib/auth";
 import { X } from "lucide-react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -36,6 +37,9 @@ export default function Actions() {
   const [resetting, setResetting] = useState(false);
   const [params, setParams] = useSearchParams();
   const filterCustomerId = params.get("customer_id");
+  const { appUser } = useAuth();
+  // Approving or rejecting needs a signed-in credit manager (in the demo: "Try it as credit manager").
+  const canDecide = !!appUser && ["admin", "credit_manager"].includes(appUser.role);
 
   // ── Pending Actions ─────────────────────────────────────────────────────────
   const { data: pendingActions, isLoading: pendingLoading, refetch: refetchPending } = useQuery({
@@ -311,6 +315,12 @@ export default function Actions() {
                         </Button>
                       </div>
                     </div>
+                  ) : !canDecide ? (
+                    <p className="text-xs text-muted-foreground">
+                      {appUser
+                        ? "Only a credit manager can approve or reject."
+                        : <>To approve or reject, <Link to="/login" className="text-primary hover:underline">sign in{DEMO_MODE ? " (try it as credit manager)" : ""}</Link>.</>}
+                    </p>
                   ) : (
                     <div className="flex gap-2">
                       <Button

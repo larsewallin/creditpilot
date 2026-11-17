@@ -89,7 +89,12 @@ echo "   .env.local (web app) and $FN_ENV (functions) written."
 [ -z "${ANTHROPIC_API_KEY:-}" ] && echo "   No ANTHROPIC_API_KEY: CIA's questions need one; everything else works."
 
 say "5/5 Creating sign-in accounts…"
-SUPABASE_URL="$API_URL" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_KEY" node scripts/create-demo-users.mjs || echo "   (accounts not created; run the line above again later)"
+if [ "$MODE" = "demo" ]; then
+  SUPABASE_URL="$API_URL" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_KEY" node scripts/create-demo-users.mjs || echo "   (accounts not created; run the line above again later)"
+else
+  # Your own data: one real admin account (ADMIN_EMAIL, default admin@example.com).
+  SUPABASE_URL="$API_URL" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_KEY" node scripts/create-demo-users.mjs --admin "${ADMIN_EMAIL:-admin@example.com}" "${ADMIN_NAME:-Admin}" || echo "   (admin not created; run the line above again later)"
+fi
 
 cat <<EOF
 

@@ -31,7 +31,7 @@ Optional keys, read from your shell when you run the setup script:
 
 Company Lookup and Trade Credit Monitor use their free hosted copies. Point `COMPANY_LOOKUP_URL` or `TCM_API_URL` at your own copies if you run them (both are MIT and run with `npm run dev`).
 
-`scripts/setup-local.sh --empty` sets up the same stack without the demo data. Stop everything with `npx supabase@3.1.0 stop`.
+`ADMIN_EMAIL=you@company.com scripts/setup-local.sh --empty` sets up the same stack without the demo data, with one admin account (its password is printed once) and nothing readable without signing in. Stop everything with `npx supabase@3.1.0 stop`.
 
 The same setup runs from scratch in CI on every change to the schema, the seed or the setup script (`.github/workflows/fresh-install.yml`), so it stays working.
 
@@ -60,8 +60,9 @@ The same setup runs from scratch in CI on every change to the schema, the seed o
    ```
 5. **Deploy the functions:** `npx supabase@3.1.0 functions deploy --project-ref <your-ref>`.
 6. **Deploy the web app** (Vercel or any static host) with `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` and `VITE_DEMO_MODE=false`.
-7. **Create the accounts:** `SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… node scripts/create-demo-users.mjs`, then change their addresses and roles in Supabase Auth, or create your own users there. There is no public sign-up.
-8. **Load your data:** customers through onboarding or the AR aging CSV upload (AR Aging page).
-9. **Choose when the agents run:** Settings › Agent schedules (defaults: news every 6 hours, SEC every 12, the rest daily, then the Risk agent and CIA's proposed actions). Settings › Credit score source puts Keen or your provider (D&B, Creditsafe, Coface, Allianz Trade, Experian…) first. "What would run now?" in Settings shows what the scheduler will start.
+7. **Create your first admin:** `SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… node scripts/create-demo-users.mjs --admin you@company.com "Your Name"` (prints a password once). Add the rest of the team the same way or in Supabase Auth plus a row in `app_users`. There is no public sign-up: in Authentication › Sign In / Providers keep **Allow new users to sign up** off. Do **not** run the script without `--admin` here: that creates the shared demo personas.
+8. **Check it is private:** Settings shows a red warning if this database is still marked as a public demo (`instance_settings.public_demo`) while `DEMO_MODE` is `false`. A fresh project starts private; nothing is readable without signing in.
+9. **Load your data:** customers through onboarding or the AR aging CSV upload (AR Aging page).
+10. **Choose when the agents run:** Settings › Agent schedules (defaults: news every 6 hours, SEC every 12, the rest daily, then the Risk agent and CIA's proposed actions). Settings › Credit score source puts Keen or your provider (D&B, Creditsafe, Coface, Allianz Trade, Experian…) first. "What would run now?" in Settings shows what the scheduler will start.
 
 What changes with `DEMO_MODE=false`: the agents read live sources instead of the seed tables, the scheduler starts them on your schedules, customers are re-scored from Keen (monthly or after a new 10-K) when Keen is your first score source, and nothing ever self-resets.

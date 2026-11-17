@@ -35,6 +35,14 @@ Deno.serve(async (req) => {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
+    // 30 demo sign-ins a day per address (pre-launch audit). Fails open on a counter error.
+    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+    const { data: n, error: rlErr } = await db.rpc("fn_increment_demo_signin_count", { p_ip_address: ip });
+    if (rlErr) console.error("[demo-signin] rate limit check failed:", rlErr.message);
+    else if (typeof n === "number" && n > 30) {
+      return json({ error: "Too many demo sign-ins from your address today. Try again tomorrow." }, 429);
+    }
+
     // generateLink creates the auth user if it does not exist yet; no email is sent.
     let link = await db.auth.admin.generateLink({ type: "magiclink", email: persona.email });
     if (link.error) {
