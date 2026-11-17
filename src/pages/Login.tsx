@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -49,7 +49,11 @@ export default function Login() {
     <div className="min-h-dvh flex items-center justify-center bg-background p-4">
       <div className="w-full max-w-sm space-y-6">
         <div className="space-y-1 text-center">
-          <h1 className="text-2xl font-semibold">CreditPilot</h1>
+          <h1 className="text-2xl font-semibold">
+            {DEMO_MODE
+              ? <Link to="/events" className="hover:underline underline-offset-4" title="Back to the app">CreditPilot</Link>
+              : "CreditPilot"}
+          </h1>
           <p className="text-sm text-muted-foreground">Sign in to your account</p>
         </div>
 
@@ -86,6 +90,11 @@ export default function Login() {
         <p className="text-center text-xs text-muted-foreground">
           Accounts are created by your administrator.
         </p>
+        {DEMO_MODE && (
+          <p className="text-center text-sm">
+            <Link to="/events" className="text-primary hover:underline underline-offset-4">← Back to the app</Link>
+          </p>
+        )}
       </div>
     </div>
   );
