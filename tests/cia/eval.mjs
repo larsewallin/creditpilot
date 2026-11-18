@@ -38,8 +38,8 @@ const truth = {
   biggest: one(`select company_name || '|' || current_exposure from customers where ${ACTIVE} order by current_exposure desc nulls last limit 1`),
   customerCount: Number(one(`select count(*) from customers where ${ACTIVE}`)),
   lowest3: col(`select company_name from customers where ${ACTIVE} and credit_rating_score is not null order by credit_rating_score asc, company_name limit 3`),
-  over60: col(`select distinct c.company_name from invoices i join customers c on c.id = i.customer_id where c.${ACTIVE} and i.outstanding_amount > 0 and i.days_overdue > 60 and i.status::text is distinct from 'pre_petition' order by 1`),
-  heliogenOverdue: Number(one(`select coalesce(sum(i.outstanding_amount),0) from invoices i join customers c on c.id = i.customer_id where c.company_name ilike 'Heliogen%' and i.days_overdue > 0 and i.status::text is distinct from 'pre_petition'`)),
+  over60: col(`select distinct c.company_name from invoices i join customers c on c.id = i.customer_id where c.${ACTIVE} and i.outstanding_amount > 0 and current_date - i.due_date > 60 and i.status::text is distinct from 'pre_petition' order by 1`),
+  heliogenOverdue: Number(one(`select coalesce(sum(i.outstanding_amount),0) from invoices i join customers c on c.id = i.customer_id where c.company_name ilike 'Heliogen%' and i.due_date < current_date and i.outstanding_amount > 0 and i.status::text is distinct from 'pre_petition'`)),
   arconic: sql(`select credit_limit, current_exposure from customers where company_name ilike 'Arconic%'`)[0]?.map(Number),
   pendingCount: Number(one("select count(*) from pending_actions where status = 'pending' and is_demo")),
   prePetition: col(`select distinct c.company_name from invoices i join customers c on c.id = i.customer_id where i.status = 'pre_petition' and i.outstanding_amount > 0 order by 1`),
@@ -51,8 +51,10 @@ const cust = (name) => sql(`select payment_terms_days, credit_rating_score, cred
 const pay = (name) => sql(`select current_avg_days_late, prior_avg_days_late, round(current_on_time_rate * 100, 1), round(all_time_on_time_rate * 100, 1) from v_payment_behaviour_current where company_name ilike '${name}%' limit 1`)[0]?.map(Number) ?? [];
 const aging = (name) => sql(`select bucket_1_30, bucket_31_60, bucket_61_90, bucket_over_90, current_amount, total_invoice_count from v_ar_aging_current where company_name ilike '${name}%' limit 1`)[0]?.map(Number) ?? [];
 const lastPay = (name) => sql(`select p.payment_date, p.days_early_late from payment_transactions p join customers c on c.id = p.customer_id where c.company_name ilike '${name}%' order by p.payment_date desc limit 1`)[0] ?? [];
-const overdueInvoices = (name) => col(`select i.invoice_number from invoices i join customers c on c.id = i.customer_id where c.company_name ilike '${name}%' and i.outstanding_amount > 0 and i.days_overdue > 0 and i.status::text is distinct from 'pre_petition' order by i.days_overdue desc limit 5`);
-const oldestOverdue = (name) => Number(one(`select coalesce(max(i.days_overdue),0) from invoices i join customers c on c.id = i.customer_id where c.company_name ilike '${name}%' and i.outstanding_amount > 0 and i.status::text is distinct from 'pre_petition'`));
+const overdueInvoices = (name) => col(`select i.invoice_number from invoices i join customers c on c.id = i.customer_id where c.company_name ilike '${name}%' and i.outstanding_amount > 0 and i.due_date < current_date and i.status::text is distinct from 'pre_petition' order by i.due_date limit 5`);
+// Days overdue from the due date, as the AR Aging page and the CIA count them (the stored
+// days_overdue column is not kept current).
+const oldestOverdue = (name) => Number(one(`select coalesce(max(greatest(current_date - i.due_date, 0)),0) from invoices i join customers c on c.id = i.customer_id where c.company_name ilike '${name}%' and i.outstanding_amount > 0 and i.status::text is distinct from 'pre_petition'`));
 const C = {
   arconic: cust("Arconic"), triumph: cust("Triumph"), lockheed: cust("Lockheed"), heliogen: cust("Heliogen"), kaman: cust("Kaman"), nordsee: cust("Nordsee"),
   triumphPay: pay("Triumph"), brixtonPay: pay("Brixton"), triumphAging: aging("Triumph"), arconicAging: aging("Arconic"),
