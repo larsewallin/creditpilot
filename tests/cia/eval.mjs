@@ -69,16 +69,19 @@ console.log("Customer-level truth:", JSON.stringify(C, null, 1), "\n");
 
 
 // ── asking ──────────────────────────────────────────────────────────────────────
-async function ask(question) {
+// The last reply in full (follow-up questions, confidence reason) for the checks below.
+let last = {};
+async function ask(question, previous) {
   const r = await fetch(`${SUPABASE_URL}/functions/v1/cia-agent`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
       ...(CIA_INTERNAL_TEST_SECRET ? { "x-internal-test-secret": CIA_INTERNAL_TEST_SECRET } : {}),
     },
-    body: JSON.stringify({ mode: "question", question }),
+    body: JSON.stringify({ mode: "question", question, ...(previous ? { previous_question: previous } : {}) }),
   });
   const d = await r.json().catch(() => ({}));
+  last = d;
   return String(d.answer ?? d.error ?? `HTTP ${r.status}`);
 }
 
@@ -99,6 +102,20 @@ function numbersIn(text) {
 const hasNumber = (text, want) => numbersIn(text).some((n) => Math.abs(n - want) <= Math.max(Math.abs(want) < 100 ? 0.6 : 1, Math.abs(want) * 0.005));
 const key = (name) => name.replace(/\b(Inc|Corp|Corporation|Ltd|LLC|Company|Group|Holding|Co)\b\.?/gi, "").split(/[\s(,-]+/).filter(Boolean)[0];
 const mentions = (text, name) => text.toLowerCase().includes(key(name).toLowerCase());
+
+// An advice answer: facts first, then next steps; nothing CreditPilot cannot act on unless asked;
+// follow-ups it can answer; a confidence reason without internal names.
+const TIER3 = /collateral|guarantee|letter of credit|credit insurance|bank (?:data|statements?)/i;
+function advice(a, { asksTier3 = false } = {}) {
+  const related = (last.relatedQuestions ?? []).join(" | ");
+  return [
+    !/^\W*I don't have/i.test(a) || "opens with what is missing",
+    /suggested next steps/i.test(a) || "no Suggested next steps",
+    asksTier3 || !TIER3.test(a) || "raises something CreditPilot does not track (not asked)",
+    !TIER3.test(related) || `follow-up it cannot answer: ${related}`,
+    !/OFFICIAL|TABLE\b|tier\b/.test(last.confidence_reason ?? "") || `internal names in the confidence reason: ${last.confidence_reason}`,
+  ];
+}
 
 const CASES = [
   { q: "What is our total overdue AR?", check: (a) => [hasNumber(a, truth.overdue) || `total overdue ${truth.overdue} not in answer`] },
@@ -149,7 +166,19 @@ const CASES = [
   { q: "Tell me about Acme Widgets Corp", check: (a) => [/don't have that information/i.test(a) || "should say it has no information"] },
   { q: "What is our FX exposure by currency?", check: (a) => [hasNumber(a, C.eur) || `EUR open receivables ${C.eur} (USD) missing`] },
   { q: "Which customers improved recently?", check: () => [] },
-  { q: "What should I do about Brixton Fasteners?", check: () => [] },
+  // ── Advice: answer first, then Suggested next steps CreditPilot can act on ──
+  { q: "What should I do about Brixton Fasteners?", check: (a) => advice(a) },
+  { q: "Should we extend Arconic's payment terms to 60 days? Do we need collateral?", check: (a) => [
+      ...advice(a, { asksTier3: true }),
+      /financial|accounts/i.test(a) || "should suggest asking for Arconic's latest accounts (none on file)"] },
+  { q: "Can we raise Lockheed Martin's credit limit?", check: (a) => advice(a) },
+  { q: "Is Triumph Group safe to extend more credit to?", check: (a) => advice(a) },
+  { q: "Should we approve the proposed actions for Heliogen?", check: (a) => advice(a) },
+  { q: "Do we have credit insurance on Kaman?", check: (a) => [
+      !/^\W*I don't have/i.test(a) || "opens with what is missing", /insurance/i.test(a) || "should say credit insurance is not tracked"] },
+  // A follow-up that names no company carries the earlier question's company over.
+  { q: "And how do they pay?", previous: "What is Arconic's credit limit and current balance?", check: (a) => [
+      /arconic/i.test(a) || "lost the company from the earlier question", /on.?time|late|days/i.test(a) || "no payment facts"] },
   { q: "Summarize the portfolio's credit risk in three sentences.", check: () => [] },
 ];
 
@@ -157,7 +186,7 @@ import { appendFileSync } from "node:fs";
 let failed = 0;
 const summary = [];
 for (const [i, c] of CASES.entries()) {
-  const answer = await ask(c.q);
+  const answer = await ask(c.q, c.previous);
   const problems = c.check(answer).filter((x) => x !== true);
   if (/\[(OFFICIAL|[CIPNFEUM]\d+)/.test(answer)) problems.push("internal tag shown in the answer");
   else if (/\[[^\]]+\](?!\()/.test(answer)) problems.push("bracketed text in the answer (looks like a citation label)");

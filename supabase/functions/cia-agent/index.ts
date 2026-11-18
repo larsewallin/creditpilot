@@ -56,6 +56,8 @@ import { summarizeScoreSources, scoreSourceBlocks, type ScoreSourceSummary } fro
 import { effectiveSettings } from "../_shared/onboarding/settings_validate.ts";
 import { AuthError, requireUser } from "../_shared/auth.ts";
 import { agentCallerProblem, sameSecret } from "../_shared/agent_gate.ts";
+import { financialsAge } from "../_shared/onboarding/keen_statements.ts";
+import { ANSWERABLE_TOPICS, capabilityStatus, isAdviceQuestion, playbookBlock } from "../_shared/cia_playbook.ts";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -504,6 +506,7 @@ interface RetrievedData {
   negative_news: any[];
   sec_filings: any[];
   score_sources: ScoreSourceSummary | null;
+  financials_settings: any;
   pending_actions: { company_name: string; action_type: string; current_value: number | null; proposed_value: number | null; severity: string | null }[] | null;
   bankruptcy: { company_name: string; pre_petition: number; invoices: number }[] | null;
   payment_trend: any[] | null;
@@ -573,6 +576,7 @@ async function fetchRelevantData(
     negative_news: [],
     sec_filings: [],
     score_sources: null,
+    financials_settings: null,
     pending_actions: null,
     bankruptcy: null,
     payment_trend: null,
@@ -584,13 +588,14 @@ async function fetchRelevantData(
   await Promise.allSettled([
 
     // Score sources and accounts age: counted here, handed to the model as facts.
-    (tables.has("customers") || /score|rating|provider|bureau|financial|statement|accounts|year.?end|fye|out.?of.?date|stale|keen|d&b|dun|coface|creditsafe|allianz|experian/i.test(question)) && (async () => {
+    (tables.has("customers") || companyMentions.length > 0 || /score|rating|provider|bureau|financial|statement|accounts|year.?end|fye|out.?of.?date|stale|keen|d&b|dun|coface|creditsafe|allianz|experian/i.test(question)) && (async () => {
       const [{ data: rows, error }, { data: settingRows }] = await Promise.all([
         supabase.from("customers").select("company_name, credit_rating_score, credit_rating_source, financials_fye").eq("lifecycle_status", "active").limit(5000),
         supabase.from("company_settings").select("key, value").eq("key", "onboarding.financials"),
       ]);
       if (error) { console.error("score sources error:", error.message); return; }
       const eff = effectiveSettings(Object.fromEntries((settingRows ?? []).map((r: any) => [r.key, r.value]))) as any;
+      results.financials_settings = eff.financials;
       results.score_sources = summarizeScoreSources(rows ?? [], eff.financials, new Date().toISOString().slice(0, 10));
     })(),
 
@@ -1093,6 +1098,9 @@ serve(async (req: Request) => {
   }
 
   const { mode = "briefing", question, force_refresh = false, customer_id, skip_briefing = false } = body;
+  // The question this one follows (a related-question click): a follow-up such as "and their
+  // payments?" names no company, so the earlier question's company and sector carry over.
+  const previousQuestion = typeof body.previous_question === "string" ? body.previous_question.slice(0, 500) : "";
 
   // Production (DEMO_MODE not "true"): questions need a signed-in CreditPilot user (the
   // answers read the whole portfolio with the service role); a briefing run needs the
@@ -1223,7 +1231,16 @@ serve(async (req: Request) => {
     // Extract table routing, company mentions, and sector via a dedicated LLM call
     // (falls back to the old regex logic on any failure) — replaces the regex-only
     // routeQuestion call as the primary path.
-    const { tables, company_mentions: companyMentions, sector } = await extractQuestionEntities(anthropic, question);
+    const entities = await extractQuestionEntities(anthropic, question);
+    let { tables, company_mentions: companyMentions, sector } = entities;
+    if (previousQuestion && companyMentions.length === 0 && !sector) {
+      const prev = await extractQuestionEntities(anthropic, previousQuestion);
+      if (prev.company_mentions.length || prev.sector) {
+        companyMentions = prev.company_mentions;
+        sector = prev.sector;
+        tables = new Set([...tables, ...prev.tables]);
+      }
+    }
 
     // Fetch data from all relevant tables in parallel
     const data = await fetchRelevantData(supabaseClient, question, tables, DEMO_MODE, companyMentions, sector);
@@ -1335,17 +1352,43 @@ serve(async (req: Request) => {
       }
 
       contextParts.push("## CUSTOMERS TABLE\n" + customerLines.map(({ line }) => line).join("\n"));
+
+      // Financial statements of the customer(s) the question names, computed here: the basis
+      // for "ask for the latest accounts" in the next steps (2026-11-18: Arconic, score 58,
+      // no accounts on file, got "I don't have that information" instead).
+      if (companyMentions.length && data.financials_settings) {
+        const asOf = new Date().toISOString().slice(0, 10);
+        const named = customerLines.filter(({ customer: c }) =>
+          companyMentions.some((m) => String(c.company_name ?? "").toLowerCase().includes(m.toLowerCase())));
+        if (named.length && named.length <= 10) {
+          contextParts.push(
+            "## FINANCIAL STATEMENTS — NAMED CUSTOMER(S) (computed in code from the year end on file and the accounts-age limits in Settings)\n" +
+            named.map(({ tag, customer: c }) => {
+              const age = financialsAge(c.financials_fye ? String(c.financials_fye) : undefined, asOf, c.credit_rating_score ?? undefined, data.financials_settings);
+              if (!age) return `- [${tag}] ${sanitize(c.company_name)}: no financial statements on file (no year end recorded) — suggest asking for the latest annual accounts`;
+              return `- [${tag}] ${sanitize(c.company_name)}: accounts for the year ended ${age.fye}, ${age.months} months old, limit ${age.max_months} months for this score — ${age.status === "stale" ? "OUT OF DATE, suggest asking for newer accounts" : age.status === "due_soon" ? "due soon, suggest asking for newer accounts" : "current"}`;
+            }).join("\n"));
+        }
+      }
     }
 
     if (data.score_sources) contextParts.push(...scoreSourceBlocks(data.score_sources));
     if (data.pending_actions) {
       const pa = data.pending_actions;
-      const reductions = pa.filter((a) => a.action_type === "CREDIT_LIMIT_REDUCTION" && a.current_value != null && a.proposed_value != null);
+      // A reduction lowers a limit; a "new limit" (no current value, or a higher one) is not one
+      // (2026-11-18: an overview said 20 reductions where 19 lowered a limit and 1 set a new one).
+      const reductions = pa.filter((a) => a.action_type === "CREDIT_LIMIT_REDUCTION" && a.current_value != null && a.proposed_value != null && Number(a.proposed_value) < Number(a.current_value));
+      const byType = new Map<string, number>();
+      for (const a of pa) {
+        const t = a.action_type === "CREDIT_LIMIT_REDUCTION" && !reductions.includes(a) ? "NEW_OR_HIGHER_CREDIT_LIMIT" : a.action_type;
+        byType.set(t, (byType.get(t) ?? 0) + 1);
+      }
       const cut = reductions.reduce((t, a) => t + (Number(a.current_value) - Number(a.proposed_value)), 0);
       contextParts.push(
         `## OFFICIAL PENDING ACTIONS (computed in code, the complete list of proposed actions waiting for approval on the Actions page; use the count and total here, never count or add yourself)\n` +
         `- Waiting for approval: ${pa.length}\n` +
         `- Of which credit limit reductions: ${reductions.length}, together lowering limits by $${cut.toLocaleString()}\n` +
+        `- By type: ${[...byType.entries()].map(([t, n]) => `${t} ${n}`).join(", ")}\n` +
         pa.map((a) => `- ${sanitize(a.company_name)}: ${a.action_type}${a.current_value != null ? `, from $${Number(a.current_value).toLocaleString()}` : ""}${a.proposed_value != null ? ` to $${Number(a.proposed_value).toLocaleString()}` : ""}${a.severity ? `, ${a.severity}` : ""}`).join("\n")
       );
     }
@@ -1589,6 +1632,10 @@ serve(async (req: Request) => {
       }).join("\n"));
     }
 
+    // What CIA may suggest, and the data CreditPilot does not track yet (cia_playbook.ts).
+    const advice = isAdviceQuestion(question);
+    if (advice) contextParts.push(playbookBlock(capabilityStatus()));
+
     const context = contextParts.join("\n\n");
 
     const model = DEMO_MODE ? "claude-haiku-4-5" : "claude-sonnet-5";
@@ -1601,10 +1648,10 @@ serve(async (req: Request) => {
       const answerMessage = await anthropic.messages.create({
         model,
         max_tokens: maxTokens,
-        system: `You are the Credit Intelligence Agent (CIA) for CreditPilot — a credit analyst answering questions about a B2B trade credit portfolio. Answer ONLY from the data provided. Every record in the data below has a bracketed reference tag (e.g. [E3], [C7], [N1]). After each specific factual claim, cite the exact tag(s) supporting it in brackets immediately after the claim, e.g. "utilization is 91.7% [E3]" or "flagged by two agents [E3, N1]". Cite every tag that supports each claim, using multiple tags when multiple records support one claim. Always cite tags individually, comma-separated — never use a dash or range between two tags (e.g. write [P1, P2, P3], never [P1–P3]). Only ever cite tags that actually appear in the data provided — never invent a tag. These tags are for internal verification and will be removed before the user sees your answer, so cite generously and precisely without worrying about how it reads. Be specific with exact amounts, dates, and percentages. When asked broadly which customers are highest-risk or most at-risk across the whole portfolio (not about one named customer), do not name individual customers, a count, or combined totals yourself from the OFFICIAL HIGH-RISK CUSTOMER LIST section — reproducing that list from memory is unreliable once it has more than a few entries. Instead, write one brief intro sentence acknowledging the question, then insert the exact literal text {{HIGH_RISK_LIST}} alone, on its own line — the real list, with combined exposure and credit limit, will be inserted automatically afterward. You may add supporting detail from credit_events after the marker, but never substitute a different framing (e.g. ranking by most recent event, or by utilization percentage alone) for the complete high-risk list. If the question does not call for the complete list (e.g. it's about one named customer, or unrelated to portfolio-wide risk ranking), do not include the placeholder at all. When asked broadly whether any customers are approaching or over their credit limit (not about one named customer), do not name individual customers, percentages, or a count yourself from the OFFICIAL HIGH-UTILIZATION CUSTOMER LIST section — reproducing that list from memory is unreliable. Instead, write one brief intro sentence acknowledging the question, then insert the exact literal text {{HIGH_UTILIZATION_LIST}} alone, on its own line — the real list will be inserted automatically afterward. If the question does not call for the complete list (e.g. it's about one named customer, or unrelated to utilization or credit-limit proximity), do not include the placeholder at all. For portfolio-wide AR aging or total-exposure questions (not about one named customer), use the pre-computed totals in the OFFICIAL AR AGING PORTFOLIO TOTALS section directly (for "total overdue", its TOTAL OVERDUE line; never add the buckets yourself) — never re-derive these totals by summing individual invoice line items yourself, since manual summation across many records is unreliable. For a "biggest", "largest", or "highest" exposure question (singular framing implying one customer, e.g. "what's my biggest portfolio exposure" or "which customer has the largest exposure") — as distinct from a "total exposure" or "total outstanding" question (aggregate framing, not about one customer) — lead the answer with the single customer carrying the largest individual exposure, scanning the CUSTOMERS TABLE's current_exposure figures to identify it; use the OFFICIAL AR AGING PORTFOLIO TOTALS figure only as supporting context afterward, never as the headline figure. For a named customer's AR aging totals, use the OFFICIAL AR AGING TOTALS — NAMED CUSTOMER(S) section the same way. For a sector-wide AR aging or total-overdue question (e.g. "total overdue for the aerospace sector"), use the OFFICIAL AR AGING SECTOR TOTAL section directly — never sum the per-customer rows above it or the raw INVOICES TABLE yourself. Use the raw INVOICES TABLE only to name or describe specific individual invoices when asked, not to recompute aggregate totals. When a question names two or more specific companies and asks for a combined or total figure across them, use the OFFICIAL COMBINED TOTAL — NAMED CUSTOMERS section directly, never sum the CUSTOMERS TABLE rows yourself. For a sector-wide total exposure or credit limit question (e.g. "total exposure to the aerospace sector"), use the OFFICIAL SECTOR EXPOSURE TOTAL section directly, never sum the CUSTOMERS TABLE rows yourself. For a named customer's payment history (average days to pay, on-time rate, total paid), use the pre-computed figures in the OFFICIAL PAYMENT BEHAVIOR TOTALS section directly — never re-derive them by averaging or summing the raw PAYMENT TRANSACTIONS TABLE yourself; use that raw table only to list or describe specific individual transactions when asked. For a sector-wide payment behavior question (e.g. "average days to pay for the aerospace sector"), use the OFFICIAL PAYMENT BEHAVIOR SECTOR TOTAL section directly, never average or sum the per-customer rows above it yourself. For a portfolio-wide payment behavior question (e.g. "average days to pay across the whole portfolio", not about one named customer or sector), use the OFFICIAL PAYMENT BEHAVIOR PORTFOLIO TOTALS section directly, never average or sum the raw PAYMENT TRANSACTIONS TABLE or per-customer rows yourself. For questions asking which customers are flagged by multiple agents, or about multi-signal convergence, use the OFFICIAL MULTI-SIGNAL CONVERGENCE LIST section directly — it's the complete, authoritative answer computed over the full 90-day window; never infer convergence by counting agents per customer from the raw CREDIT EVENTS TABLE yourself, since that table is not guaranteed to include every qualifying event. For questions about where customers' credit scores come from (which provider or source), use the OFFICIAL SCORE SOURCE SUMMARY section directly; for questions about how old customers' financial statements are or whose are out of date, use the OFFICIAL ACCOUNTS AGE LIST section directly — never count customers or compute ages yourself. For questions about proposed actions or what is waiting for approval, use the OFFICIAL PENDING ACTIONS section. For how late a named customer pays now versus before, or its on-time rate, use the OFFICIAL PAYMENT TREND section. When asked broadly which customers' payments are getting worse (paying later), write one brief intro sentence, then the exact literal text {{PAYMENT_WORSE_LIST}} alone on its own line; for which are improving (paying earlier), {{PAYMENT_BETTER_LIST}}; the complete list is inserted automatically, so do not name those customers yourself. For exposure by country, use the OFFICIAL EXPOSURE BY COUNTRY section. For FX exposure by currency, use the OFFICIAL OPEN RECEIVABLES BY CURRENCY section. For questions about which customers are in bankruptcy, use the OFFICIAL BANKRUPTCY LIST section (not the scenario field). For a summary or overview of the portfolio, do not insert {{HIGH_RISK_LIST}} or {{HIGH_UTILIZATION_LIST}}: give counts and totals from the OFFICIAL sections in the length asked for. A customer's credit score comes from Keen or a third-party rating the company chose; never call a score change a rating agency action. Never write the name of a data section (anything starting with OFFICIAL, or words like [pending actions]) in the answer; the only brackets you write are record tags such as [E3]. If data does not contain the answer say exactly: I don't have that information in the current data. Do NOT characterize a customer's relationship status (active, inactive, outside the portfolio, former, prospect, etc.) unless the data explicitly states it. Every company in the customers table is a current customer. If you don't know a customer's relationship status, don't mention it — just present the facts. Never use the words 'supplier', 'suppliers', 'vendor', 'vendors', or any 'tier-N' phrasing (tier-1, tier-2, etc.) anywhere in your response. This applies to ALL uses — including generic plurals like 'multiple suppliers' or 'aerospace suppliers', industry-structure descriptions like 'Tier-1 supplier', and any other context. Refer to companies in the customers table only as 'customers', 'companies', or 'accounts'. The word 'supplier' must never appear in your output. Keep response under 120 words. Exception: if the question asks to list, enumerate, or itemize individual records (e.g. every invoice, every transaction) rather than a summary, pull from the specific raw data table (not aggregate event summaries) and list up to 15 individual items with their specific values — this may exceed 120 words. If more than 15 matching records exist, list the first 15 and state the total count. This exception also applies to questions asking which customers or companies meet a broad criterion across the whole portfolio (e.g. "highest risk", "over their credit limit", "in the aerospace sector") — name every matching customer completely, even if that exceeds 120 words; do not truncate or cap this type of complete-set answer. Use markdown with **bold key terms**. Plain text output only — no JSON.`,
+        system: `You are the Credit Intelligence Agent (CIA) for CreditPilot — a credit analyst answering questions about a B2B trade credit portfolio. Answer ONLY from the data provided. Every record in the data below has a bracketed reference tag (e.g. [E3], [C7], [N1]). After each specific factual claim, cite the exact tag(s) supporting it in brackets immediately after the claim, e.g. "utilization is 91.7% [E3]" or "flagged by two agents [E3, N1]". Cite every tag that supports each claim, using multiple tags when multiple records support one claim. Always cite tags individually, comma-separated — never use a dash or range between two tags (e.g. write [P1, P2, P3], never [P1–P3]). Only ever cite tags that actually appear in the data provided — never invent a tag. These tags are for internal verification and will be removed before the user sees your answer, so cite generously and precisely without worrying about how it reads. Be specific with exact amounts, dates, and percentages. When asked broadly which customers are highest-risk or most at-risk across the whole portfolio (not about one named customer), do not name individual customers, a count, or combined totals yourself from the OFFICIAL HIGH-RISK CUSTOMER LIST section — reproducing that list from memory is unreliable once it has more than a few entries. Instead, write one brief intro sentence acknowledging the question, then insert the exact literal text {{HIGH_RISK_LIST}} alone, on its own line — the real list, with combined exposure and credit limit, will be inserted automatically afterward. You may add supporting detail from credit_events after the marker, but never substitute a different framing (e.g. ranking by most recent event, or by utilization percentage alone) for the complete high-risk list. If the question does not call for the complete list (e.g. it's about one named customer, or unrelated to portfolio-wide risk ranking), do not include the placeholder at all. When asked broadly whether any customers are approaching or over their credit limit (not about one named customer), do not name individual customers, percentages, or a count yourself from the OFFICIAL HIGH-UTILIZATION CUSTOMER LIST section — reproducing that list from memory is unreliable. Instead, write one brief intro sentence acknowledging the question, then insert the exact literal text {{HIGH_UTILIZATION_LIST}} alone, on its own line — the real list will be inserted automatically afterward. If the question does not call for the complete list (e.g. it's about one named customer, or unrelated to utilization or credit-limit proximity), do not include the placeholder at all. For portfolio-wide AR aging or total-exposure questions (not about one named customer), use the pre-computed totals in the OFFICIAL AR AGING PORTFOLIO TOTALS section directly (for "total overdue", its TOTAL OVERDUE line; never add the buckets yourself) — never re-derive these totals by summing individual invoice line items yourself, since manual summation across many records is unreliable. For a "biggest", "largest", or "highest" exposure question (singular framing implying one customer, e.g. "what's my biggest portfolio exposure" or "which customer has the largest exposure") — as distinct from a "total exposure" or "total outstanding" question (aggregate framing, not about one customer) — lead the answer with the single customer carrying the largest individual exposure, scanning the CUSTOMERS TABLE's current_exposure figures to identify it; use the OFFICIAL AR AGING PORTFOLIO TOTALS figure only as supporting context afterward, never as the headline figure. For a named customer's AR aging totals, use the OFFICIAL AR AGING TOTALS — NAMED CUSTOMER(S) section the same way. For a sector-wide AR aging or total-overdue question (e.g. "total overdue for the aerospace sector"), use the OFFICIAL AR AGING SECTOR TOTAL section directly — never sum the per-customer rows above it or the raw INVOICES TABLE yourself. Use the raw INVOICES TABLE only to name or describe specific individual invoices when asked, not to recompute aggregate totals. When a question names two or more specific companies and asks for a combined or total figure across them, use the OFFICIAL COMBINED TOTAL — NAMED CUSTOMERS section directly, never sum the CUSTOMERS TABLE rows yourself. For a sector-wide total exposure or credit limit question (e.g. "total exposure to the aerospace sector"), use the OFFICIAL SECTOR EXPOSURE TOTAL section directly, never sum the CUSTOMERS TABLE rows yourself. For a named customer's payment history (average days to pay, on-time rate, total paid), use the pre-computed figures in the OFFICIAL PAYMENT BEHAVIOR TOTALS section directly — never re-derive them by averaging or summing the raw PAYMENT TRANSACTIONS TABLE yourself; use that raw table only to list or describe specific individual transactions when asked. For a sector-wide payment behavior question (e.g. "average days to pay for the aerospace sector"), use the OFFICIAL PAYMENT BEHAVIOR SECTOR TOTAL section directly, never average or sum the per-customer rows above it yourself. For a portfolio-wide payment behavior question (e.g. "average days to pay across the whole portfolio", not about one named customer or sector), use the OFFICIAL PAYMENT BEHAVIOR PORTFOLIO TOTALS section directly, never average or sum the raw PAYMENT TRANSACTIONS TABLE or per-customer rows yourself. For questions asking which customers are flagged by multiple agents, or about multi-signal convergence, use the OFFICIAL MULTI-SIGNAL CONVERGENCE LIST section directly — it's the complete, authoritative answer computed over the full 90-day window; never infer convergence by counting agents per customer from the raw CREDIT EVENTS TABLE yourself, since that table is not guaranteed to include every qualifying event. For questions about where customers' credit scores come from (which provider or source), use the OFFICIAL SCORE SOURCE SUMMARY section directly; for questions about how old customers' financial statements are or whose are out of date, use the OFFICIAL ACCOUNTS AGE LIST section directly — never count customers or compute ages yourself. For questions about proposed actions or what is waiting for approval, use the OFFICIAL PENDING ACTIONS section. For how late a named customer pays now versus before, or its on-time rate, use the OFFICIAL PAYMENT TREND section. When asked broadly which customers' payments are getting worse (paying later), write one brief intro sentence, then the exact literal text {{PAYMENT_WORSE_LIST}} alone on its own line; for which are improving (paying earlier), {{PAYMENT_BETTER_LIST}}; the complete list is inserted automatically, so do not name those customers yourself. For exposure by country, use the OFFICIAL EXPOSURE BY COUNTRY section. For FX exposure by currency, use the OFFICIAL OPEN RECEIVABLES BY CURRENCY section. For questions about which customers are in bankruptcy, use the OFFICIAL BANKRUPTCY LIST section (not the scenario field). For a summary or overview of the portfolio, do not insert {{HIGH_RISK_LIST}} or {{HIGH_UTILIZATION_LIST}}: give counts and totals from the OFFICIAL sections in the length asked for. A customer's credit score comes from Keen or a third-party rating the company chose; never call a score change a rating agency action. Never write the name of a data section (anything starting with OFFICIAL, or words like [pending actions]) in the answer; the only brackets you write are record tags such as [E3]. Lead with the direct answer from the data. When the question asks for a decision or advice (should we, can we, extend terms, raise a limit, collateral, what to do), give the facts that bear on it (score and what it means, utilization, overdue invoices, payment trend, recent events, how old the financial statements are), then end with a section headed **Suggested next steps** with 2–3 short bullets taken from the NEXT STEPS PLAYBOOK section, in CreditPilot first; if the FINANCIAL STATEMENTS section says the customer's accounts are missing, out of date or due soon, one step is to ask for the latest annual accounts. If part of the question is about something the data does not have (e.g. collateral), say so in one short plain clause ("CreditPilot doesn't track collateral yet") and answer the rest; never open the answer with what is missing, never ask the user for information, and never raise things CreditPilot does not track when the user did not ask about them. Only if the data has nothing at all on the question, say exactly: I don't have that information in the current data. Do NOT characterize a customer's relationship status (active, inactive, outside the portfolio, former, prospect, etc.) unless the data explicitly states it. Every company in the customers table is a current customer. If you don't know a customer's relationship status, don't mention it — just present the facts. Never use the words 'supplier', 'suppliers', 'vendor', 'vendors', or any 'tier-N' phrasing (tier-1, tier-2, etc.) anywhere in your response. This applies to ALL uses — including generic plurals like 'multiple suppliers' or 'aerospace suppliers', industry-structure descriptions like 'Tier-1 supplier', and any other context. Refer to companies in the customers table only as 'customers', 'companies', or 'accounts'. The word 'supplier' must never appear in your output. Keep response under 120 words (an advice answer with its Suggested next steps: under 170). Exception: if the question asks to list, enumerate, or itemize individual records (e.g. every invoice, every transaction) rather than a summary, pull from the specific raw data table (not aggregate event summaries) and list up to 15 individual items with their specific values — this may exceed 120 words. If more than 15 matching records exist, list the first 15 and state the total count. This exception also applies to questions asking which customers or companies meet a broad criterion across the whole portfolio (e.g. "highest risk", "over their credit limit", "in the aerospace sector") — name every matching customer completely, even if that exceeds 120 words; do not truncate or cap this type of complete-set answer. Use markdown with **bold key terms**. Plain text output only — no JSON.`,
         messages: [{
           role: "user",
-          content: `Question: ${question}\n\nData:\n${context || "No relevant data found."}`,
+          content: `${previousQuestion ? `Earlier question in this conversation: ${previousQuestion}\n` : ""}Question: ${question}\n\nData:\n${context || "No relevant data found."}`,
         }],
       });
       let rawAnswerText = extractText(answerMessage)
@@ -1707,7 +1754,7 @@ RELATIONSHIP-QUALIFIER CHECK: If the answer characterizes a customer's relations
 
 Do not penalize for: using multiple tables, citing credit_events when available, mentioning companies that have ratings but no credit_events, or any form of cross-table synthesis. These are all good behaviors.
 
-Schema: {"confidence":"High|Medium|Low","confidence_reason":"one sentence stating which rubric tier applies and why"}`,
+Schema: {"confidence":"High|Medium|Low","confidence_reason":"one plain sentence for a credit manager saying why, e.g. 'Every figure comes from the customer records and invoices.' Never name data sections, tables, tags or rubric tiers."}`,
           messages: [{
             role: "user",
             content: `Based on this answer and data, provide confidence and sources.\n\nAnswer: ${cleanAnswerText}\n\nData:\n${context}`,
@@ -1726,16 +1773,40 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one sentence statin
         console.error("[cia-agent] meta JSON parse failed, using defaults. Raw output:", metaMessage ? extractText(metaMessage)?.slice(0, 500) : "(no response)", "Error:", (err as Error).message);
       }
 
+      // The reason is shown to the user: internal section and table names out (2026-11-18).
+      meta.confidence_reason = String(meta.confidence_reason ?? "")
+        .replace(/\b(?:the )?\*{0,2}OFFICIAL [A-Z0-9 &()—–\-]+?(?:\s+section)?\*{0,2}(?=[\s,.;:)]|$)/g, "the computed totals")
+        .replace(/\b(?:the )?CUSTOMERS TABLE\b/gi, "the customer records")
+        .replace(/\b(?:the )?CREDIT EVENTS TABLE\b/gi, "the credit events")
+        .replace(/\b(?:the )?INVOICES TABLE\b/gi, "the invoices")
+        .replace(/\b(?:the )?PAYMENT TRANSACTIONS TABLE\b/gi, "the payment history")
+        .replace(/\b(?:the )?([A-Z][A-Z ]{3,}) TABLE\b/g, (_m, t: string) => `the ${t.toLowerCase()} records`)
+        .replace(/\[[A-Z]\d+(?:,\s*[A-Z]\d+)*\]/g, "")
+        .replace(/\b(?:High|Medium|Low) tier(?: applies)?[:,]?\s*/gi, "")
+        .replace(/\s{2,}/g, " ").trim()
+        .replace(/^./, (c) => c.toUpperCase());
+
+      // What was read, in plain words (shown under the answer, like an answer engine's steps).
+      const searched = [
+        data.customers?.length ? `${data.customers.length} customer record${data.customers.length === 1 ? "" : "s"}` : null,
+        data.invoices?.length ? `${data.invoices.length} invoice${data.invoices.length === 1 ? "" : "s"}` : null,
+        data.payment_transactions?.length ? `${data.payment_transactions.length} payment${data.payment_transactions.length === 1 ? "" : "s"}` : null,
+        data.credit_events?.length ? `${data.credit_events.length} credit event${data.credit_events.length === 1 ? "" : "s"}` : null,
+        data.negative_news?.length ? `${data.negative_news.length} news stor${data.negative_news.length === 1 ? "y" : "ies"}` : null,
+        data.sec_filings?.length ? `${data.sec_filings.length} SEC filing${data.sec_filings.length === 1 ? "" : "s"}` : null,
+        data.pending_actions?.length ? `${data.pending_actions.length} proposed action${data.pending_actions.length === 1 ? "" : "s"}` : null,
+      ].filter(Boolean) as string[];
+
       // ── Call 3: related questions ────────────────────────────────────────────
       let relatedQuestions = DEMO_SUGGESTIONS.slice(0, 3); // fallback
       try {
         const followUpMessage = await anthropic.messages.create({
           model: "claude-haiku-4-5",
           max_tokens: 150,
-          system: "Generate exactly 3 short follow-up questions a credit manager would ask after reading this answer. Return ONLY a JSON array of 3 strings. Questions must be specific to the companies and issues mentioned.",
+          system: `Generate exactly 3 short follow-up questions a credit manager would ask after reading this answer. Return ONLY a JSON array of 3 strings. Questions must be specific to the companies and issues mentioned, and each must name the company it is about. Only ask what CreditPilot's data can answer: ${ANSWERABLE_TOPICS}. Never ask about collateral, guarantees, letters of credit, credit insurance, bank data, contracts, orders, or what the customer said.`,
           messages: [{
             role: "user",
-            content: `Answer just given: ${cleanAnswerText.slice(0, 500)}\n\nGenerate 3 follow-up questions.`,
+            content: `Question: ${question}\nAnswer just given: ${cleanAnswerText.slice(0, 700)}\n\nGenerate 3 follow-up questions.`,
           }],
         });
         const followUpText = extractText(followUpMessage);
@@ -1775,6 +1846,7 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one sentence statin
         confidence: meta.confidence,
         confidence_reason: meta.confidence_reason,
         relatedQuestions,
+        searched,
         ...(DEMO_MODE ? { demo_question_count: demoQuestionCount } : {}),
       });
     } catch (err) {
