@@ -84,4 +84,12 @@ export const SCORE_PROVIDERS: ScoreProvider[] = [
 export const PROVIDER = Object.fromEntries(SCORE_PROVIDERS.map((p) => [p.id, p])) as Record<string, ScoreProvider>;
 
 /** What Settings and the form show: id, name and scale. */
-export const PROVIDER_LIST = SCORE_PROVIDERS.map(({ id, name, scale }) => ({ id, name, scale }));
+/**
+ * Keen is paused in onboarding until it is fully developed (founder, 2026-11-18): it is left out
+ * of every score order and of the providers Settings offers. Its code stays; set true to bring it back.
+ */
+export const KEEN_IN_ONBOARDING = false;
+/** A score order with the paused sources left out. */
+export const activeScoreOrder = (order: string[]) => order.filter((id) => KEEN_IN_ONBOARDING || id !== "keen");
+
+export const PROVIDER_LIST = SCORE_PROVIDERS.filter((p) => KEEN_IN_ONBOARDING || p.id !== "keen").map(({ id, name, scale }) => ({ id, name, scale }));

@@ -43,8 +43,8 @@ export const ONBOARDING_DEFAULTS: OnboardingSettings = {
     due_soon_months: 2,
   },
   sources: {
-    // Keen first by default; a company using D&B, Creditsafe, Coface, Allianz Trade or Experian
-    // moves it up in Settings › Credit score source. The first source with a score counts.
+    // The first source with a score counts; order in Settings › Credit score source. Keen is
+    // paused in onboarding (KEEN_IN_ONBOARDING in score_providers.ts) and skipped while it is.
     score_order: ["keen", "dnb", "creditsafe", "coface", "allianz_trade", "experian", "other", "bureau_report"],
   },
 };

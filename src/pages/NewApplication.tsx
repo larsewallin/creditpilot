@@ -3,8 +3,8 @@
  * "Load sample" fills a ready-made applicant. Submitting runs the whole pipeline and opens
  * the prospect page; /new-customers/:id/edit opens a submitted application to complete or
  * correct it, and saving runs the checks again.
- * Credit score (founder, 2026-11-18: no statements typed in): Keen by default, automatic for
- * a US-listed company from its 10-K; otherwise a third-party score or rating.
+ * Credit score (founder, 2026-11-18): the credit provider's report, attached with the score it
+ * gives; Keen is paused. The public demo scores every application 55 (workflow over data).
  */
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { callOnboarding, db } from "@/lib/onboarding";
+import { DEMO_MODE } from "@/lib/constants";
 import { SAMPLE_APPLICATIONS } from "@/lib/onboardingSamples";
 import { CompanyLookupSearch, type LookupPrefill } from "@/components/onboarding/CompanyLookupSearch";
 import type { KeenStatements } from "@/components/onboarding/KeenStatementsForm";
@@ -91,8 +92,6 @@ export default function NewApplication() {
   const { id: editId } = useParams();
   const [f, setF] = useState<Form>(EMPTY_FORM);
   const [sample, setSample] = useState<string>("");
-  // Credit score source on this application: Keen (default) or a third-party score or rating.
-  const [scoreSource, setScoreSource] = useState<"keen" | "third_party">("keen");
 
   // Editing a submitted application: load its answers once.
   const existing = useQuery({
@@ -106,16 +105,14 @@ export default function NewApplication() {
   });
   useEffect(() => {
     if (!existing.data?.answers) return;
-    const form = fromApplication(existing.data.answers);
-    setF(form);
-    if (form.provider_scores.length) setScoreSource("third_party");
+    setF(fromApplication(existing.data.answers));
   }, [existing.data]);
   const set = (k: keyof Form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setF((x) => ({ ...x, [k]: e.target.type === "checkbox" ? (e.target as HTMLInputElement).checked : e.target.value }));
 
   const submit = useMutation({
     mutationFn: () => {
-      const application = { ...toApplication(f), ...(scoreSource === "keen" ? { provider_scores: [] } : {}) };
+      const application = toApplication(f);
       return editId
         ? callOnboarding<{ application_id: string }>({ action: "update", application_id: editId, application })
         : callOnboarding<{ application_id: string }>({ action: "submit", application });
@@ -164,7 +161,7 @@ export default function NewApplication() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <h1 className="text-xl font-semibold text-foreground">{editId ? "Edit credit application" : "New credit application"}</h1>
         {!editId && <div className="flex items-center gap-2">
-          <Select value={sample} onValueChange={(v) => { setSample(v); const s = SAMPLE_APPLICATIONS.find((x) => x.key === v); if (s) { const form = fromApplication(s.application); setF(form); setScoreSource(form.provider_scores.length ? "third_party" : "keen"); } }}>
+          <Select value={sample} onValueChange={(v) => { setSample(v); const s = SAMPLE_APPLICATIONS.find((x) => x.key === v); if (s) setF(fromApplication(s.application)); }}>
             <SelectTrigger className="h-8 w-72 text-xs"><SelectValue placeholder="Load sample application…" /></SelectTrigger>
             <SelectContent>{SAMPLE_APPLICATIONS.map((s) => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}</SelectContent>
           </Select>
@@ -210,27 +207,13 @@ export default function NewApplication() {
 
         <section className="bg-card rounded-xl border p-4 space-y-3">
           <h2 className="text-sm font-semibold">Credit score</h2>
-          <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Credit score source">
-            {([
-              ["keen", "Keen (default)", "Scored automatically from the company's financial statements."],
-              ["third_party", "Third-party score or rating", "From a credit provider's report (D&B, Creditsafe, Coface, Allianz Trade, Experian…)."],
-            ] as const).map(([key, title, hint]) => (
-              <label key={key} className={`flex gap-2 rounded-lg border p-3 cursor-pointer text-xs ${scoreSource === key ? "border-primary bg-primary/5" : ""}`}>
-                <input type="radio" name="score-source" checked={scoreSource === key} onChange={() => setScoreSource(key)} className="mt-0.5" />
-                <span><span className="font-medium block">{title}</span><span className="text-muted-foreground">{hint}</span></span>
-              </label>
-            ))}
-          </div>
-          {scoreSource === "keen" ? (
-            keenReadsFiling(f) ? (
-              <p className="text-xs">Keen reads the company's latest 10-K at the SEC. Nothing to enter: the score and how old the accounts are appear on the application after you submit.</p>
-            ) : f.keen || f.legacy_statements.length ? (
-              <p className="text-xs">Keen scores the statements that came with this application.</p>
-            ) : (
-              <p className="text-xs text-amber-700">Keen scores US-listed companies automatically (tick "Publicly listed" and give the ticker). For a private company, choose a third-party score or rating{(Number(f.amount_usd) || 0) > 0 ? "; without one, the application waits for it" : ""}.</p>
-            )
+          {DEMO_MODE ? (
+            <p className="text-xs">Demo: every new application is scored <span className="font-semibold">55</span>, so you can follow the workflow from screening to approval. In production you attach the credit provider's report here (D&amp;B, Creditsafe, Coface, Allianz Trade, Experian…).</p>
           ) : (
-            <ProviderScoresForm rows={f.provider_scores.length ? f.provider_scores : [{ ...EMPTY_PROVIDER_ROW }]} onChange={(provider_scores) => setF((x) => ({ ...x, provider_scores }))} />
+            <>
+              <p className="text-xs text-muted-foreground">From the credit provider's report: attach it and type the score or rating it gives.</p>
+              <ProviderScoresForm rows={f.provider_scores.length ? f.provider_scores : [{ ...EMPTY_PROVIDER_ROW }]} onChange={(provider_scores) => setF((x) => ({ ...x, provider_scores }))} />
+            </>
           )}
         </section>
 

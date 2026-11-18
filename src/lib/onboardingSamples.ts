@@ -36,7 +36,7 @@ const signed = { terms: true, credit_check_consent: true };
 
 export const SAMPLE_APPLICATIONS: { key: string; label: string; expect: string; application: Record<string, unknown> }[] = [
   {
-    key: "fastenal", label: "Fastenal Company (US-listed)", expect: "Keen scores it from its latest 10-K; no statements to enter",
+    key: "fastenal", label: "Fastenal Company (US-listed)", expect: "A US-listed company; the limit caps come from its latest 10-K",
     application: {
       legal_name: "Fastenal Company", country_code: "US", entity_type: "corporation", website: "fastenal.com", sector: "Industrial Manufacturing",
       is_public: true, ticker: "FAST",
@@ -59,7 +59,7 @@ export const SAMPLE_APPLICATIONS: { key: string; label: string; expect: string; 
     },
   },
   {
-    key: "lakeshore", label: "Lakeshore Industrial Supply (US, fictional)", expect: "Keen scores its statements (a private company); approve as requested",
+    key: "lakeshore", label: "Lakeshore Industrial Supply (US, fictional)", expect: "A private company; approve as requested",
     application: {
       legal_name: "Lakeshore Industrial Supply Inc.", country_code: "US", tax_id: "31-4482910", entity_type: "corporation", sector: "Industrial Manufacturing",
       is_public: false, date_established: "2009-03-01",

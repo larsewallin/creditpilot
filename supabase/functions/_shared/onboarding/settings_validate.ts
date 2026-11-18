@@ -5,6 +5,7 @@
  * rejected, so a typo cannot silently change nothing.
  * onboarding.approval has no code default yet (Phase 2): it accepts any object.
  */
+import { activeScoreOrder } from "./score_providers.ts";
 import { ONBOARDING_DEFAULTS } from "./settings.ts";
 import { SCORE_PROVIDERS } from "./score_providers.ts";
 import { AGENTS, EVERY_HOURS, SCHEDULE_DEFAULTS, validTimezone } from "../scheduling/schedule.ts";
@@ -88,6 +89,9 @@ export function effectiveSettings(overrides: Record<string, Json>) {
   for (const section of Object.keys(ONBOARDING_DEFAULTS) as (keyof typeof ONBOARDING_DEFAULTS)[]) {
     out[section] = merge(ONBOARDING_DEFAULTS[section], overrides[`onboarding.${section}`]);
   }
+  // Paused sources (Keen, 2026-11-18) are not offered or shown in the order.
+  const src = out.sources as { score_order?: string[] } | undefined;
+  if (src?.score_order) out.sources = { ...src, score_order: activeScoreOrder(src.score_order) };
   out.approval = overrides["onboarding.approval"] ?? {};
   const sched = (overrides["agents.schedule"] ?? {}) as Record<string, Json>;
   out.agents = Object.fromEntries(Object.entries(SCHEDULE_DEFAULTS).map(([k, d]) => [k, merge(d, sched[k])]));

@@ -39,7 +39,7 @@ import { publishEvent } from "../_shared/publishEvent.ts";
 import { SectorEnum } from "../_shared/event_schemas.ts";
 import { NEW_CREDIT_LIMIT, decisionLabel, underwritingAssumptions } from "../_shared/onboarding/decision.ts";
 import { companyLookup, prefillFromCard, isCompanyId } from "../_shared/onboarding/company_lookup.ts";
-import { PROVIDER } from "../_shared/onboarding/score_providers.ts";
+import { KEEN_IN_ONBOARDING, PROVIDER } from "../_shared/onboarding/score_providers.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -53,6 +53,8 @@ const RUNNERS = ["admin", "credit_manager", "credit_analyst"] as const;
 const DISPOSERS = ["admin", "credit_manager"] as const;
 const REG_B_DAYS = 30;
 const DAY = 86_400_000;
+/** Every application's credit score in the public demo (founder, 2026-11-18). */
+const DEMO_APPLICATION_SCORE = 55;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -68,6 +70,14 @@ Deno.serve(async (req) => {
       case "update": {
         const user = await requireUser(req, [...RUNNERS]);
         return json(await update(db, user, body, req));
+      }
+      case "upload_report": {
+        const user = await requireUser(req, [...RUNNERS]);
+        return json(await uploadReport(db, user, body));
+      }
+      case "report_url": {
+        await requireUser(req, [...RUNNERS, ...DISPOSERS]);
+        return json(await reportUrl(db, body));
       }
       case "run": {
         const user = await requireUser(req, [...RUNNERS]);
@@ -160,6 +170,38 @@ async function keenTemplate() {
 }
 
 // ─── Actions ──────────────────────────────────────────────────────────────────
+
+// ─── Credit providers' reports (private bucket credit-reports) ──────────────────
+const REPORT_TYPES: Record<string, string> = { "application/pdf": "pdf", "image/png": "png", "image/jpeg": "jpg" };
+const REPORT_MAX_BYTES = 10 * 1024 * 1024;
+
+/** Stores a provider's report sent as base64; returns the path the application keeps. */
+async function uploadReport(db: SupabaseClient, user: AuthedUser, body: Record<string, unknown>) {
+  if ((Deno.env.get("DEMO_MODE") ?? "false") === "true") throw new UserError("Report upload is off in the demo: every demo application is scored 55.");
+  const type = String(body.content_type ?? "");
+  const ext = REPORT_TYPES[type];
+  if (!ext) throw new UserError("The report must be a PDF, PNG or JPEG file");
+  const b64 = String(body.data_base64 ?? "");
+  let bytes: Uint8Array;
+  try { bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)); } catch { throw new UserError("The file could not be read"); }
+  if (!bytes.length) throw new UserError("The file is empty");
+  if (bytes.length > REPORT_MAX_BYTES) throw new UserError("The report is over 10 MB");
+  const fileName = String(body.file_name ?? `report.${ext}`).replace(/[^\w.\- ]+/g, "_").slice(0, 120);
+  const path = `${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}.${ext}`;
+  const { error } = await db.storage.from("credit-reports").upload(path, bytes, { contentType: type, upsert: false });
+  if (error) throw new Error(`Could not store the report: ${error.message}`);
+  console.log(`[onboarding] report stored by ${user.user_id}: ${path}`);
+  return { path, file_name: fileName };
+}
+
+/** A 10-minute link to a stored report. */
+async function reportUrl(db: SupabaseClient, body: Record<string, unknown>) {
+  const path = String(body.path ?? "");
+  if (!/^\d{4}-\d{2}-\d{2}\/[0-9a-f-]{36}\.(pdf|png|jpg)$/.test(path)) throw new UserError("Unknown report");
+  const { data, error } = await db.storage.from("credit-reports").createSignedUrl(path, 600);
+  if (error || !data) throw new Error(`Could not open the report: ${error?.message ?? "no link"}`);
+  return { url: data.signedUrl };
+}
 
 function validApplication(body: Record<string, unknown>): Omit<CreditApplication, "application_id"> {
   const app = body.application as Omit<CreditApplication, "application_id"> | undefined;
@@ -263,7 +305,9 @@ async function run(db: SupabaseClient, user: AuthedUser, applicationId: string, 
 
   let outcome: OnboardingOutcome;
   try {
-    outcome = await runOnboarding(app, providersFor(db, row.customer_id), { settings, cleared: mergedCleared });
+    // The public demo scores every application 55: the demo shows the workflow, not the data.
+    const demoScore = (Deno.env.get("DEMO_MODE") ?? "false") === "true" ? DEMO_APPLICATION_SCORE : undefined;
+    outcome = await runOnboarding(app, providersFor(db, row.customer_id), { settings, cleared: mergedCleared, demoScore, keenPaused: !KEEN_IN_ONBOARDING });
   } catch (e) {
     // Fail closed (e.g. sanctions lists stale): the application waits at Screening.
     const message = e instanceof Error ? e.message : String(e);

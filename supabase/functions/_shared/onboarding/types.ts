@@ -168,6 +168,7 @@ export interface ProviderScore {
   as_of?: string;            // the report's date
   max_credit_usd?: number;   // the provider's credit recommendation, if it gives one
   name?: string;             // for "other": the provider's name
+  report?: { path: string; file_name: string };  // the provider's report, in the private credit-reports bucket
 }
 
 export interface BureauReport {
