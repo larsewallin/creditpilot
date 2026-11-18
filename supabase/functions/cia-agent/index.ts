@@ -669,7 +669,9 @@ async function fetchRelevantData(
 
     // customers — search by name or return top 20 by credit_limit (highest exposure first)
     tables.has("customers") && (async () => {
-      const selectFields = "id, company_name, company_type, credit_limit, current_exposure, credit_rating_score, credit_rating_raw, credit_rating_source, financials_fye, scenario, risk_tags, payment_on_time_rate, payment_trend, payment_health";
+      // Everything the Customers page and the customer drawer show (2026-11-18 eval: payment
+      // terms, account manager and invoicing currency were answered "I don't have that").
+      const selectFields = "id, company_name, company_type, credit_limit, current_exposure, credit_rating_score, credit_rating_raw, credit_rating_source, credit_rating_previous_score, credit_rating_updated_at, financials_fye, scenario, risk_tags, payment_on_time_rate, payment_trend, payment_health, payment_avg_days_early_late, payment_terms_days, invoicing_currency, account_manager, credit_manager, sector, industry, country_code, city, customer_since, contract_expiry, preferred_customer, primary_products, last_reviewed";
 
       if (companyMentions.length > 0) {
         // Specific company names mentioned — targeted name search
@@ -1205,7 +1207,7 @@ serve(async (req: Request) => {
         return {
           tag,
           customer: c,
-          line: `- [${tag}] ${sanitize(c.company_name)} (type:${sanitize(c.company_type)}, credit_limit=$${c.credit_limit?.toLocaleString()}, balance=$${c.current_exposure?.toLocaleString()}, utilization=${c.credit_limit ? Math.round(c.current_exposure / c.credit_limit * 100) : "N/A"}%, ${c.credit_rating_score != null ? `credit_score=${c.credit_rating_score}/100 (${sanitize(c.credit_rating_raw) || "N/A"} from ${sanitize(c.credit_rating_source) || "N/A"})` : "credit_score=NR (No Rating, provider=N/A)"}, ${c.financials_fye ? `financials_year_end=${String(c.financials_fye).slice(0, 10)}, ` : ""}scenario=${sanitize(c.scenario) || "N/A"}, payment_health=${sanitize(c.payment_health) || "unknown"}, risk_tags=[${(c.risk_tags ?? []).map(sanitize).join(", ")}]${c.is_high_risk ? ', RISK_FLAG=HIGH' : ''})`,
+          line: `- [${tag}] ${sanitize(c.company_name)} (type:${sanitize(c.company_type)}, credit_limit=$${c.credit_limit?.toLocaleString()}, balance=$${c.current_exposure?.toLocaleString()}, utilization=${c.credit_limit ? Math.round(c.current_exposure / c.credit_limit * 100) : "N/A"}%, ${c.credit_rating_score != null ? `credit_score=${c.credit_rating_score}/100 (${sanitize(c.credit_rating_raw) || "N/A"} from ${sanitize(c.credit_rating_source) || "N/A"})` : "credit_score=NR (No Rating, provider=N/A)"}, ${c.financials_fye ? `financials_year_end=${String(c.financials_fye).slice(0, 10)}, ` : ""}${c.credit_rating_previous_score != null ? `previous_credit_score=${c.credit_rating_previous_score}/100${c.credit_rating_updated_at ? ` (score changed ${String(c.credit_rating_updated_at).slice(0, 10)})` : ""}, ` : ""}payment_terms=${c.payment_terms_days != null ? `net ${c.payment_terms_days} days` : "N/A"}, invoicing_currency=${sanitize(c.invoicing_currency) || "N/A"}, ${c.payment_avg_days_early_late != null ? `avg_days_late=${c.payment_avg_days_early_late}, ` : ""}account_manager=${sanitize(c.account_manager) || "N/A"}, credit_manager=${sanitize(c.credit_manager) || "N/A"}, sector=${sanitize(c.sector) || "N/A"}${c.industry ? ` (${sanitize(c.industry)})` : ""}, country=${sanitize(c.country_code) || "N/A"}${c.city ? ` (${sanitize(c.city)})` : ""}, ${c.customer_since ? `customer_since=${String(c.customer_since).slice(0, 10)}, ` : ""}${c.contract_expiry ? `contract_expiry=${String(c.contract_expiry).slice(0, 10)}, ` : ""}${c.last_reviewed ? `last_reviewed=${String(c.last_reviewed).slice(0, 10)}, ` : ""}${c.preferred_customer ? "preferred_customer=yes, " : ""}${c.primary_products ? `products=${sanitize(c.primary_products)}, ` : ""}scenario=${sanitize(c.scenario) || "N/A"}, payment_health=${sanitize(c.payment_health) || "unknown"}, risk_tags=[${(c.risk_tags ?? []).map(sanitize).join(", ")}]${c.is_high_risk ? ', RISK_FLAG=HIGH' : ''})`,
         };
       });
 
@@ -1547,8 +1549,10 @@ serve(async (req: Request) => {
         // Section names the model sometimes cites ("[OFFICIAL AR AGING PORTFOLIO TOTALS]")
         // are internal labels, never shown to the user (seen 2026-11-17).
         .replace(/\s*\[(?:[^\]]*OFFICIAL[^\]]*|pending actions?|bankruptcy list|multi-signal convergence list|high-risk customer list)\]/gi, "")
-        // Any other all-caps label in brackets is a section name too ("[AR AGING PORTFOLIO TOTALS]").
-        .replace(/\s*\[[A-Z][A-Z0-9 &()—–\-,]{3,}\](?!\()/g, "")
+        // Any other all-caps label in brackets is a section name too ("[AR AGING PORTFOLIO TOTALS]", "[PENDING_ACTIONS]").
+        .replace(/\s*\[[A-Z][A-Z0-9 _&()—–\-,]{3,}\](?!\()/g, "")
+        // Anything else in brackets is the model's own aside ("[critical priority]"): parentheses read better.
+        .replace(/\[([^\]\n]{2,80})\](?!\()/g, "($1)")
         // Section names in prose ("Based on the OFFICIAL MULTI-SIGNAL CONVERGENCE LIST, …").
         .replace(/\b(?:based on|according to|per|from) the \*{0,2}OFFICIAL [A-Z0-9 &()—–\-]+?\*{0,2}(?:,|:)\s*/gi, "")
         .replace(/\*{0,2}OFFICIAL [A-Z0-9 &()—–\-]*(?:LIST|TOTALS?|SUMMARY)\*{0,2}/g, "the data")
