@@ -140,7 +140,7 @@ const CASES = [
   // ── Customer level: what a user sees on Customers, AR Aging and Payment Behaviour ──
   { q: "What are Arconic's payment terms?", check: (a) => [hasNumber(a, Number(C.arconic[0])) || `terms ${C.arconic[0]} days missing`] },
   { q: "What is Lockheed Martin's credit score and rating?", check: (a) => [
-      hasNumber(a, Number(C.lockheed[1])) || `score ${C.lockheed[1]} missing`, !C.lockheed[2] || a.includes(C.lockheed[2]) || `rating ${C.lockheed[2]} missing`] },
+      hasNumber(a, Number(C.lockheed[1])) || `score ${C.lockheed[1]} missing`, !C.lockheed[2] || a.replace(/\u2212/g, "-").includes(C.lockheed[2]) || `rating ${C.lockheed[2]} missing`] },
   { q: "What was Heliogen's previous credit score, and what is it now?", check: (a) => [
       hasNumber(a, Number(C.heliogen[3])) || `previous score ${C.heliogen[3]} missing`, hasNumber(a, Number(C.heliogen[1])) || `score ${C.heliogen[1]} missing`] },
   { q: "Who is the account manager for Kaman?", check: (a) => [!C.kaman[4] || a.includes(C.kaman[4].split(" ")[0]) || `account manager ${C.kaman[4]} missing`] },

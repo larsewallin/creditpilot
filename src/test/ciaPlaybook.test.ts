@@ -28,7 +28,7 @@ describe("CIA next-steps playbook", () => {
   });
 
   it("tells advice questions from lookups", () => {
-    for (const q of ["Should we extend Arconic's payment terms?", "Can we raise Lockheed's limit?", "What should I do about Brixton?", "Do we need collateral from Heliogen?"])
+    for (const q of ["Should we extend Arconic's payment terms?", "Can we raise Lockheed's limit?", "What should I do about Brixton?", "Do we need collateral from Heliogen?", "Do we have credit insurance on Kaman?"])
       expect(isAdviceQuestion(q)).toBe(true);
     for (const q of ["What is our total overdue AR?", "Who is the account manager for Kaman?", "List Arconic's overdue invoices."])
       expect(isAdviceQuestion(q)).toBe(false);
