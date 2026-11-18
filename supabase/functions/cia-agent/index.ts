@@ -1547,6 +1547,8 @@ serve(async (req: Request) => {
         // Section names the model sometimes cites ("[OFFICIAL AR AGING PORTFOLIO TOTALS]")
         // are internal labels, never shown to the user (seen 2026-11-17).
         .replace(/\s*\[(?:[^\]]*OFFICIAL[^\]]*|pending actions?|bankruptcy list|multi-signal convergence list|high-risk customer list)\]/gi, "")
+        // Any other all-caps label in brackets is a section name too ("[AR AGING PORTFOLIO TOTALS]").
+        .replace(/\s*\[[A-Z][A-Z0-9 &()—–\-,]{3,}\](?!\()/g, "")
         // Section names in prose ("Based on the OFFICIAL MULTI-SIGNAL CONVERGENCE LIST, …").
         .replace(/\b(?:based on|according to|per|from) the \*{0,2}OFFICIAL [A-Z0-9 &()—–\-]+?\*{0,2}(?:,|:)\s*/gi, "")
         .replace(/\*{0,2}OFFICIAL [A-Z0-9 &()—–\-]*(?:LIST|TOTALS?|SUMMARY)\*{0,2}/g, "the data")
