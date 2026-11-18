@@ -1777,7 +1777,7 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one plain sentence 
 
       // The reason is shown to the user: internal section and table names out (2026-11-18).
       meta.confidence_reason = String(meta.confidence_reason ?? "")
-        .replace(/\b(?:the )?\*{0,2}OFFICIAL [A-Z0-9 &()—–\-]+?(?:\s+section)?\*{0,2}(?=[\s,.;:)]|$)/g, "the computed totals")
+        .replace(/\b(?:the )?\*{0,2}OFFICIAL(?: [A-Z0-9&()—–\-]+)+(?: section)?\*{0,2}/g, "the computed totals")
         .replace(/\b(?:the )?CUSTOMERS TABLE\b/gi, "the customer records")
         .replace(/\b(?:the )?CREDIT EVENTS TABLE\b/gi, "the credit events")
         .replace(/\b(?:the )?INVOICES TABLE\b/gi, "the invoices")
@@ -1853,7 +1853,7 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one plain sentence 
       });
     } catch (err) {
       console.error("Question mode inner error (Anthropic):", err);
-      return jsonRes({ error: "Failed to generate answer" }, 500);
+      return jsonRes({ error: "Failed to generate answer", detail: err instanceof Error ? `${err.name}: ${err.message}`.slice(0, 300) : String(err).slice(0, 300) }, 500);
     }
 
     } catch (outerErr) {
