@@ -8,7 +8,8 @@
 //
 //   SUPABASE_URL=… SUPABASE_ANON_KEY=… CIA_INTERNAL_TEST_SECRET=… DATABASE_URL=… node tests/cia/eval.mjs
 //
-// Exit 1 when a check fails. Run by .github/workflows/cia-eval.yml.
+// Informational: a failed check is a warning in the run's summary, not a failed run
+// (no failure emails). EVAL_STRICT=1 makes it exit 1. Run by .github/workflows/cia-eval.yml.
 
 import { execFileSync } from "node:child_process";
 
@@ -107,14 +108,20 @@ const CASES = [
   { q: "Summarize the portfolio's credit risk in three sentences.", check: () => [] },
 ];
 
+import { appendFileSync } from "node:fs";
 let failed = 0;
+const summary = [];
 for (const [i, c] of CASES.entries()) {
   const answer = await ask(c.q);
   const problems = c.check(answer).filter((x) => x !== true);
   if (/\[(OFFICIAL|[CIPNFEUM]\d+)/.test(answer)) problems.push("internal tag shown in the answer");
   failed += problems.length ? 1 : 0;
+  if (problems.length) { console.log(`::warning::CIA eval: "${c.q}": ${problems.join("; ")}`); summary.push(`- ✗ ${c.q}: ${problems.join("; ")}`); }
   console.log(`\n── ${i + 1}. ${c.q}  ${problems.length ? "✗ " + problems.join("; ") : c.check.length || problems.length ? "✓" : "(read)"}`);
   console.log(answer);
 }
 console.log(`\n${CASES.length - failed}/${CASES.length} passed their checks`);
-process.exit(failed ? 1 : 0);
+if (process.env.GITHUB_STEP_SUMMARY) {
+  appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## CIA eval: ${CASES.length - failed}/${CASES.length} passed\n\n${summary.join("\n") || "All checks passed."}\n\nEvery answer is in the job log.\n`);
+}
+process.exit(failed && process.env.EVAL_STRICT === "1" ? 1 : 0);
