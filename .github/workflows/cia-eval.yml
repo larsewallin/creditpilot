@@ -1,0 +1,43 @@
+# CIA accuracy evaluation: ~20 questions against the deployed CIA on the demo data,
+# each checked against the database (read-only). Prints every answer in the log.
+# Informational (not a merge gate): it measures what is deployed now. Runs daily after
+# the 04:00 New York demo refresh, on demand, and on PRs that change the evaluation.
+name: CIA eval
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 11 * * *"
+  pull_request:
+    paths:
+      - tests/cia/eval.mjs
+      - .github/workflows/cia-eval.yml
+permissions:
+  contents: read
+jobs:
+  eval:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install Postgres 17 client
+        run: |
+          sudo apt-get install -y -q postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y -q postgresql-client-17
+          echo /usr/lib/postgresql/17/bin >> "$GITHUB_PATH"
+      - name: Check target is production
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          [[ "$SUPABASE_URL" == *yxqudytimmxufypothis* && "$DATABASE_URL" == *yxqudytimmxufypothis* ]] || { echo "secrets missing or not production"; exit 1; }
+      - name: Ask and check
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          CIA_INTERNAL_TEST_SECRET: ${{ secrets.CIA_INTERNAL_TEST_SECRET }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: node tests/cia/eval.mjs
