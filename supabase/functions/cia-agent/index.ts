@@ -283,11 +283,19 @@ function buildHighUtilizationListBlock(
   if (lines.length === 0) {
     return "**No customers** are currently at or above 85% utilization.";
   }
-  const bullets = lines.map((c) => {
-    const utilPct = Math.round(((c.current_exposure as number) / (c.credit_limit as number)) * 100);
-    return `- **${sanitize(c.company_name)}** — ${utilPct}% utilization (balance $${c.current_exposure?.toLocaleString()}, credit limit $${c.credit_limit?.toLocaleString()}) [${c.tag}]`;
-  }).join("\n");
-  return `**${lines.length} customer${lines.length === 1 ? "" : "s"}** at or above 85% utilization:\n${bullets}`;
+  // Over the limit first (most over first), then close to it: "over their credit limit"
+  // and "near their limit" are different answers (seen 2026-11-17: 4 over, 16 close).
+  const util = (c: (typeof lines)[number]) => (c.current_exposure as number) / (c.credit_limit as number);
+  const bullet = (c: (typeof lines)[number]) =>
+    `- **${sanitize(c.company_name)}** — ${Math.round(util(c) * 100)}% utilization (balance $${c.current_exposure?.toLocaleString()}, credit limit $${c.credit_limit?.toLocaleString()}) [${c.tag}]`;
+  const over = lines.filter((c) => util(c) > 1).sort((a, b) => util(b) - util(a));
+  const near = lines.filter((c) => util(c) <= 1).sort((a, b) => util(b) - util(a));
+  const parts: string[] = [];
+  parts.push(over.length
+    ? `**${over.length} customer${over.length === 1 ? " is" : "s are"} over their credit limit:**\n${over.map(bullet).join("\n")}`
+    : "**No customers** are over their credit limit.");
+  if (near.length) parts.push(`**${near.length} more ${near.length === 1 ? "is" : "are"} close to it (85–100% of the limit):**\n${near.map(bullet).join("\n")}`);
+  return parts.join("\n\n");
 }
 
 // Same pattern as HIGH_UTIL_MARKER above, for the locked V1 high-risk set —
@@ -1470,6 +1478,9 @@ serve(async (req: Request) => {
         .replace(/\[([^\]]+)\]/g, (full, inner) =>
           inner.split(",").every((p: string) => tagOrRangePattern.test(p.trim())) ? "" : full
         )
+        // Section names the model sometimes cites ("[OFFICIAL AR AGING PORTFOLIO TOTALS]")
+        // are internal labels, never shown to the user (seen 2026-11-17).
+        .replace(/\s*\[OFFICIAL[^\]]*\]/g, "")
         .replace(/\s+([.,;:!?])/g, "$1")
         .replace(/[ \t]{2,}/g, " ")
         .trim();
