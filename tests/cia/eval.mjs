@@ -136,6 +136,7 @@ const CASES = [
   { q: "Show Triumph Group's AR aging by bucket.", check: (a) => C.triumphAging.slice(0, 4).filter((v) => v > 0).map((v) => hasNumber(a, v) || `bucket ${v} missing`) },
   { q: "How many open invoices does Arconic have, and how overdue is the oldest?", check: (a) => [
       hasNumber(a, C.arconicAging[5]) || `invoice count ${C.arconicAging[5]} missing`, hasNumber(a, C.arconicOldest) || `oldest ${C.arconicOldest} days missing`] },
+  { q: "How much does Arconic owe us that is past due?", check: (a) => [hasNumber(a, C.arconicOverdueAmt) || `Arconic overdue ${C.arconicOverdueAmt} missing`] },
   { q: "List Arconic's overdue invoices.", check: (a) => C.arconicOverdue.map((n) => a.includes(n) || `invoice ${n} missing`) },
   { q: "What is Arconic's credit utilization?", check: (a) => [hasNumber(a, Math.round(Number(C.arconic[7]) / Number(C.arconic[6]) * 1000) / 10) || hasNumber(a, Math.round(Number(C.arconic[7]) / Number(C.arconic[6]) * 100)) || "utilization missing"] },
   { q: "What is our total exposure to customers in Germany?", check: (a) => [hasNumber(a, C.germany) || `Germany exposure ${C.germany} missing`] },
