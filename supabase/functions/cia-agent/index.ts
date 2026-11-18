@@ -1250,6 +1250,8 @@ serve(async (req: Request) => {
     // Build context string — sanitize all text fields to prevent JSON parse errors
     // in Claude's response (quotes, backslashes, newlines in DB fields break output JSON)
     const contextParts: string[] = [];
+    // Named customers whose accounts are missing or old: the next steps must ask for them.
+    const accountsNeeded: string[] = [];
 
     // Populated alongside contextParts: tag -> record, so citations the model makes
     // inline (e.g. [E3]) can be mechanically verified against real provided rows.
@@ -1363,6 +1365,10 @@ serve(async (req: Request) => {
         const named = customerLines.filter(({ customer: c }) =>
           companyMentions.some((m) => String(c.company_name ?? "").toLowerCase().includes(m.toLowerCase())));
         if (named.length && named.length <= 10) {
+          for (const { customer: c } of named) {
+            const age = financialsAge(c.financials_fye ? String(c.financials_fye) : undefined, asOf, c.credit_rating_score ?? undefined, data.financials_settings);
+            if (!age || age.status !== "current") accountsNeeded.push(`${sanitize(c.company_name)} (${!age ? "none on file" : age.status === "stale" ? "out of date" : "due soon"})`);
+          }
           contextParts.push(
             "## FINANCIAL STATEMENTS — NAMED CUSTOMER(S) (computed in code from the year end on file and the accounts-age limits in Settings)\n" +
             named.map(({ tag, customer: c }) => {
@@ -1636,7 +1642,8 @@ serve(async (req: Request) => {
 
     // What CIA may suggest, and the data CreditPilot does not track yet (cia_playbook.ts).
     const advice = isAdviceQuestion(question);
-    if (advice) contextParts.push(playbookBlock(capabilityStatus()));
+    if (advice) contextParts.push(playbookBlock(capabilityStatus()) + (accountsNeeded.length
+      ? `\nRequired step (include it in Suggested next steps): ask ${accountsNeeded.join(", ")} for the latest annual accounts, then re-score.` : ""));
 
     const context = contextParts.join("\n\n");
 
@@ -1657,6 +1664,10 @@ serve(async (req: Request) => {
         }],
       });
       let rawAnswerText = extractText(answerMessage)
+        // "I don't have that information…" is for an answer with nothing else in it; when the
+        // advice answer goes on, the opening only says what is missing (2026-11-18 eval, Kaman
+        // insurance). A lookup about an unknown company keeps it (harness q8).
+        .replace(advice ? /^\s*I don't have that information in the current data\.?\s*(?=\S[\s\S]{40,})/ : /(?!)/, "")
         // A list marker must stand on its own line: the model sometimes wraps it in
         // brackets or puts it mid-sentence ("over their limit [{{HIGH_UTILIZATION_LIST}}].").
         .replace(/\s*[\[(]\s*(\{\{\s*[A-Z_]+\s*\}\})\s*[\])]\.?/g, "\n\n$1\n")
