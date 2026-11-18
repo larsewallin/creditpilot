@@ -58,10 +58,11 @@ const oldestOverdue = (name) => Number(one(`select coalesce(max(greatest(current
 const C = {
   arconic: cust("Arconic"), triumph: cust("Triumph"), lockheed: cust("Lockheed"), heliogen: cust("Heliogen"), kaman: cust("Kaman"), nordsee: cust("Nordsee"),
   triumphPay: pay("Triumph"), brixtonPay: pay("Brixton"), triumphAging: aging("Triumph"), arconicAging: aging("Arconic"),
-  triumphLast: lastPay("Triumph"), arconicOverdue: overdueInvoices("Arconic"), arconicOldest: oldestOverdue("Arconic"),
+  triumphLast: lastPay("Triumph"), arconicOverdue: overdueInvoices("Arconic"),
+  arconicOverdueAmt: Number(one(`select coalesce(sum(i.outstanding_amount),0) from invoices i join customers c on c.id = i.customer_id where c.company_name ilike 'Arconic%' and i.due_date < current_date and i.outstanding_amount > 0 and i.status::text is distinct from 'pre_petition'`)), arconicOldest: oldestOverdue("Arconic"),
   germany: Number(one(`select coalesce(sum(current_exposure),0) from customers where ${ACTIVE} and country_code = 'DE'`)),
   portfolioDaysLate: Number(one("select avg_days_early_late from v_payment_behaviour_portfolio")),
-  deteriorating: col(`select company_name from v_payment_behaviour_current where deterioration_severity in ('critical','high') order by company_name`),
+  deteriorating: col(`select company_name from v_payment_behaviour_current where deterioration_severity is not null order by company_name`),
 };
 console.log("Customer-level truth:", JSON.stringify(C, null, 1), "\n");
 
