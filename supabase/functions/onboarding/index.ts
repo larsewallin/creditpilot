@@ -65,6 +65,10 @@ Deno.serve(async (req) => {
         const user = await requireUser(req, [...RUNNERS]);
         return json(await submit(db, user, body, req));
       }
+      case "update": {
+        const user = await requireUser(req, [...RUNNERS]);
+        return json(await update(db, user, body, req));
+      }
       case "run": {
         const user = await requireUser(req, [...RUNNERS]);
         return json(await run(db, user, String(body.application_id), req));
@@ -157,13 +161,40 @@ async function keenTemplate() {
 
 // ─── Actions ──────────────────────────────────────────────────────────────────
 
-async function submit(db: SupabaseClient, user: AuthedUser, body: Record<string, unknown>, req: Request) {
+function validApplication(body: Record<string, unknown>): Omit<CreditApplication, "application_id"> {
   const app = body.application as Omit<CreditApplication, "application_id"> | undefined;
   if (!app?.legal_name?.trim()) throw new UserError("application.legal_name is required");
   if (!app.country_code || !/^[A-Z]{2}$/.test(app.country_code.toUpperCase())) throw new UserError("application.country_code must be a 2-letter country code");
   app.country_code = app.country_code.toUpperCase();
   app.people ??= []; app.trade_references ??= []; app.financial_statements ??= []; app.signatures ??= {};
   app.credit_request ??= {};
+  return app;
+}
+
+/**
+ * The credit team corrects or completes an application already submitted (e.g. the trade
+ * references the applicant sent later) and the checks run again on the same application.
+ * The prospect keeps its record; earlier screening decisions stay on the application.
+ */
+async function update(db: SupabaseClient, user: AuthedUser, body: Record<string, unknown>, req: Request) {
+  const id = String(body.application_id ?? "");
+  const app = validApplication(body);
+  const { data: row, error } = await db.from("credit_applications").select("id, status, answers").eq("id", id).maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!row) throw new UserError("Application not found");
+  if (row.status === "decided" || row.status === "withdrawn") throw new UserError(`Application is ${row.status} and can no longer be edited`);
+  const { error: upErr } = await db.from("credit_applications").update({
+    answers: app,
+    requested_limit_usd: app.credit_request.amount_usd ?? null,
+    requested_terms_days: app.credit_request.terms_days ?? null,
+    updated_at: new Date().toISOString(),
+  }).eq("id", id);
+  if (upErr) throw new Error(`Could not save application: ${upErr.message}`);
+  return await run(db, user, id, req);
+}
+
+async function submit(db: SupabaseClient, user: AuthedUser, body: Record<string, unknown>, req: Request) {
+  const app = validApplication(body);
   const via = (["staff", "sales", "buyer_link"] as const).includes(body.submitted_via as never) ? body.submitted_via as string : "staff";
 
   const providers = providersFor(db);

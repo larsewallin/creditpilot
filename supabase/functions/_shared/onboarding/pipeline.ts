@@ -216,8 +216,11 @@ function completenessGaps(app: CreditApplication, s: OnboardingSettings, asOf: s
   if (!app.country_code) missing.push("country_code");
   if (!app.credit_request.amount_usd) missing.push("credit_request.amount_usd");
   if ((app.trade_references?.length ?? 0) < s.template.min_trade_references) missing.push("trade_references");
-  if (!app.is_public && (app.credit_request.amount_usd ?? 0) > s.template.statements_required_above_usd && !app.financial_statements.length) {
-    missing.push("financial_statements");
+  // A private company above the threshold needs a credit score: Keen from statements, or a
+  // third-party score or rating (founder, 2026-11-18: the form no longer takes statements).
+  if (!app.is_public && (app.credit_request.amount_usd ?? 0) > s.template.statements_required_above_usd
+    && !app.financial_statements.length && !app.keen_statements && !(app.provider_scores ?? []).length) {
+    missing.push("credit_score");
   }
   const age = app.date_established ? monthsBetween(app.date_established, asOf) : undefined;
   const needsGuarantee = app.entity_type === "sole_proprietor" ||
