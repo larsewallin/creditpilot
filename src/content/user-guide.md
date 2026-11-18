@@ -1,6 +1,6 @@
 ## What is this?
 
-CreditPilot is an open-source project exploring how AI agents can automate credit and risk management for companies that sell on open terms. It's a project built to show what this kind of system could look like in practice.
+CreditPilot is an open-source credit management app for companies that sell on credit terms. A team of AI agents watches a customer portfolio, writes down what it finds, and proposes decisions for a person to approve.
 
 [GitHub repo →](https://github.com/larsewallin/creditpilot)
 
@@ -8,81 +8,39 @@ CreditPilot is an open-source project exploring how AI agents can automate credi
 
 ## How it works
 
-Think of it as a team of always-on analysts, each watching one specific thing.
+Think of a team of always-on analysts, each watching one thing. On a schedule the credit team sets, each writes a short, sourced note when it finds something concerning:
 
-One reads the news. On a schedule the credit team sets, it scans for stories about every company in a portfolio, and the moment something concerning shows up, it writes a short, sourced note. Another reads SEC filings, catching covenant breaches, going-concern language, or executive departures the moment a public customer files one. A third watches accounts receivable: who's over their credit limit, who's overdue and by how much, who's quietly drifting from paying on time to paying late. A fourth watches payment timing itself, comparing a customer's most recent month of payments against the month before to catch a deteriorating or improving trend before it shows up anywhere else. A fifth watches the economic and news environment around each industry sector in the portfolio — not any single customer. It knows the difference between a falling commodity price being bad news for the sector that sells it and good news for the sector that buys it, and adjusts what it reports accordingly. Others watch credit scores (a customer's score falling, or its financial statements getting too old), countries (ratings, policy rates, tariffs, political and economic shocks), and currencies (invoices in a currency that is moving against you). A Risk analyst then maps those country, industry and currency findings onto the customers actually exposed to them.
+- **AR aging:** who is overdue, by how much, and who is close to or over their credit limit.
+- **Payments:** whether a customer pays later (or earlier) in the last 90 days than in the 90 days before.
+- **News:** stories that name a customer.
+- **SEC filings:** going-concern doubts, covenant waivers, executive departures at public customers.
+- **Credit score:** a score falling, or financial statements getting too old.
+- **Industry:** economic data and news for each sector in the portfolio, knowing that a falling price hurts the sector that sells and helps the sector that buys.
+- **Country and FX:** political and economic events, rating and rate changes, tariffs, and currencies moving against open invoices.
+- **Risk:** maps the industry, country and currency findings onto the customers actually exposed to them.
 
-None of these analysts talk to each other. They all just write what they find into one shared log, called Credit Events. That's the raw feed of everything happening across a portfolio, in real time.
+Each analyst works on its own and writes into one shared log, **Credit Events**: the feed of everything happening across the portfolio. Every event has a severity (see below).
 
-When something in that feed is serious enough to warrant a decision, it becomes a proposed Action: a specific recommendation, with its reasoning attached, waiting for someone to approve or reject. Nothing happens automatically. A human stays the decision-maker. CreditPilot's job is just making sure that moment doesn't get missed.
+When the warning signs about a customer add up, the app proposes an **Action**, for example a lower credit limit, with its reasoning and the events behind it. Nothing changes until a person approves it.
 
-Then there's the Credit Intelligence Agent, the CIA, the one analyst that doesn't watch anything on its own. Its job is reading every note every other analyst has written and answering questions about it. Someone might ask "should we be worried about American Airlines?" That question goes to the CIA. It pulls together everything every analyst has ever written about that company and answers directly, with the actual source record behind every claim, never an invented citation.
-
-The CIA will become more powerful as more analysts get hired. It only shows information that's backed by a real source in the data it has access to.
-
----
-
-## Deploying it, and keeping data secure
-
-The live demo runs on a fictional portfolio, hosted on this project's own infrastructure, so anyone can try it without any setup: on the sign-in page, choose to try it as a credit manager, a credit analyst or a sales rep. The customer names are real companies used for illustration only; every score, limit, invoice, payment, event and news item about them is invented. The demo is shared by every visitor and replays the same story each day with today's dates. Two things in it are real: New customers looks companies up in real registers and sanctions lists and scores US-listed companies from their real SEC filings with Keen, and the CIA's answers are written live by an AI model (limited to 10 questions a day per visitor). The real design, though, is for a company to run this on its own data, in its own environment: its own Supabase project, deployed under its own account. None of that data would ever touch this project's infrastructure or anyone else's. It can also run entirely locally. Either way, the analysis happens on a company's own data, for its own eyes only.
-
----
-
-## How it's actually built (for the curious)
-
-CreditPilot is open source, so the "team of analysts" doesn't have to stay a metaphor. Anyone can go look at the code. Here's the real structure, in plain terms.
-
-The analysts are independent programs, called agents, not one big AI. Each one is a small, focused service, technically a Supabase Edge Function, that does exactly one job. More analysts can and will be "hired" to continue growing this credit-management orchestration.
-
-The AR Aging Agent watches accounts receivable: overdue balances broken into age buckets, credit utilization, and payment-behavior trends. The News Monitor Agent searches for and classifies negative news about every customer in a portfolio. The SEC Filing Monitor Agent pulls filings directly from the SEC's EDGAR system for public customers and scans them for risk language. The Payment Behaviour Monitor Agent compares a customer's payment timing across two 90-day windows to catch a deteriorating trend, an improving one, or growing unpredictability. The Industry Risk Monitor Agent watches sector-level economic data and news — the only one of the five that isn't tied to a single customer, watching an industry sector as a whole instead, and adjusting for whether that sector buys or sells the thing a given price move affects. The Credit Intelligence Agent, the CIA, is the synthesis layer. It doesn't watch anything on its own. It reads what the other four have written and answers questions in plain English, with sources.
-
-The agents don't call each other directly. Each monitoring agent writes its findings into one shared table of events, and the CIA reads that table. This keeps every agent simple and independently testable. An agent's only job is to watch its one thing and write down what it finds, in a standard format. Nothing more.
-
-Every event has a real source. When the CIA cites something as evidence, that citation is built directly from actual records in the database — never generated freeform by the AI. If there's no real event to point to, it won't invent a source to fill the gap.
-
-Customer identity is never guessed. When CreditPilot needs to match uploaded data, such as an AR aging file from an accounting system, to a customer in a portfolio, it uses real identifiers, like an internal customer code or a DUNS number, rather than approximate name-matching. If it can't confirm a match with certainty, it rejects that row rather than risk attaching the data to the wrong company.
-
-The team of analysts described above isn't a fixed team. It's a pattern, documented specifically so new analysts can be added — by the project's maintainer or by anyone else — without redesigning the system.
-
-A new agent is just a new watcher that follows the shared contract. It's a self-contained function that watches one thing: a data source, an API, a feed. It writes what it finds into the same shared event log every other agent uses, in the same standard shape. It respects the same demo and live separation, so it's safe to test without touching real data. Once it's writing events correctly, the CIA can already read and reason about its findings, with no changes needed to the CIA itself.
-
-That last point is the real payoff of the design. The CIA gets smarter automatically as more analysts are added, because it already knows how to read the shared event format. That is how the Country Risk, FX and Risk analysts were added: each plugged into the same slot the first five occupy.
-
-The repo's CONTRIBUTING.md walks through the exact steps and conventions — how to write events, how rate-limiting and audit logging are handled — so a new agent behaves consistently with the existing ones from day one. Anyone can also help shape the roadmap by opening an issue describing what kind of risk signal they'd want CreditPilot to watch, which becomes a candidate for the next analyst.
-
-This also means CreditPilot isn't locked to one vendor's data or one company's roadmap. Anyone running their own instance can add the specific signals that matter for their industry or their portfolio, on top of the same foundation.
+The **Credit Intelligence Agent (CIA)** watches nothing itself. It reads what the others wrote and answers questions in plain English from the chat bar at the bottom of every page, such as "Should we be worried about American Airlines?" Every claim points to the record behind it; totals and counts are calculated by the app, not by the AI. It gets more useful with every analyst added, without changes to the CIA.
 
 ---
 
-## What you see when you use it
+## The pages
 
-Credit Events is the live feed of what every analyst is writing. New events appear as the agents detect them, each one showing the customer, what happened, the source, the severity, and the date. It's filterable by customer, severity, or event type — the situational awareness layer, showing what's happening across a portfolio right now.
-
-Actions is where proposed recommendations wait for review, each one tied back to the specific events that triggered it.
-
-AR Aging shows accounts receivable broken down by age bucket, credit utilization, and overdue exposure per customer, kept current as new AR data comes in.
-
-News Monitor, SEC Filings, and Customers are filtered views into the underlying data each analyst produces.
-
-Payment Behaviour shows every customer's payment timing — the recent period against the one before — sorted worst-first, and opens up to the individual payments behind each figure.
-
-Industry Risk is the one page that isn't organized by customer. It lists the sectors your portfolio is actually exposed to, and what each analyst found about them: the economic series being watched, and the news that moved them.
-
-Country Risk and FX Risk show the countries and currencies the portfolio is exposed to, and what changed.
-
-New customers is where the credit team onboards a new account: the company is looked up in official registers (Company Lookup), screened against sanctions lists, scored (Keen by default, or another provider such as D&B, Creditsafe, Coface, Allianz Trade or Experian), and given a proposed credit limit that a credit manager approves. Customers never use CreditPilot themselves.
-
-Settings holds the company's own rules: which score providers come first, how old a customer's financial statements may get, and when each agent runs.
-
-Every one of these pages can be opened directly from a Credit Events card, landing on the exact customer or sector that event was about.
-
-And in the middle of all of it is the CIA, accessible from anywhere through a search bar for asking questions in plain English. It's the conversational layer over everything else.
+- **Credit Events:** the feed. Filter by severity, source, period or customer, or show only the **Customer summaries** (customers flagged by several agents).
+- **Actions:** proposed decisions waiting for approval, each linked to the events behind it.
+- **Customers, AR Aging, Payment Behaviour, News, SEC Filings:** each analyst's data, customer by customer.
+- **Industry, Country and FX Risk:** the sectors, countries and currencies the portfolio is exposed to, and what changed.
+- **New customers:** onboarding a new account. The company is looked up in official registers (Company Lookup), screened against sanctions lists, scored (Keen by default, or a third-party rating the credit team brings), and given a proposed limit for a credit manager to approve. Customers never use CreditPilot themselves.
+- **Settings:** the company's rules (which score comes first, how old financial statements may be, when each agent runs) and **Connectors**, every data source and whether it is connected.
 
 ---
 
 ## How severity works
 
-Every finding in CreditPilot carries one of the same severity levels, wherever it appears: Credit Events, Actions, News, a customer's page and the assistant's answers.
+Every finding has one of the same levels, everywhere in the app.
 
 | Severity | What it means | What to do |
 |---|---|---|
@@ -91,29 +49,47 @@ Every finding in CreditPilot carries one of the same severity levels, wherever i
 | **Medium** | Something to watch. | Keep an eye on it; it counts if other signs appear. |
 | **Low** | Minor or early. | Noted; no action needed on its own. |
 
-Good news, such as a customer starting to pay faster, is recorded as low or as information only.
+Good news, such as a customer paying faster, is recorded as low or as information only.
 
-Each agent decides the severity of what it finds by fixed rules, so the same facts always give the same severity. Some examples:
+Each agent sets severity by fixed rules, so the same facts always give the same level. Some examples:
 
-- **AR aging:** critical when a customer is over its credit limit or has invoices more than 90 days overdue; high at 61–90 days, or close to the limit (over 80%) when other signs are weak; medium at 31–60 days; low at 1–30 days.
-- **Payments:** critical when a customer pays 20 or more days later than in the period before; high at 10–20 days later; medium when slightly later.
+- **AR aging:** critical when a customer is over its credit limit or has invoices more than 90 days overdue; high at 61–90 days, or above 80% of the limit when other signs are weak; medium at 31–60 days; low at 1–30 days.
+- **Payments:** critical when a customer pays 20 or more days later than before; high at 10–20 days; medium when slightly later.
 - **SEC filings:** critical for a going-concern doubt; high for a covenant waiver or a CEO departure; medium for other warnings.
-- **Credit score:** critical when a score falls 30 points or more; high at 20 or more; medium at 10 or more; low below that.
-- **Exchange rates:** critical when an invoice currency moved 10% or more against you in 30 days; high at 6% or more.
+- **Credit score:** critical for a fall of 30 points or more; high at 20; medium at 10; low below that.
+- **Exchange rates:** critical when an invoice currency moved 10% or more against you in 30 days; high at 6%.
 - **News:** each story is rated on how directly it threatens the customer's ability to pay.
 
-When several agents flag the same customer, the assistant writes one summary card, **Several warning signs**, rated at the severity of the most serious signal behind it. It proposes an **Action** (for example a lower credit limit) when the signs add up: three or more agents, two agents with a critical signal, or very high use of the credit limit. Nothing changes until a person approves it.
+When several agents flag the same customer, the CIA writes one **Several warning signs** card, rated at the severity of its most serious signal. It proposes an Action when the signs add up: three or more agents, two agents with a critical signal, or very high use of the credit limit.
 
-On Credit Events, choose **Critical** in the severity filter to see every critical event at once, or **Customer summaries** to see only the summary cards.
+---
+
+## The demo, and running it on your own data
+
+**The demo** runs on a sample portfolio, so anyone can try it without setup. On the sign-in page, try it as a credit manager, a credit analyst or a sales rep. The customer names are real companies used for illustration only: every score, limit, invoice, payment, event and news item about them is invented. The demo is shared by every visitor and replays the same story each day with today's dates. Real in the demo: New customers (official registers, sanctions lists, and Keen scores from SEC filings) and the CIA's answers, written live by an AI model (10 questions a day per visitor).
+
+**Your own data** stays yours: a company runs CreditPilot in its own Supabase project, or entirely locally, and nothing touches this project's infrastructure. The repo's RUN_IT_YOURSELF guide covers both.
+
+---
+
+## How it's built (for the curious)
+
+Each analyst is a small, independent program (a Supabase Edge Function) that does one job and writes its findings into the shared event log in a standard shape. Agents never call each other, so each one stays simple and testable on its own.
+
+A few rules hold everywhere:
+
+- **Real sources only.** A citation in a CIA answer is built from an actual record in the database, never generated by the AI.
+- **No AI arithmetic.** Totals, counts and lists are computed by the app; the AI explains them.
+- **Customer identity is never guessed.** Uploaded data (an AR file from an accounting system, say) is matched on real identifiers such as a customer code or DUNS number; a row that can't be matched for certain is rejected.
+
+New analysts can be added by anyone: a new agent watches one source and writes events in the same shape, and the CIA can read them straight away. CONTRIBUTING.md has the steps. To suggest the next one, open an issue describing the risk signal you'd want watched.
 
 ---
 
 ## Who's building this
 
-Hi, I'm Lars. I've spent the last two decades in trade and receivables finance. I started this project to try to push the limits of what's possible to build. I'm not married to a specific model, but this project has been built mainly using Claude Code.
+Hi, I'm Lars. I've spent the last two decades in trade and receivables finance, and I started this project to push the limits of what's possible to build. I'm not married to a specific model, but it has been built mainly with Claude Code.
 
-I truly believe that agents will run a big part of companies' finance and operations in the future. This is a good way to explore what that could look like — the advantages and challenges of building internal tools with AI.
+I believe agents will run a big part of companies' finance and operations. This is a way to explore what that could look like: the advantages and the challenges of building internal tools with AI.
 
-Follow along as new agents ship, or reach out if you're exploring something similar at your own company.
-
-Let's connect! [Connect on LinkedIn](https://www.linkedin.com/in/larsewallin/)
+Follow along as new agents ship, or reach out if you're exploring something similar at your own company. [Connect on LinkedIn](https://www.linkedin.com/in/larsewallin/)
