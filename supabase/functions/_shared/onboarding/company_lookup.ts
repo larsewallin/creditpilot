@@ -27,6 +27,18 @@ export interface LookupResult {
   city?: string | null;
   incorporated?: string | null;
   lei?: string | null;
+  /** The stock ticker when the search matched one (e.g. "EOSE"). */
+  ticker?: string | null;
+}
+
+/**
+ * Funds, ETFs and other investment vehicles are never trade customers (founder, 2026-11-18):
+ * they are left out of the application search. GLEIF marks funds (`kind: "fund"`); names
+ * catch the ones registered as ordinary entities ("EOSE 2x Daily ETF").
+ */
+const FUND_NAME = /\b(?:ETFs?|ETNs?|ETPs?|exchange[- ]traded|index fund|mutual fund|money market fund|UCITS|SICAV|unit trust|investment trust|closed[- ]end fund)\b/i;
+export function isInvestmentVehicle(r: { name?: string | null; kind?: string | null }): boolean {
+  return r.kind === "fund" || FUND_NAME.test(String(r.name ?? ""));
 }
 
 export interface LookupCard {
@@ -91,11 +103,11 @@ export function companyLookup(deps: LookupDeps = {}) {
       if (query.length < 2) return { error: "bad_request", message: "Type at least 2 characters" };
       const params = new URLSearchParams({ q: query.slice(0, 120) });
       if (country && /^[A-Za-z]{2}$/.test(country)) params.set("country", country.toUpperCase());
-      const r = await get<{ results?: LookupResult[]; warnings?: string[] }>(`/api/search?${params}`);
+      const r = await get<{ results?: (LookupResult & { kind?: string | null })[]; warnings?: string[] }>(`/api/search?${params}`);
       if ("error" in r) return r;
       return {
-        results: (r.results ?? []).map((x) => ({ id: x.id, name: x.name, country: x.country ?? null, source: x.source, number: x.number ?? null,
-          status: x.status ?? null, city: x.city ?? null, incorporated: x.incorporated ?? null, lei: x.lei ?? null })),
+        results: (r.results ?? []).filter((x) => !isInvestmentVehicle(x)).map((x) => ({ id: x.id, name: x.name, country: x.country ?? null, source: x.source, number: x.number ?? null,
+          status: x.status ?? null, city: x.city ?? null, incorporated: x.incorporated ?? null, lei: x.lei ?? null, ticker: x.ticker ?? null })),
         warnings: r.warnings ?? [],
       };
     },
