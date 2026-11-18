@@ -24,6 +24,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.98.0";
 import { AuthError, requireUser } from "../_shared/auth.ts";
+import { inBackground, replayDemoAgents } from "../_shared/demo_replay.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -231,6 +232,14 @@ Deno.serve(async (req) => {
         console.error("[demo-actions:reset] payment date reset failed:", paymentDateError.message);
       }
 
+      // Then the agents, on the server, so the replay finishes even if the visitor
+      // closes the page (body.replay === false: state only, the caller runs them).
+      if (body?.replay !== false) {
+        const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+        const pending = inBackground(replayDemoAgents(Deno.env.get("SUPABASE_URL")!, anonKey, {}, "demo-actions:reset"));
+        if (pending) await pending;
+        return json({ ok: true, replay: "started" });
+      }
       return json({ ok: true });
     }
 

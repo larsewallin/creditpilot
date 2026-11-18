@@ -98,31 +98,17 @@ export async function initDemo() {
   });
   if (resetError) console.error("[initDemo] reset failed:", resetError.message);
 
-  // ── 2. Invoke all agents ──────────────────────────────────────────────────
-
-  await Promise.all([
-    supabase.functions.invoke("ar-aging-agent", { body: { triggered_by: "auto" } }),
-    supabase.functions.invoke("news-monitor-agent", { body: { triggered_by: "auto" } }),
-    supabase.functions.invoke("sec-monitor-agent", { body: { triggered_by: "auto" } }),
-    // Added 2026-09-30 (F1): these two were previously never invoked on reset,
-    // so a demo reset never refreshed their events even though both agents
-    // self-reset their own prior demo credit_events each run (see A5/A6).
-    supabase.functions.invoke("payment-behaviour-agent", { body: { triggered_by: "auto" } }),
-    supabase.functions.invoke("industry-risk-agent", { body: { triggered_by: "auto" } }),
-    supabase.functions.invoke("credit-rating-agent", { body: { triggered_by: "auto" } }),
-    supabase.functions.invoke("country-risk-agent", { body: { triggered_by: "auto" } }),
-    supabase.functions.invoke("fx-risk-agent", { body: { triggered_by: "auto" } }),
-  ]);
-  // The Risk Agent maps the Country/Industry/FX macro events onto customers, so it must run
-  // after those three finish and before cia-agent reads the events.
-  await supabase.functions.invoke("risk-agent", { body: { triggered_by: "auto" } });
-  // skip_briefing: true -- a reset's cia-agent call has no need to spend real
-  // Anthropic tokens on the DAILY_BRIEFING text, which has no UI surface
-  // (CreditEvents.tsx excludes it) and feeds nothing the Actions/Credit
-  // Events pages actually display -- composite-risk events and
-  // pending_actions are computed independent of it. See CIARequest's
-  // skip_briefing doc comment in cia-agent/index.ts (2026-10-02).
-  await supabase.functions.invoke("cia-agent", { body: { skip_briefing: true } });
+  // ── 2. Agents ─────────────────────────────────────────────────────────────
+  // demo-actions runs every agent on the server after the reset (it keeps going if this
+  // page closes). Wait here until CIA has proposed the actions again, at most 90 s.
+  const deadline = Date.now() + 90_000;
+  const startedAt = new Date(Date.now() - 5_000).toISOString();
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 3_000));
+    const { count } = await supabase.from("pending_actions").select("id", { count: "exact", head: true })
+      .eq("is_demo", true).eq("status", "pending").gte("created_at", startedAt);
+    if ((count ?? 0) > 0) break;
+  }
 
   // ── 3. Mark demo as initialized ───────────────────────────────────────────
 
