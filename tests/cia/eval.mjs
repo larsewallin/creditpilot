@@ -46,6 +46,23 @@ const truth = {
   aerospace: Number(one(`select coalesce(sum(current_exposure),0) from customers where ${ACTIVE} and sector = 'Aerospace & Defense'`)),
 };
 console.log("Ground truth:", JSON.stringify(truth, null, 1), "\n");
+// Customer-level facts a user sees on Customers, the customer drawer, AR Aging and Payment Behaviour.
+const cust = (name) => sql(`select payment_terms_days, credit_rating_score, credit_rating_raw, credit_rating_previous_score, account_manager, invoicing_currency, credit_limit, current_exposure from customers where company_name ilike '${name}%' limit 1`)[0] ?? [];
+const pay = (name) => sql(`select current_avg_days_late, prior_avg_days_late, round(current_on_time_rate * 100, 1), round(all_time_on_time_rate * 100, 1) from v_payment_behaviour_current where company_name ilike '${name}%' limit 1`)[0]?.map(Number) ?? [];
+const aging = (name) => sql(`select bucket_1_30, bucket_31_60, bucket_61_90, bucket_over_90, current_amount, total_invoice_count from v_ar_aging_current where company_name ilike '${name}%' limit 1`)[0]?.map(Number) ?? [];
+const lastPay = (name) => sql(`select p.payment_date, p.days_early_late from payment_transactions p join customers c on c.id = p.customer_id where c.company_name ilike '${name}%' order by p.payment_date desc limit 1`)[0] ?? [];
+const overdueInvoices = (name) => col(`select i.invoice_number from invoices i join customers c on c.id = i.customer_id where c.company_name ilike '${name}%' and i.outstanding_amount > 0 and i.days_overdue > 0 and i.status::text is distinct from 'pre_petition' order by i.days_overdue desc limit 5`);
+const oldestOverdue = (name) => Number(one(`select coalesce(max(i.days_overdue),0) from invoices i join customers c on c.id = i.customer_id where c.company_name ilike '${name}%' and i.outstanding_amount > 0 and i.status::text is distinct from 'pre_petition'`));
+const C = {
+  arconic: cust("Arconic"), triumph: cust("Triumph"), lockheed: cust("Lockheed"), heliogen: cust("Heliogen"), kaman: cust("Kaman"), nordsee: cust("Nordsee"),
+  triumphPay: pay("Triumph"), brixtonPay: pay("Brixton"), triumphAging: aging("Triumph"), arconicAging: aging("Arconic"),
+  triumphLast: lastPay("Triumph"), arconicOverdue: overdueInvoices("Arconic"), arconicOldest: oldestOverdue("Arconic"),
+  germany: Number(one(`select coalesce(sum(current_exposure),0) from customers where ${ACTIVE} and country_code = 'DE'`)),
+  portfolioDaysLate: Number(one("select avg_days_early_late from v_payment_behaviour_portfolio")),
+  deteriorating: col(`select company_name from v_payment_behaviour_current where deterioration_severity in ('critical','high') order by company_name`),
+};
+console.log("Customer-level truth:", JSON.stringify(C, null, 1), "\n");
+
 
 // ── asking ──────────────────────────────────────────────────────────────────────
 async function ask(question) {
@@ -75,7 +92,7 @@ function numbersIn(text) {
   }
   return out;
 }
-const hasNumber = (text, want) => numbersIn(text).some((n) => Math.abs(n - want) <= Math.max(1, Math.abs(want) * 0.005));
+const hasNumber = (text, want) => numbersIn(text).some((n) => Math.abs(n - want) <= Math.max(Math.abs(want) < 100 ? 0.6 : 1, Math.abs(want) * 0.005));
 const key = (name) => name.replace(/\b(Inc|Corp|Corporation|Ltd|LLC|Company|Group|Holding|Co)\b\.?/gi, "").split(/[\s(,-]+/).filter(Boolean)[0];
 const mentions = (text, name) => text.toLowerCase().includes(key(name).toLowerCase());
 
@@ -99,6 +116,29 @@ const CASES = [
   { q: "How many proposed actions are waiting for approval?", check: (a) => [hasNumber(a, truth.pendingCount) || `pending count ${truth.pendingCount} not in answer`] },
   { q: "Which customers are in bankruptcy?", check: (a) => truth.prePetition.map((n) => mentions(a, n) || `${n} (pre-petition) missing`) },
   { q: "What is our total exposure to the aerospace sector?", check: (a) => [hasNumber(a, truth.aerospace) || `aerospace exposure ${truth.aerospace} not in answer`] },
+  // ── Customer level: what a user sees on Customers, AR Aging and Payment Behaviour ──
+  { q: "What are Arconic's payment terms?", check: (a) => [hasNumber(a, Number(C.arconic[0])) || `terms ${C.arconic[0]} days missing`] },
+  { q: "What is Lockheed Martin's credit score and rating?", check: (a) => [
+      hasNumber(a, Number(C.lockheed[1])) || `score ${C.lockheed[1]} missing`, !C.lockheed[2] || a.includes(C.lockheed[2]) || `rating ${C.lockheed[2]} missing`] },
+  { q: "What was Heliogen's previous credit score, and what is it now?", check: (a) => [
+      hasNumber(a, Number(C.heliogen[3])) || `previous score ${C.heliogen[3]} missing`, hasNumber(a, Number(C.heliogen[1])) || `score ${C.heliogen[1]} missing`] },
+  { q: "Who is the account manager for Kaman?", check: (a) => [!C.kaman[4] || a.includes(C.kaman[4].split(" ")[0]) || `account manager ${C.kaman[4]} missing`] },
+  { q: "What currency does Nordsee Erdgas invoice in?", check: (a) => [!C.nordsee[5] || a.includes(C.nordsee[5]) || /euro/i.test(a) || `currency ${C.nordsee[5]} missing`] },
+  { q: "How late does Triumph Group pay now compared with before?", check: (a) => [
+      hasNumber(a, C.triumphPay[0]) || `current avg days late ${C.triumphPay[0]} missing`, hasNumber(a, C.triumphPay[1]) || `prior ${C.triumphPay[1]} missing`] },
+  { q: "What is Brixton Fasteners' on-time payment rate?", check: (a) => [
+      hasNumber(a, C.brixtonPay[2]) || hasNumber(a, C.brixtonPay[3]) || `on-time rate ${C.brixtonPay[2]}% (recent) or ${C.brixtonPay[3]}% (all time) missing`] },
+  { q: "When did Triumph Group last pay us, and how late was it?", check: (a) => [
+      (C.triumphLast[0] && (a.includes(C.triumphLast[0]) || a.includes(new Date(C.triumphLast[0]).toLocaleDateString("en-US", { month: "long", day: "numeric", timeZone: "UTC" })))) || `last payment ${C.triumphLast[0]} missing`,
+      hasNumber(a, Math.abs(Number(C.triumphLast[1]))) || `days late ${C.triumphLast[1]} missing`] },
+  { q: "Show Triumph Group's AR aging by bucket.", check: (a) => C.triumphAging.slice(0, 4).filter((v) => v > 0).map((v) => hasNumber(a, v) || `bucket ${v} missing`) },
+  { q: "How many open invoices does Arconic have, and how overdue is the oldest?", check: (a) => [
+      hasNumber(a, C.arconicAging[5]) || `invoice count ${C.arconicAging[5]} missing`, hasNumber(a, C.arconicOldest) || `oldest ${C.arconicOldest} days missing`] },
+  { q: "List Arconic's overdue invoices.", check: (a) => C.arconicOverdue.map((n) => a.includes(n) || `invoice ${n} missing`) },
+  { q: "What is Arconic's credit utilization?", check: (a) => [hasNumber(a, Math.round(Number(C.arconic[7]) / Number(C.arconic[6]) * 1000) / 10) || hasNumber(a, Math.round(Number(C.arconic[7]) / Number(C.arconic[6]) * 100)) || "utilization missing"] },
+  { q: "What is our total exposure to customers in Germany?", check: (a) => [hasNumber(a, C.germany) || `Germany exposure ${C.germany} missing`] },
+  { q: "On average, how many days late do customers pay?", check: (a) => [hasNumber(a, C.portfolioDaysLate) || `portfolio avg ${C.portfolioDaysLate} missing`] },
+  { q: "Which customers' payments are getting worse?", check: (a) => C.deteriorating.map((n) => mentions(a, n) || `${n} (deteriorating) missing`) },
   { q: "Which customers are flagged by three or more agents?", check: () => [] },
   { q: "Should we be worried about Lockheed Martin?", check: () => [] },
   { q: "Tell me about Acme Widgets Corp", check: (a) => [/don't have that information/i.test(a) || "should say it has no information"] },
