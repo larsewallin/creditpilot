@@ -1546,7 +1546,15 @@ serve(async (req: Request) => {
         )
         // Section names the model sometimes cites ("[OFFICIAL AR AGING PORTFOLIO TOTALS]")
         // are internal labels, never shown to the user (seen 2026-11-17).
-        .replace(/\s*\[(?:OFFICIAL[^\]]*|pending actions?|bankruptcy list|multi-signal convergence list|high-risk customer list)\]/gi, "")
+        .replace(/\s*\[(?:[^\]]*OFFICIAL[^\]]*|pending actions?|bankruptcy list|multi-signal convergence list|high-risk customer list)\]/gi, "")
+        // Section names in prose ("Based on the OFFICIAL MULTI-SIGNAL CONVERGENCE LIST, …").
+        .replace(/\b(?:based on|according to|per|from) the \*{0,2}OFFICIAL [A-Z0-9 &()—–\-]+?\*{0,2}(?:,|:)\s*/gi, "")
+        .replace(/\*{0,2}OFFICIAL [A-Z0-9 &()—–\-]*(?:LIST|TOTALS?|SUMMARY)\*{0,2}/g, "the data")
+        .replace(/(^|\n)([ \t*]*)([a-z])/g, (_m, a: string, b: string, c: string) => a + b + c.toUpperCase())
+        // Agents by their readable names, not their internal ones.
+        .replace(/\b(ar_aging|payment_behaviour|news_monitor|sec_monitor|credit_rating|industry_risk|country_risk|fx_risk|risk)_agent\b/g, (_m, a: string) =>
+          ({ ar_aging: "AR aging", payment_behaviour: "payments", news_monitor: "news", sec_monitor: "SEC filings", credit_rating: "credit score",
+             industry_risk: "industry", country_risk: "country", fx_risk: "FX", risk: "risk" } as Record<string, string>)[a] ?? a)
         .replace(/\s+([.,;:!?])/g, "$1")
         .replace(/[ \t]{2,}/g, " ")
         .trim();
