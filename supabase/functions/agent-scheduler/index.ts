@@ -110,10 +110,6 @@ Deno.serve(async (req) => {
 
 const DEMO_REFRESH = "scheduler:demo_refresh";
 const DEMO_REFRESH_HOUR_NY = 4;
-const DEMO_AGENTS = [
-  "ar-aging-agent", "news-monitor-agent", "sec-monitor-agent", "payment-behaviour-agent",
-  "industry-risk-agent", "credit-rating-agent", "country-risk-agent", "fx-risk-agent",
-];
 
 function newYorkParts(d: Date): { day: string; hour: number } {
   const f = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23" });
@@ -142,13 +138,7 @@ async function maybeRefreshDemo(db: any, url: string, anonKey: string, secret: s
       await r.body?.cancel();
     } catch (e) { console.error(`[agent-scheduler] demo refresh: ${fn} failed:`, e instanceof Error ? e.message : String(e)); }
   };
-  const run = (async () => {
-    await call("demo-actions", { action: "reset" });
-    await Promise.all(DEMO_AGENTS.map((fn) => call(fn, { triggered_by: "schedule" })));
-    await call("risk-agent", { triggered_by: "schedule" });
-    await call("cia-agent", { skip_briefing: true, triggered_by: "schedule" });
-  })();
-  if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(run);
-  else await run;
+  // demo-actions' reset replays the agents itself (server side, see _shared/demo_replay.ts).
+  await call("demo-actions", { action: "reset" });
   return "started";
 }
