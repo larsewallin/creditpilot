@@ -19,7 +19,7 @@ import type {
 } from "./types.ts";
 import { ONBOARDING_DEFAULTS } from "./settings.ts";
 import { financialsAge, statementFromKeen } from "./keen_statements.ts";
-import { PROVIDER, SCORE_PROVIDERS } from "./score_providers.ts";
+import { activeScoreOrder, PROVIDER, SCORE_PROVIDERS } from "./score_providers.ts";
 import { selectCreditScore } from "../skills/analytical/select-credit-score.ts";
 import { calculateOnboardingLimit, scoreToBand } from "../skills/analytical/calculate-onboarding-limit.ts";
 import { matchSanctionsName, normalize, prepareSanctionsList, type PreparedEntry } from "../skills/analytical/match-sanctions-name.ts";
@@ -34,6 +34,12 @@ export interface RunOptions {
     hits?: { subject: string; list_entry: string }[];
     fraud_flags_accepted?: boolean;
   };
+  /** The public demo: every application gets this score, so the demo shows the workflow, not
+   *  the data (founder, 2026-11-18). Never set outside the demo. */
+  demoScore?: number;
+  /** Keen paused (KEEN_IN_ONBOARDING false): not asked for a score, and every application above
+   *  the threshold needs a third-party score. The edge function sets it; tests choose. */
+  keenPaused?: boolean;
 }
 
 const REG_B_INCOMPLETE_DAYS = 30;
@@ -69,7 +75,7 @@ export async function runOnboarding(
 
   // ─── 2. Completeness ───────────────────────────────────────────────────────
   out.stopped_at = "completeness";
-  const missing = completenessGaps(app, settings, asOf);
+  const missing = completenessGaps(app, settings, asOf, !!opts.keenPaused).filter((m) => !(m === "credit_score" && opts.demoScore !== undefined));
   if (missing.length) {
     out.completeness = { status: "incomplete", missing, reg_b_clock_days: REG_B_INCOMPLETE_DAYS };
     out.events.push("APPLICATION_INCOMPLETE");
@@ -122,7 +128,9 @@ export async function runOnboarding(
 
   // One score counts: the first source in the company's priority list that has one
   // (Keen if the company uses it, then whatever else it uses). Never an average.
-  const picked = await selectCreditScore(settings.sources.score_order, {
+  const picked = opts.demoScore !== undefined
+    ? { source: "demo", result: { score: opts.demoScore, raw: `Demo score ${opts.demoScore}` } as { score: number; raw: string; max_credit_recommendation_usd?: number; keen?: unknown }, fallbacks: [], used_fallback: false }
+    : await selectCreditScore(opts.keenPaused ? activeScoreOrder(settings.sources.score_order) : settings.sources.score_order, {
     keen: async () => {
       const r = await providers.keenScore(app, statement ? [statement] : app.financial_statements);
       if ("error" in r) return { error: r.reason ? `${r.error}:${r.reason}` : r.error };
@@ -210,16 +218,18 @@ export async function runOnboarding(
 
 // ─── Completeness ────────────────────────────────────────────────────────────
 
-function completenessGaps(app: CreditApplication, s: OnboardingSettings, asOf: string): string[] {
+function completenessGaps(app: CreditApplication, s: OnboardingSettings, asOf: string, keenPaused: boolean): string[] {
   const missing: string[] = [];
   if (!app.legal_name?.trim()) missing.push("legal_name");
   if (!app.country_code) missing.push("country_code");
   if (!app.credit_request.amount_usd) missing.push("credit_request.amount_usd");
   if ((app.trade_references?.length ?? 0) < s.template.min_trade_references) missing.push("trade_references");
-  // A private company above the threshold needs a credit score: Keen from statements, or a
-  // third-party score or rating (founder, 2026-11-18: the form no longer takes statements).
-  if (!app.is_public && (app.credit_request.amount_usd ?? 0) > s.template.statements_required_above_usd
-    && !app.financial_statements.length && !app.keen_statements && !(app.provider_scores ?? []).length) {
+  // Above the threshold a credit score is needed. With Keen: a private company's statements (a
+  // listed one is read from its 10-K) or a third-party score. Keen paused (founder, 2026-11-18):
+  // every company needs the credit provider's report.
+  const hasScoreSource = (app.provider_scores ?? []).length > 0 || !!app.bureau_report || app.financial_statements.length > 0
+    || (!keenPaused && (app.is_public || !!app.keen_statements));
+  if ((app.credit_request.amount_usd ?? 0) > s.template.statements_required_above_usd && !hasScoreSource) {
     missing.push("credit_score");
   }
   const age = app.date_established ? monthsBetween(app.date_established, asOf) : undefined;

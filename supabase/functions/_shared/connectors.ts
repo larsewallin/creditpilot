@@ -62,13 +62,12 @@ export const CONNECTORS: Connector[] = [
 
   { key: "sanctions_lists", category: "sanctions", name: "OFAC, EU, UN and UK lists", feeds: "New customers and their owners are screened; lists sync daily", settings: [], kind: "built_in" },
 
-  { key: "keen", category: "scores", name: "Keen", feeds: "Default score (0–100) from a company's financial statements; re-scores customers when a new 10-K is filed",
-    settings: ["KEEN_API_KEY", "KEEN_API_URL"], kind: "key", code: "_shared/onboarding/score_providers.ts", demo_sample: true },
-  { key: "third_party_scores", category: "scores", name: "D&B, Creditsafe, Coface, Allianz Trade, Experian, other ratings", feeds: "Your own provider's score, entered from its report on the application; put it first in Credit score source",
+  { key: "third_party_scores", category: "scores", name: "D&B, Creditsafe, Coface, Allianz Trade, Experian, other ratings", feeds: "Default: the provider's report attached on the application, with the score or rating it gives",
     settings: [], kind: "manual", code: "_shared/onboarding/score_providers.ts (fetch hook for an API connection)" },
+  { key: "keen", category: "scores", name: "Keen", feeds: "Score (0–100) from a company's financial statements. Paused until fully developed (KEEN_IN_ONBOARDING)",
+    settings: ["KEEN_API_KEY", "KEEN_API_URL"], kind: "planned", code: "_shared/onboarding/score_providers.ts" },
 
-  { key: "sec_edgar_financials", category: "financials", name: "SEC EDGAR (US-listed)", feeds: "Latest 10-K, read by Keen", settings: [], kind: "built_in" },
-  { key: "statements_entry", category: "financials", name: "Entered statements (private companies)", feeds: "The credit team types the accounts into Keen's template on the application", settings: [], kind: "manual" },
+  { key: "sec_edgar_financials", category: "financials", name: "SEC EDGAR (US-listed)", feeds: "Latest 10-K figures for the limit caps", settings: [], kind: "built_in" },
   { key: "fmp_financials", category: "financials", name: "Financial Modeling Prep", feeds: "Financials of listed companies outside the US", settings: ["FMP_API_KEY"], kind: "key", optional: true },
 
   { key: "tavily", category: "news", name: "Tavily news search", feeds: "News agent: web news naming each customer", settings: ["TAVILY_API_KEY"], kind: "key", optional: true,
@@ -111,8 +110,6 @@ export function connectorStatuses(has: (name: string) => boolean): ConnectorView
     else if (c.kind === "planned") status = "planned";
     else if (c.kind === "default_url") status = missing.length ? "default" : "connected";
     else status = missing.length === 0 ? "connected" : "not_set";
-    // Keen's URL has a default; its key is what connects it.
-    if (c.key === "keen") status = has("KEEN_API_KEY") ? "connected" : "not_set";
     if (c.key === "email") status = has("SENDGRID_API_KEY") ? "connected" : "not_set";
     return { ...c, status, missing: status === "connected" ? [] : missing };
   });

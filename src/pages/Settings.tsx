@@ -1,6 +1,6 @@
 /**
  * Company settings the credit team changes without code: which credit score counts
- * (Keen by default, or D&B, Creditsafe, Coface, Allianz Trade, Experian, another
+ * (the credit provider's report: D&B, Creditsafe, Coface, Allianz Trade, Experian, another
  * provider), how old accounts may be at each score, and when each agent runs. Admins and credit managers
  * save; everyone else sees them.
  */
@@ -85,7 +85,7 @@ export default function Settings() {
 
       <section className="bg-card rounded-xl border p-4 space-y-3 text-xs">
         <h2 className="text-sm font-semibold">Credit score source</h2>
-        <p className="text-muted-foreground">The first source in this list that has a score for a company counts; scores are never averaged. Keen is the default. If you use Dun &amp; Bradstreet, Creditsafe, Coface, Allianz Trade, Experian or another provider, move it to the top. Its score is typed from the provider's report on the application and put on the same 0–100 scale (higher is safer).</p>
+        <p className="text-muted-foreground">The first source in this list that has a score for a company counts; scores are never averaged. Put the provider you use (Dun &amp; Bradstreet, Creditsafe, Coface, Allianz Trade, Experian or another) at the top. Its report is attached on the application with the score it gives, put on the same 0–100 scale (higher is safer).</p>
         <ol className="divide-y divide-border rounded-lg border">
           {order.map((id, i) => (
             <li key={id} className="flex items-center gap-3 px-3 py-2">

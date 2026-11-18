@@ -10,12 +10,12 @@ describe("connectors", () => {
   it("status follows which settings are present, never their values", () => {
     const none = connectorStatuses(() => false);
     const by = (v: typeof none, k: string) => v.find((c) => c.key === k)!;
-    expect(by(none, "keen").status).toBe("not_set");
+    expect(by(none, "keen").status).toBe("planned");   // paused (founder, 2026-11-18)
     expect(by(none, "company_lookup").status).toBe("default");
     expect(by(none, "sec_edgar").status).toBe("built_in");
     expect(by(none, "tavily").missing).toEqual(["TAVILY_API_KEY"]);
     const all = connectorStatuses(() => true);
-    expect(by(all, "keen").status).toBe("connected");
+    expect(by(all, "keen").status).toBe("planned");
     expect(by(all, "tavily").missing).toEqual([]);
   });
 });

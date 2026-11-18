@@ -541,6 +541,21 @@ const PROVIDER_NAME: Record<string, string> = {
   dnb: "Dun & Bradstreet", creditsafe: "Creditsafe", coface: "Coface", allianz_trade: "Allianz Trade", experian: "Experian", other: "Third-party rating", bureau_report: "Uploaded bureau report",
 };
 
+/** Opens a stored provider report through a 10-minute link. */
+function ReportLink({ report }: { report: { path: string; file_name: string } }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <button type="button" className="text-primary underline disabled:opacity-50" disabled={busy}
+      onClick={async () => {
+        setBusy(true);
+        try { const r = await callOnboarding<{ url: string }>({ action: "report_url", path: report.path }); window.open(r.url, "_blank", "noopener"); }
+        catch (e) { toast.error((e as Error).message); } finally { setBusy(false); }
+      }}>
+      {busy ? "Opening…" : `Report: ${report.file_name}`}
+    </button>
+  );
+}
+
 function AnalysisView({ o, scores, memo, a }: { o: any; scores: any[]; memo?: any; a: any }) {
   const an = o.analysis;
   if (!an) return <Panel title="Credit analysis"><p className="text-xs text-muted-foreground">Analysis runs after screening passes.</p></Panel>;
@@ -562,7 +577,14 @@ function AnalysisView({ o, scores, memo, a }: { o: any; scores: any[]; memo?: an
     <div className="space-y-3 text-xs">
       <Panel title="Credit data sources">
         <div className="grid gap-2 grid-cols-2 lg:grid-cols-4">
-          {SOURCE_TILES.map((t) => {
+          {an.score_source === "demo" && (
+            <div className="rounded-lg border p-3 space-y-1 border-primary/40 bg-primary/5">
+              <p className="font-semibold">Demo score</p>
+              <p className="text-muted-foreground">Every demo application is scored {an.score}, so the demo shows the workflow, not the data.</p>
+              <p className="text-primary font-medium">Used: {an.score} on 0–100 (band {an.band})</p>
+            </div>
+          )}
+          {SOURCE_TILES.filter((t) => t.key !== "keen" || an.keen || scores.some((x) => x.provider === "keen")).map((t) => {
             const st = tile(t.key);
             return (
               <div key={t.key} className={cn("rounded-lg border p-3 space-y-1", st.state === "used" ? "border-primary/40 bg-primary/5" : "")}>
@@ -579,6 +601,7 @@ function AnalysisView({ o, scores, memo, a }: { o: any; scores: any[]; memo?: an
               <div key={i} className={cn("rounded-lg border p-3 space-y-1", used ? "border-primary/40 bg-primary/5" : "")}>
                 <p className="font-semibold">{p.provider === "other" && p.name ? p.name : PROVIDER_NAME[p.provider] ?? p.provider}</p>
                 <p className="text-muted-foreground">Entered from its report{p.as_of ? ` of ${p.as_of}` : ""}: {p.raw}</p>
+                {p.report?.path && <ReportLink report={p.report} />}
                 <p className={cn(used ? "text-primary font-medium" : gap ? "text-amber-700" : "text-muted-foreground")}>
                   {used ? `Used: ${an.score} on 0–100 (band ${an.band})` : gap ? (gap.reason === "not_a_score" ? "Not on the provider's scale" : gap.reason.replace(/_/g, " ")) : "Not needed: a source higher in Settings had a score"}
                 </p>

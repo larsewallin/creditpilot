@@ -33,7 +33,7 @@ The **Credit Intelligence Agent (CIA)** watches nothing itself. It reads what th
 - **Actions:** proposed decisions waiting for approval, each linked to the events behind it.
 - **Customers, AR Aging, Payment Behaviour, News, SEC Filings:** each analyst's data, customer by customer.
 - **Industry, Country and FX Risk:** the sectors, countries and currencies the portfolio is exposed to, and what changed.
-- **New customers:** onboarding a new account. The company is looked up in official registers (Company Lookup), screened against sanctions lists, scored (Keen by default, or a third-party rating the credit team brings), and given a proposed limit for a credit manager to approve. Customers never use CreditPilot themselves.
+- **New customers:** onboarding a new account. The company is looked up in official registers (Company Lookup), screened against sanctions lists, scored from the credit provider's report the credit team attaches (D&B, Creditsafe, Coface, Allianz Trade, Experian…), and given a proposed limit for a credit manager to approve. Customers never use CreditPilot themselves.
 - **Settings:** the company's rules (which score comes first, how old financial statements may be, when each agent runs) and **Connectors**, every data source and whether it is connected.
 
 ---
@@ -66,7 +66,7 @@ When several agents flag the same customer, the CIA writes one **Several warning
 
 ## The demo, and running it on your own data
 
-**The demo** runs on a sample portfolio, so anyone can try it without setup. On the sign-in page, try it as a credit manager, a credit analyst or a sales rep. The customer names are real companies used for illustration only: every score, limit, invoice, payment, event and news item about them is invented. The demo is shared by every visitor and replays the same story each day with today's dates. Real in the demo: New customers (official registers, sanctions lists, and Keen scores from SEC filings) and the CIA's answers, written live by an AI model (10 questions a day per visitor).
+**The demo** runs on a sample portfolio, so anyone can try it without setup. On the sign-in page, try it as a credit manager, a credit analyst or a sales rep. The customer names are real companies used for illustration only: every score, limit, invoice, payment, event and news item about them is invented. The demo is shared by every visitor and replays the same story each day with today's dates. Real in the demo: New customers' official registers and sanctions lists (every demo application is scored 55, so the demo follows the workflow, not the data) and the CIA's answers, written live by an AI model (10 questions a day per visitor).
 
 **Your own data** stays yours: a company runs CreditPilot in its own Supabase project, or entirely locally, and nothing touches this project's infrastructure. The repo's RUN_IT_YOURSELF guide covers both.
 

@@ -76,4 +76,29 @@ describe("pipeline", () => {
     const o = await runOnboarding(app, providers(90), { asOf: "2026-11-13" });
     expect(o.analysis?.score_source).toBe("keen");
   });
+
+  // Founder 2026-11-18: Keen paused in onboarding; the demo scores every application 55.
+  it("Keen paused: never asked, the provider's report counts", async () => {
+    let asked = false;
+    const p = { ...providers(90), async keenScore() { asked = true; return { provider: "keen", score: 90 }; } } as OnboardingProviders;
+    const o = await runOnboarding(app, p, { asOf: "2026-11-13", keenPaused: true });
+    expect(asked).toBe(false);
+    expect(o.analysis?.score_source).toBe("allianz_trade");
+    expect(o.analysis?.fallbacks.map((f) => f.provider)).not.toContain("keen");
+  });
+  it("Keen paused: a listed company above the threshold without a provider's report waits at Completeness", async () => {
+    const big = { ...app, is_public: true, financial_statements: [], provider_scores: [], credit_request: { ...app.credit_request, amount_usd: 400_000 } };
+    const o = await runOnboarding(big, providers(90), { asOf: "2026-11-13", keenPaused: true });
+    expect(o.completeness?.missing).toContain("credit_score");
+    const withKeen = await runOnboarding(big, providers(90), { asOf: "2026-11-13" });
+    expect(withKeen.completeness?.missing ?? []).not.toContain("credit_score");
+  });
+  it("demo: every application is scored 55 and never waits for a score", async () => {
+    const big = { ...app, financial_statements: [], provider_scores: [], credit_request: { ...app.credit_request, amount_usd: 400_000 } };
+    const o = await runOnboarding(big, providers(90), { asOf: "2026-11-13", keenPaused: true, demoScore: 55 });
+    expect(o.completeness?.missing ?? []).not.toContain("credit_score");
+    expect(o.analysis?.score_source).toBe("demo");
+    expect(o.analysis?.score).toBe(55);
+    expect(o.proposal).toBeDefined();
+  });
 });
