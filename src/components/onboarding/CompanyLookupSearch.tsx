@@ -26,7 +26,7 @@ export interface LookupPrefill {
   flags: { level: string; label: string; detail?: string }[];
 }
 
-interface Result { id: string; name: string; country: string | null; source: string; number?: string | null; status?: string | null; city?: string | null }
+interface Result { id: string; name: string; country: string | null; source: string; number?: string | null; status?: string | null; city?: string | null; ticker?: string | null }
 
 const FIELD_LABEL: Record<string, string> = {
   legal_name: "legal name", country_code: "country", registration_no: "registration number", cik: "SEC number (CIK)",
@@ -70,7 +70,7 @@ export function CompanyLookupSearch({ country, onPick }: { country: string; onPi
           <span className="ml-1">Search</span>
         </Button>
       </div>
-      <p className="text-[10px] text-muted-foreground">Searches the country above plus the global LEI register. Uses Company Lookup; you can still type every field by hand.</p>
+      <p className="text-[10px] text-muted-foreground">Searches the country above plus the global LEI register (funds and ETFs left out). Uses Company Lookup; if the company isn't found, fill in the form by hand.</p>
       {error && <p className="text-xs text-destructive">{error}</p>}
       {warnings.map((w) => <p key={w} className="text-[10px] text-muted-foreground">{w}</p>)}
       {results && results.length === 0 && <p className="text-xs text-muted-foreground">No match. Try another spelling, the registration number, or another country.</p>}
@@ -82,7 +82,7 @@ export function CompanyLookupSearch({ country, onPick }: { country: string; onPi
                 className="w-full text-left px-2 py-1.5 hover:bg-secondary/60 flex items-center justify-between gap-2">
                 <span>
                   <span className="font-medium">{r.name}</span>
-                  <span className="text-muted-foreground"> · {[r.country, r.city, r.number, r.status].filter(Boolean).join(" · ")}</span>
+                  <span className="text-muted-foreground"> · {[r.ticker ? `ticker ${r.ticker}` : null, r.country, r.city, r.number, r.status].filter(Boolean).join(" · ")}</span>
                 </span>
                 <span className="text-[10px] text-muted-foreground shrink-0">{busy === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : r.source}</span>
               </button>

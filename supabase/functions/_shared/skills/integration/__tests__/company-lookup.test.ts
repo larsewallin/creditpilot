@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { companyLookup, prefillFromCard, isCompanyId, cikFromCompanyId, type LookupCard } from "../../../onboarding/company_lookup";
+import { companyLookup, isInvestmentVehicle, prefillFromCard, isCompanyId, cikFromCompanyId, type LookupCard } from "../../../onboarding/company_lookup";
 
 const ok = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { "content-type": "application/json" } });
 const recorder = (respond: (url: string) => Response) => {
@@ -24,6 +24,21 @@ const CARD: LookupCard = {
 };
 
 describe("Company Lookup connector", () => {
+  it("leaves funds and ETFs out of the search (never trade customers)", async () => {
+    const { f } = recorder(() => ok({ results: [
+      { id: "us:sec-0001805077", name: "Eos Energy Enterprises, Inc.", country: "US", source: "SEC EDGAR", ticker: "EOSE" },
+      { id: "lei:529900RKUIAW62PB4R61", name: "EOSE 2x Daily ETF", country: "US", source: "GLEIF", kind: "fund" },
+      { id: "lei:X", name: "Tradr 2X Long EOSE Daily ETF", country: "US", source: "GLEIF" },
+      { id: "lei:Y", name: "Some Global Equity Fund", country: "US", source: "GLEIF", kind: "fund" },
+    ], warnings: [] }));
+    const r = await companyLookup({ fetch: f }).search("eose", "US");
+    expect("results" in r && r.results.map((x) => [x.name, x.ticker])).toEqual([["Eos Energy Enterprises, Inc.", "EOSE"]]);
+    for (const name of ["Northern Trust Corporation", "Fundamental Holdings Inc", "Etfield Ltd", "Trust Company of America"])
+      expect(isInvestmentVehicle({ name })).toBe(false);
+    for (const name of ["iShares MSCI World UCITS ETF", "Vanguard 500 Index Fund", "Templeton Emerging Markets Investment Trust PLC"])
+      expect(isInvestmentVehicle({ name })).toBe(true);
+  });
+
   it("searches the configured address and maps results", async () => {
     const { f, calls } = recorder(() => ok({ results: [{ id: "gb:00445790", name: "TESCO PLC", country: "GB", source: "Companies House", number: "00445790", status: "active" }], warnings: [] }));
     const r = await companyLookup({ baseUrl: "http://localhost:3000/", fetch: f }).search(" Tesco ", "gb");
