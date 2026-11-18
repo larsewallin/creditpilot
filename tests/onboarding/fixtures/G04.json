@@ -80,7 +80,7 @@
     "completeness": {
       "status": "incomplete",
       "missing_include": [
-        "financial_statements",
+        "credit_score",
         "trade_references"
       ],
       "reg_b_clock_days": 30

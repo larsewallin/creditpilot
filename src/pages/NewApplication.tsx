@@ -1,23 +1,25 @@
 /**
  * The credit team keys in a new customer's application (customers do not use CreditPilot).
  * "Load sample" fills a ready-made applicant. Submitting runs the whole pipeline and opens
- * the prospect page. Financials: a US-listed company's 10-K is read by Keen; any other
- * company's statements are entered here in Keen's lines and scored by Keen.
+ * the prospect page; /new-customers/:id/edit opens a submitted application to complete or
+ * correct it, and saving runs the checks again.
+ * Credit score (founder, 2026-11-18: no statements typed in): Keen by default, automatic for
+ * a US-listed company from its 10-K; otherwise a third-party score or rating.
  */
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { callOnboarding } from "@/lib/onboarding";
+import { callOnboarding, db } from "@/lib/onboarding";
 import { SAMPLE_APPLICATIONS } from "@/lib/onboardingSamples";
 import { CompanyLookupSearch, type LookupPrefill } from "@/components/onboarding/CompanyLookupSearch";
-import { KeenStatementsForm, type KeenStatements } from "@/components/onboarding/KeenStatementsForm";
-import { ProviderScoresForm, toProviderScores, fromProviderScores, type ProviderScoreRow } from "@/components/onboarding/ProviderScoresForm";
+import type { KeenStatements } from "@/components/onboarding/KeenStatementsForm";
+import { EMPTY_PROVIDER_ROW, ProviderScoresForm, toProviderScores, fromProviderScores, type ProviderScoreRow } from "@/components/onboarding/ProviderScoresForm";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -86,15 +88,43 @@ function toApplication(f: Form) {
 export default function NewApplication() {
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { id: editId } = useParams();
   const [f, setF] = useState<Form>(EMPTY_FORM);
-  const [formKey, setFormKey] = useState(0);
   const [sample, setSample] = useState<string>("");
+  // Credit score source on this application: Keen (default) or a third-party score or rating.
+  const [scoreSource, setScoreSource] = useState<"keen" | "third_party">("keen");
+
+  // Editing a submitted application: load its answers once.
+  const existing = useQuery({
+    queryKey: ["application-edit", editId],
+    enabled: !!editId,
+    queryFn: async () => {
+      const { data, error } = await db.from("credit_applications").select("id, status, answers").eq("id", editId!).maybeSingle();
+      if (error) throw new Error(error.message);
+      return data as { id: string; status: string; answers: any } | null;
+    },
+  });
+  useEffect(() => {
+    if (!existing.data?.answers) return;
+    const form = fromApplication(existing.data.answers);
+    setF(form);
+    if (form.provider_scores.length) setScoreSource("third_party");
+  }, [existing.data]);
   const set = (k: keyof Form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setF((x) => ({ ...x, [k]: e.target.type === "checkbox" ? (e.target as HTMLInputElement).checked : e.target.value }));
 
   const submit = useMutation({
-    mutationFn: () => callOnboarding<{ application_id: string }>({ action: "submit", application: toApplication(f) }),
-    onSuccess: (r) => { qc.invalidateQueries(); toast.success("Submitted. The checks have run."); navigate(`/new-customers/${r.application_id}`); },
+    mutationFn: () => {
+      const application = { ...toApplication(f), ...(scoreSource === "keen" ? { provider_scores: [] } : {}) };
+      return editId
+        ? callOnboarding<{ application_id: string }>({ action: "update", application_id: editId, application })
+        : callOnboarding<{ application_id: string }>({ action: "submit", application });
+    },
+    onSuccess: (r) => {
+      qc.invalidateQueries();
+      toast.success(editId ? "Saved. The checks ran again." : "Submitted. The checks have run.");
+      navigate(`/new-customers/${r.application_id ?? editId}`);
+    },
     onError: (e) => toast.error((e as Error).message),
   });
 
@@ -122,21 +152,26 @@ export default function NewApplication() {
     is_public: p.is_public ?? x.is_public,
   }));
 
+  if (editId && existing.isLoading) return <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Loading…</div>;
+  if (editId && (existing.error || !existing.data)) return <p className="text-sm text-destructive">{existing.error ? (existing.error as Error).message : "Application not found."}</p>;
+  const locked = !!editId && ["decided", "withdrawn"].includes(existing.data?.status ?? "");
+
   return (
     <div className="space-y-5 pb-48 max-w-4xl">
-      <Link to="/new-customers" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="h-3.5 w-3.5" />New customers
+      <Link to={editId ? `/new-customers/${editId}` : "/new-customers"} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+        <ArrowLeft className="h-3.5 w-3.5" />{editId ? "Back to the application" : "New customers"}
       </Link>
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <h1 className="text-xl font-semibold text-foreground">New credit application</h1>
-        <div className="flex items-center gap-2">
-          <Select value={sample} onValueChange={(v) => { setSample(v); const s = SAMPLE_APPLICATIONS.find((x) => x.key === v); if (s) { setF(fromApplication(s.application)); setFormKey((k) => k + 1); } }}>
+        <h1 className="text-xl font-semibold text-foreground">{editId ? "Edit credit application" : "New credit application"}</h1>
+        {!editId && <div className="flex items-center gap-2">
+          <Select value={sample} onValueChange={(v) => { setSample(v); const s = SAMPLE_APPLICATIONS.find((x) => x.key === v); if (s) { const form = fromApplication(s.application); setF(form); setScoreSource(form.provider_scores.length ? "third_party" : "keen"); } }}>
             <SelectTrigger className="h-8 w-72 text-xs"><SelectValue placeholder="Load sample application…" /></SelectTrigger>
             <SelectContent>{SAMPLE_APPLICATIONS.map((s) => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}</SelectContent>
           </Select>
-        </div>
+        </div>}
       </div>
       {chosen && <p className="text-xs text-muted-foreground">Expected: {chosen.expect}.</p>}
+      {locked && <p className="text-xs text-destructive">This application is {existing.data?.status} and can no longer be edited.</p>}
 
       <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); submit.mutate(); }}>
         <section className="bg-card rounded-xl border p-4 grid gap-3 sm:grid-cols-2">
@@ -173,23 +208,30 @@ export default function NewApplication() {
             <Textarea value={f.trade_references} onChange={set("trade_references")} className="text-xs min-h-[90px]" /></label>
         </section>
 
-        {keenReadsFiling(f) ? (
-        <section className="bg-card rounded-xl border p-4 space-y-1">
-          <h2 className="text-sm font-semibold">Financials</h2>
-          <p className="text-xs">From the company's latest 10-K at the SEC, scored by Keen. Nothing to enter.</p>
-          <p className="text-xs text-muted-foreground">The score, the financial year end and how old the accounts are appear on the prospect page after you submit.</p>
-        </section>
-        ) : (
         <section className="bg-card rounded-xl border p-4 space-y-3">
-          <h2 className="text-sm font-semibold">Financial statements</h2>
-          <p className="text-xs text-muted-foreground">From the accounts the customer sent you. Keen scores them; the same figures set the limit caps.{f.legacy_statements.length > 0 && !f.keen ? " This sample carries short-form figures for the caps only." : ""}</p>
-          <KeenStatementsForm key={formKey} initial={f.keen} onChange={(keen) => setF((x) => ({ ...x, keen }))} />
-        </section>
-        )}
-
-        <section className="bg-card rounded-xl border p-4 space-y-3">
-          <h2 className="text-sm font-semibold">Scores from other credit providers (optional)</h2>
-          <ProviderScoresForm rows={f.provider_scores} onChange={(provider_scores) => setF((x) => ({ ...x, provider_scores }))} />
+          <h2 className="text-sm font-semibold">Credit score</h2>
+          <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Credit score source">
+            {([
+              ["keen", "Keen (default)", "Scored automatically from the company's financial statements."],
+              ["third_party", "Third-party score or rating", "From a credit provider's report (D&B, Creditsafe, Coface, Allianz Trade, Experian…)."],
+            ] as const).map(([key, title, hint]) => (
+              <label key={key} className={`flex gap-2 rounded-lg border p-3 cursor-pointer text-xs ${scoreSource === key ? "border-primary bg-primary/5" : ""}`}>
+                <input type="radio" name="score-source" checked={scoreSource === key} onChange={() => setScoreSource(key)} className="mt-0.5" />
+                <span><span className="font-medium block">{title}</span><span className="text-muted-foreground">{hint}</span></span>
+              </label>
+            ))}
+          </div>
+          {scoreSource === "keen" ? (
+            keenReadsFiling(f) ? (
+              <p className="text-xs">Keen reads the company's latest 10-K at the SEC. Nothing to enter: the score and how old the accounts are appear on the application after you submit.</p>
+            ) : f.keen || f.legacy_statements.length ? (
+              <p className="text-xs">Keen scores the statements that came with this application.</p>
+            ) : (
+              <p className="text-xs text-amber-700">Keen scores US-listed companies automatically (tick "Publicly listed" and give the ticker). For a private company, choose a third-party score or rating{(Number(f.amount_usd) || 0) > 0 ? "; without one, the application waits for it" : ""}.</p>
+            )
+          ) : (
+            <ProviderScoresForm rows={f.provider_scores.length ? f.provider_scores : [{ ...EMPTY_PROVIDER_ROW }]} onChange={(provider_scores) => setF((x) => ({ ...x, provider_scores }))} />
+          )}
         </section>
 
         <section className="bg-card rounded-xl border p-4 space-y-2">
@@ -199,8 +241,8 @@ export default function NewApplication() {
           {check("personal_guarantee", "Customer has signed a personal guarantee (needed for companies under 24 months old)")}
         </section>
 
-        <Button type="submit" disabled={submit.isPending || !f.legal_name || !f.amount_usd}>
-          {submit.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Submit and run checks
+        <Button type="submit" disabled={submit.isPending || locked || !f.legal_name || !f.amount_usd}>
+          {submit.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}{editId ? "Save and run the checks again" : "Submit and run checks"}
         </Button>
         {submit.isPending && <p className="text-xs text-muted-foreground">Screening and analysis take up to a minute.</p>}
       </form>

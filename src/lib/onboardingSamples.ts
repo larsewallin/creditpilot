@@ -71,7 +71,7 @@ export const SAMPLE_APPLICATIONS: { key: string; label: string; expect: string; 
     },
   },
   {
-    key: "incomplete", label: "Ostrava Components USA (incomplete, fictional)", expect: "Stops at Completeness: statements and a trade reference missing",
+    key: "incomplete", label: "Ostrava Components USA (incomplete, fictional)", expect: "Stops at Completeness: a credit score and a trade reference missing",
     application: {
       legal_name: "Ostrava Components USA Corp.", country_code: "US", tax_id: "88-1029374", entity_type: "corporation", sector: "Industrial Manufacturing",
       is_public: false, date_established: "2009-03-01",

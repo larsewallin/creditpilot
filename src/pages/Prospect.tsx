@@ -5,11 +5,11 @@
  * once approved, what monitoring will watch.
  */
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { ArrowLeft, Check, Loader2, RefreshCw, X } from "lucide-react";
+import { ArrowLeft, Check, Loader2, Pencil, RefreshCw, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -39,8 +39,18 @@ const FLAG_LABEL: Record<string, string> = {
   COMPANY_LOOKUP_STOP: "Company Lookup raised a flag to review",
 };
 
+/** What an incomplete application lacks, in plain words. */
+const MISSING_LABEL: Record<string, string> = {
+  legal_name: "the legal name", country_code: "the country", "credit_request.amount_usd": "the requested limit",
+  trade_references: "trade references", credit_score: "a credit score (Keen for a US-listed company, otherwise a third-party score or rating)",
+  financial_statements: "financial statements", personal_guarantee: "a personal guarantee (company under 24 months old)",
+  signature_terms: "the signed terms and conditions",
+};
+const missingLabel = (k: string) => MISSING_LABEL[k] ?? k.replace(/[._]/g, " ");
+
 export default function Prospect() {
   const { id = "" } = useParams();
+  const navigate = useNavigate();
   const { appUser } = useAuth();
   const qc = useQueryClient();
   const isCredit = !!appUser && ["admin", "credit_manager", "credit_analyst"].includes(appUser.role);
@@ -143,21 +153,33 @@ export default function Prospect() {
             <Panel title="No limit proposal yet">
               <p className="text-xs text-muted-foreground">
                 {o.error ? `A check could not run: ${o.error}`
-                  : app.status === "incomplete" ? `The application is missing: ${(o.completeness?.missing ?? []).join(", ").replace(/_/g, " ")}.`
+                  : app.status === "incomplete" ? `The application is missing ${(o.completeness?.missing ?? []).map(missingLabel).join(", ")}. Add ${(o.completeness?.missing ?? []).length > 1 ? "them" : "it"} with Edit application; the checks run again when you save.`
                   : o.route === "existing_customer_limit_review" ? "This company is already a customer; it was routed to a limit review instead."
                   : o.screening?.status && o.screening.status !== "pass" ? "Screening needs a person first: see the Screening tab."
                   : "The agents are still working on this application."}
               </p>
-              {isCredit && app.status !== "decided" && (
-                <Button size="sm" variant="outline" className="h-7 text-xs mt-2" onClick={() => rerun.mutate()} disabled={rerun.isPending}>
-                  {rerun.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <RefreshCw className="h-3 w-3 mr-1" />}Run the checks again
-                </Button>
+              {isCredit && app.status !== "decided" && app.status !== "withdrawn" && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  <Button size="sm" className="h-7 text-xs" onClick={() => navigate(`/new-customers/${id}/edit`)}>
+                    <Pencil className="h-3 w-3 mr-1" />Edit application
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => rerun.mutate()} disabled={rerun.isPending}>
+                    {rerun.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <RefreshCw className="h-3 w-3 mr-1" />}Run the checks again
+                  </Button>
+                </div>
               )}
             </Panel>
           )}
         </TabsContent>
 
-        <TabsContent value="application"><ApplicationView a={a} /></TabsContent>
+        <TabsContent value="application" className="space-y-3">
+          {isCredit && app.status !== "decided" && app.status !== "withdrawn" && (
+            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => navigate(`/new-customers/${id}/edit`)}>
+              <Pencil className="h-3 w-3 mr-1" />Edit application
+            </Button>
+          )}
+          <ApplicationView a={a} />
+        </TabsContent>
 
         <TabsContent value="screening">
           <ScreeningView app={app} runs={runs} checks={checks} hits={hits} canDispose={canDispose} />

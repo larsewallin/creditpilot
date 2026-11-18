@@ -21,7 +21,7 @@ harness is expected to fail (Phase 0: 0/14).
 | G01 | Clean private US distributor | Approve as requested ($35k); needs-based binds |
 | G02 | Strong private US | Approve $80k + "higher limit supportable up to $200k" |
 | G03 | Request above balance-sheet caps | Counteroffer $110k (asked $500k); working capital binds |
-| G04 | Missing statements and a trade reference | Incomplete; names both; Reg B 30-day clock |
+| G04 | Missing credit score (no statements or third-party score) and a trade reference | Incomplete; names both; Reg B 30-day clock |
 | G05 | Director close to a sanctions-list name | Screening review; hit open until a person decides |
 | G06 | Entity on a sanctions list | Screening fail; decline proposed to a person only |
 | G07 | 4-month-old company, 2-month-old website, virtual office, $150k | Screening review with 3 fraud flags |
@@ -44,7 +44,7 @@ company in Settings › Onboarding.
 
 **Completeness**
 - Minimum 3 trade references.
-- Private companies requesting more than $250,000 must upload financial statements.
+- Private companies requesting more than $250,000 need a credit score: Keen (statements) or a third-party score or rating.
 - Personal guarantee required for sole proprietors and entities younger than 24 months.
 - An existing customer (matched on DUNS, tax ID or registration no.) stops here and is routed to a limit review.
 

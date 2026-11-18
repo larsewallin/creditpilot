@@ -110,6 +110,7 @@ const App = () => (
             <Route path="/customers" element={<Customers />} />
             <Route path="/new-customers" element={<RequireAuth><NewCustomers /></RequireAuth>} />
             <Route path="/new-customers/new" element={<RequireAuth roles={["admin", "credit_manager", "credit_analyst"]}><NewApplication /></RequireAuth>} />
+            <Route path="/new-customers/:id/edit" element={<RequireAuth roles={["admin", "credit_manager", "credit_analyst"]}><NewApplication /></RequireAuth>} />
             <Route path="/new-customers/:id" element={<RequireAuth><Prospect /></RequireAuth>} />
             <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
             <Route path="/cia" element={<CIA />} />
