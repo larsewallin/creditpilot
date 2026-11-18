@@ -1607,7 +1607,11 @@ serve(async (req: Request) => {
           content: `Question: ${question}\n\nData:\n${context || "No relevant data found."}`,
         }],
       });
-      let rawAnswerText = extractText(answerMessage);
+      let rawAnswerText = extractText(answerMessage)
+        // A list marker must stand on its own line: the model sometimes wraps it in
+        // brackets or puts it mid-sentence ("over their limit [{{HIGH_UTILIZATION_LIST}}].").
+        .replace(/\s*[\[(]\s*(\{\{\s*[A-Z_]+\s*\}\})\s*[\])]\.?/g, "\n\n$1\n")
+        .replace(/([^\n])[ \t]*(\{\{\s*[A-Z_]+\s*\}\})/g, "$1\n\n$2");
       if ((answerMessage as { stop_reason?: string }).stop_reason === "max_tokens") {
         // Drop the unfinished last line (often half a citation tag) and say it was cut.
         rawAnswerText = rawAnswerText.replace(/\n[^\n]*$/, "").trimEnd() +
