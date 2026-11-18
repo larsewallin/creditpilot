@@ -101,5 +101,5 @@ export const ANSWERABLE_TOPICS =
 
 /** Is this an advice question (a decision or a course of action), as opposed to a lookup? */
 export function isAdviceQuestion(q: string): boolean {
-  return /\b(should|shall|can we|could we|do we need|would you|recommend|advise|advice|what (?:should|would|do) (?:i|we)|next step|extend|increase|raise|lower|reduce|approve|decline|reject|terms?|collateral|guarantee|security|safe to|ok to|worth|worried|risky)\b/i.test(q);
+  return /\b(should|shall|can we|could we|do we need|would you|recommend|advise|advice|what (?:should|would|do) (?:i|we)|next step|extend|increase|raise|lower|reduce|approve|decline|reject|terms?|collateral|guarantees?|security|insur(?:ance|ed)|letters? of credit|bank (?:data|statements?)|safe to|ok to|worth|worried|risky)\b/i.test(q);
 }
