@@ -115,6 +115,7 @@ for (const [i, c] of CASES.entries()) {
   const answer = await ask(c.q);
   const problems = c.check(answer).filter((x) => x !== true);
   if (/\[(OFFICIAL|[CIPNFEUM]\d+)/.test(answer)) problems.push("internal tag shown in the answer");
+  else if (/\[[^\]]+\](?!\()/.test(answer)) problems.push("bracketed text in the answer (looks like a citation label)");
   failed += problems.length ? 1 : 0;
   if (problems.length) { console.log(`::warning::CIA eval: "${c.q}": ${problems.join("; ")}`); summary.push(`- ✗ ${c.q}: ${problems.join("; ")}`); }
   console.log(`\n── ${i + 1}. ${c.q}  ${problems.length ? "✗ " + problems.join("; ") : c.check.length || problems.length ? "✓" : "(read)"}`);
