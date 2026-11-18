@@ -1592,7 +1592,9 @@ serve(async (req: Request) => {
     const context = contextParts.join("\n\n");
 
     const model = DEMO_MODE ? "claude-haiku-4-5" : "claude-sonnet-5";
-    const maxTokens = DEMO_MODE ? 600 : 900;
+    // A list answer with its citation tags runs long: at 600 tokens one was cut off mid-list
+    // (2026-11-18 eval). A cut answer is also closed off cleanly below.
+    const maxTokens = DEMO_MODE ? 1200 : 1500;
 
     try {
       // ── Call 1: plain-text answer — never embedded in JSON ──────────────────
@@ -1605,7 +1607,12 @@ serve(async (req: Request) => {
           content: `Question: ${question}\n\nData:\n${context || "No relevant data found."}`,
         }],
       });
-      const rawAnswerText = extractText(answerMessage);
+      let rawAnswerText = extractText(answerMessage);
+      if ((answerMessage as { stop_reason?: string }).stop_reason === "max_tokens") {
+        // Drop the unfinished last line (often half a citation tag) and say it was cut.
+        rawAnswerText = rawAnswerText.replace(/\n[^\n]*$/, "").trimEnd() +
+          "\n\n_The answer was cut short. Ask about fewer customers or a narrower period for the rest._";
+      }
 
       // ── Deterministic list splice: if the model decided this question calls for
       // the complete high-utilization list, it emits the marker instead of naming
@@ -1653,6 +1660,8 @@ serve(async (req: Request) => {
         .replace(/\s*\[(?:[^\]]*OFFICIAL[^\]]*|pending actions?|bankruptcy list|multi-signal convergence list|high-risk customer list)\]/gi, "")
         // Any other all-caps label in brackets is a section name too ("[AR AGING PORTFOLIO TOTALS]", "[PENDING_ACTIONS]").
         .replace(/\s*\[[A-Z][A-Z0-9 _&()—–\-,]{3,}\](?!\()/g, "")
+        // Bold markers left empty around a removed tag ("**[I1]**" -> "****").
+        .replace(/\*{4}\s?/g, "")
         // Section sub-labels cited like sources ("(Getting worse list)").
         .replace(/\s*[\[(](?:getting worse|improving|erratic|named customer\(s\)|high-risk|high-utilization)(?: list)?[\])]/gi, "")
         // Anything else in brackets is the model's own aside ("[critical priority]"): parentheses read better.
