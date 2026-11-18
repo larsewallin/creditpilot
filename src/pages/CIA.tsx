@@ -9,6 +9,7 @@ import { DEMO_MODE } from "@/lib/constants";
 import { DEMO_ANSWERS } from "@/lib/demoAnswers";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { agentLabel, sourceLabel } from "@/lib/sourceLabels";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -29,6 +30,8 @@ export interface CIAAnswer {
   confidence: "High" | "Medium" | "Low";
   confidence_reason: string;
   relatedQuestions?: string[];
+  /** What was read for the answer, in plain words ("12 invoices"). */
+  searched?: string[];
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -39,14 +42,7 @@ function severityDot(severity: string | null) {
   return "bg-gray-300";
 }
 
-function agentLabel(agent: string | null | undefined) {
-  if (!agent) return "Record";
-  if (agent.includes("ar_aging") || agent.includes("ar-aging")) return "AR";
-  if (agent.includes("news")) return "News";
-  if (agent.includes("sec")) return "SEC";
-  if (agent.includes("cia")) return "CIA";
-  return agent;
-}
+
 
 function formatDate(dateStr?: string) {
   if (!dateStr) return "";
@@ -118,6 +114,9 @@ export default function CIA() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const question = searchParams.get("q") ?? "";
+  // Set when the question was a related-question click: the server carries the earlier
+  // question's company over to a follow-up that does not name one.
+  const previousQuestion = searchParams.get("after") ?? "";
 
   const [answer, setAnswer] = useState<CIAAnswer | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -142,7 +141,7 @@ export default function CIA() {
     }
 
     supabase.functions
-      .invoke("cia-agent", { body: { mode: "question", question } })
+      .invoke("cia-agent", { body: { mode: "question", question, ...(previousQuestion ? { previous_question: previousQuestion } : {}) } })
       .then(({ data, error: fnError }) => {
         if (fnError) throw new Error(fnError.message);
         if (data?.error) throw new Error(data.error);
@@ -153,7 +152,7 @@ export default function CIA() {
       })
       .catch(err => setError(err instanceof Error ? err.message : "Unknown error"))
       .finally(() => setIsLoading(false));
-  }, [question]);
+  }, [question, previousQuestion]);
 
   // Use contextual follow-up questions returned with the answer
   useEffect(() => {
@@ -173,7 +172,7 @@ export default function CIA() {
   };
 
   const handleRelated = (q: string) => {
-    navigate(`/cia?q=${encodeURIComponent(q)}`);
+    navigate(`/cia?q=${encodeURIComponent(q)}&after=${encodeURIComponent(question)}`);
   };
 
   if (!question) {
@@ -216,6 +215,9 @@ export default function CIA() {
               <div className="prose prose-base max-w-none text-gray-800 prose-p:leading-relaxed prose-strong:text-gray-900 prose-p:text-base">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{answer.answer}</ReactMarkdown>
               </div>
+              {answer.searched && answer.searched.length > 0 && (
+                <p className="mt-3 text-xs text-muted-foreground">Read: {answer.searched.join(", ")}</p>
+              )}
             </div>
           </div>
 
@@ -234,9 +236,9 @@ export default function CIA() {
                       <span className={cn("w-2 h-2 rounded-full shrink-0", severityDot(s.severity))} />
                       <span className="text-sm font-medium text-gray-800 truncate">{s.customer_name}</span>
                       <span className="text-gray-300">·</span>
-                      <span className="text-xs text-muted-foreground shrink-0">{agentLabel(s.agent)}</span>
+                      <span className="text-xs text-muted-foreground shrink-0">{agentLabel(s.agent, s.source_type)}</span>
                       <span className="text-gray-300">·</span>
-                      <span className="text-xs font-mono text-muted-foreground truncate">{(s.event_type ?? s.source_type ?? "Record").replace(/_/g, " ")}</span>
+                      <span className="text-xs text-muted-foreground truncate">{sourceLabel(s)}</span>
                       {s.date && <>
                         <span className="text-gray-300 ml-auto">·</span>
                         <span className="text-xs text-muted-foreground shrink-0">{formatDate(s.date)}</span>
@@ -252,11 +254,13 @@ export default function CIA() {
                       <span className={cn("w-2 h-2 rounded-full shrink-0", severityDot(s.severity))} />
                       <span className="text-sm font-medium text-gray-800 truncate">{s.customer_name}</span>
                       <span className="text-gray-300">·</span>
-                      <span className="text-xs text-muted-foreground shrink-0">{agentLabel(s.agent)}</span>
+                      <span className="text-xs text-muted-foreground shrink-0">{agentLabel(s.agent, s.source_type)}</span>
                       <span className="text-gray-300">·</span>
-                      <span className="text-xs font-mono text-muted-foreground truncate">{(s.event_type ?? s.source_type ?? "Record").replace(/_/g, " ")}</span>
-                      <span className="text-gray-300 ml-auto">·</span>
-                      <span className="text-xs text-muted-foreground shrink-0">{formatDate(s.date)}</span>
+                      <span className="text-xs text-muted-foreground truncate">{sourceLabel(s)}</span>
+                      {s.date && <>
+                        <span className="text-gray-300 ml-auto">·</span>
+                        <span className="text-xs text-muted-foreground shrink-0">{formatDate(s.date)}</span>
+                      </>}
                     </button>
                   )
                 ))}
@@ -266,7 +270,7 @@ export default function CIA() {
             <div className="space-y-1">
               <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Sources</p>
               <div className="border-t border-gray-100 pt-3">
-                <p className="text-sm text-muted-foreground italic">This answer is based on portfolio-level data (customers table) rather than a specific dated event — no individual source records to cite.</p>
+                <p className="text-sm text-muted-foreground italic">This answer is based on portfolio-level figures rather than specific records, so there are no individual sources to list.</p>
               </div>
             </div>
           )}
