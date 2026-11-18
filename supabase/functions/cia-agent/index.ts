@@ -104,6 +104,8 @@ interface CIARequest {
   /** onboarding mode: the credit application whose proposal becomes a NEW_CREDIT_LIMIT action. */
   application_id?: string;
   question?: string;
+  /** The question a follow-up click came from (its company carries over). */
+  previous_question?: string;
   force_refresh?: boolean;
   customer_id?: string;
   /** Skip the Anthropic briefing call entirely (used by initDemo.ts on reset
