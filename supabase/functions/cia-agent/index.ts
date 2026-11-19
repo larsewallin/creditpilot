@@ -1075,7 +1075,8 @@ async function fetchRelevantData(
 
 const SAVED_ANSWER_MAX_AGE_MS = 6 * 3600 * 1000;
 
-async function savedAnswer(db: ReturnType<typeof createClient>, question: string): Promise<{ id: string; created_at: string; answer: Record<string, unknown> } | null> {
+// deno-lint-ignore no-explicit-any
+async function savedAnswer(db: any, question: string): Promise<{ id: string; created_at: string; answer: Record<string, unknown> } | null> {
   try {
     const since = new Date(Math.max(lastDemoRefresh().getTime(), Date.now() - SAVED_ANSWER_MAX_AGE_MS)).toISOString();
     const { data, error } = await db.from("cia_answers").select("id, created_at, answer")
