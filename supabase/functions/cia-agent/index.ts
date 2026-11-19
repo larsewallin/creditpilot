@@ -1837,7 +1837,7 @@ serve(async (req: Request) => {
           return known ? "" : full;
         })
         // Anything else in brackets is the model's own aside ("[critical priority]"): parentheses read better.
-        .replace(/\[([^\]\n]{2,80})\](?!\()/g, "($1)")
+        .replace(/\[([^\]\n]{2,300})\](?!\()/g, "($1)")
         // Section names in prose ("Based on the OFFICIAL MULTI-SIGNAL CONVERGENCE LIST, …").
         .replace(/\b(?:based on|according to|per|from) the \*{0,2}OFFICIAL [A-Z0-9 &()—–\-]+?\*{0,2}(?: data| section| list| figures)?(?:,|:)\s*/gi, "")
         .replace(/\*{0,2}OFFICIAL [A-Z0-9 &()—–\-]+[A-Z)]\*{0,2}/g, "the data")
