@@ -1,4 +1,4 @@
-import { Zap, Newspaper, BarChart2, FileSearch, Users, Wrench, Info, Github, CreditCard, Factory, Globe, Coins, LogIn, LogOut, UserPlus, Settings as SettingsIcon } from "lucide-react";
+import { Sparkles, Zap, Newspaper, BarChart2, FileSearch, Users, Wrench, Info, Github, CreditCard, Factory, Globe, Coins, LogIn, LogOut, UserPlus, Settings as SettingsIcon } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -7,6 +7,7 @@ import { useAuth, ROLE_LABEL } from "@/lib/auth";
 import { VIEWS } from "@/lib/onboarding";
 
 const navItems = [
+  { title: "Ask", path: "/cia", icon: Sparkles },
   { title: "Credit Events", path: "/events", icon: Zap },
   { title: "Actions", path: "/actions", icon: Wrench },
   { title: "New customers", path: "/new-customers", icon: UserPlus, views: true },
