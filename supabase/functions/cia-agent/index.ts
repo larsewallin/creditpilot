@@ -1944,7 +1944,7 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one plain sentence 
         const followUpMessage = await anthropic.messages.create({
           model: "claude-haiku-4-5",
           max_tokens: 150,
-          system: `Generate exactly 3 short follow-up questions a credit manager would ask after reading this answer. Return ONLY a JSON array of 3 strings. Questions must be specific to the companies and issues mentioned, and each must name the company it is about. Only ask what CreditPilot's data can answer: ${ANSWERABLE_TOPICS}. Never ask about collateral, guarantees, letters of credit, credit insurance, bank data, contracts, orders, or what the customer said.`,
+          system: `Generate exactly 3 short follow-up questions (at most 14 words each, one question each) a credit manager would ask after reading this answer. Return ONLY a JSON array of 3 strings. Questions must be specific to the companies and issues mentioned, and each must name the company it is about. Only ask what CreditPilot's data can answer: ${ANSWERABLE_TOPICS}. Never ask about collateral, guarantees, letters of credit, credit insurance, bank data, contracts, orders, or what the customer said. Never ask the reader about themselves (their authority, their plans).`,
           messages: [{
             role: "user",
             content: `Question: ${question}\nAnswer just given: ${plainAnswerText.slice(0, 700)}\n\nGenerate 3 follow-up questions.`,
