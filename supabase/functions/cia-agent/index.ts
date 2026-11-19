@@ -59,6 +59,7 @@ import { agentCallerProblem, sameSecret } from "../_shared/agent_gate.ts";
 import { financialsAge } from "../_shared/onboarding/keen_statements.ts";
 import { streamClaude, WEB_SEARCH_TOOL, type WebSource } from "../_shared/claude_stream.ts";
 import { buildCharts } from "../_shared/cia_charts.ts";
+import { lastDemoRefresh } from "../_shared/demo_refresh_time.ts";
 import { ANSWERABLE_TOPICS, capabilityStatus, isAdviceQuestion, playbookBlock } from "../_shared/cia_playbook.ts";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -1070,6 +1071,43 @@ async function fetchRelevantData(
 // signal a naive === could leak, and the bypassed value is a soft demo
 // cost-control limit, not an auth boundary) — but it's ~10 dependency-free
 // lines that close the question permanently rather than leave it open.
+// ─── Saved answers (demo) ────────────────────────────────────────────────────
+
+const SAVED_ANSWER_MAX_AGE_MS = 6 * 3600 * 1000;
+
+async function savedAnswer(db: ReturnType<typeof createClient>, question: string): Promise<{ id: string; created_at: string; answer: Record<string, unknown> } | null> {
+  try {
+    const since = new Date(Math.max(lastDemoRefresh().getTime(), Date.now() - SAVED_ANSWER_MAX_AGE_MS)).toISOString();
+    const { data, error } = await db.from("cia_answers").select("id, created_at, answer")
+      .eq("is_demo", true).eq("question", question.trim().slice(0, 1000)).gte("created_at", since)
+      .order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (error || !data) return null;
+    const a = data.answer as Record<string, unknown>;
+    if (!a?.answer || a.error || !Array.isArray(a.steps)) return null;
+    return data as { id: string; created_at: string; answer: Record<string, unknown> };
+  } catch { return null; }
+}
+
+/** A saved answer, as JSON or replayed as the same events a live answer sends (steps, then text). */
+function replayAnswer(saved: { id: string; created_at: string; answer: Record<string, unknown> }, stream: boolean): Response {
+  const payload = { ...saved.answer, answer_id: saved.id, saved_at: saved.created_at };
+  if (!stream) return new Response(JSON.stringify(payload), { headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
+  const enc = new TextEncoder();
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const body = new ReadableStream<Uint8Array>({
+    async start(c) {
+      const send = (event: string, data: unknown) => c.enqueue(enc.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+      try {
+        for (const label of (saved.answer.steps as string[])) { send("step", { label }); await sleep(350); }
+        const text = String(saved.answer.answer ?? "").replace(/\[\d{1,3}\]/g, "");
+        for (let i = 0; i < text.length; i += 24) { send("delta", { text: text.slice(i, i + 24) }); await sleep(18); }
+        send("done", payload);
+      } finally { c.close(); }
+    },
+  });
+  return new Response(body, { headers: { ...CORS_HEADERS, "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache" } });
+}
+
 function timingSafeEqualStr(a: string, b: string): boolean {
   const enc = new TextEncoder();
   const aBytes = enc.encode(a);
@@ -1225,6 +1263,15 @@ serve(async (req: Request) => {
     const providedSecret = req.headers.get("x-internal-test-secret");
     const isInternalTest = !!testSecret && !!providedSecret && timingSafeEqualStr(providedSecret, testSecret);
 
+    // Saved answers (demo): the same question asked again since the last demo refresh, with no
+    // conversation before it, is answered from the stored answer, replayed with its steps — the
+    // suggested questions look like any live answer and cost nothing (2026-11-19). Not counted
+    // against the daily limit.
+    if (DEMO_MODE && !isInternalTest && !previousQuestion && !(Array.isArray(body.history) && body.history.length)) {
+      const cached = await savedAnswer(supabaseClient, question);
+      if (cached) return replayAnswer(cached, body.stream === true);
+    }
+
     const DEMO_QUESTION_LIMIT = 10;
     let demoQuestionCount: number | null = null;
     if (DEMO_MODE && !isInternalTest) {
@@ -1257,7 +1304,8 @@ serve(async (req: Request) => {
     // page shows each step ("Reading 86 customers…", "Searching the web: …") and the text as it
     // is written; the last event (done) carries the same payload as the JSON answer.
     let emit: (event: string, data: unknown) => void = () => {};
-    const step = (label: string) => emit("step", { label });
+    const recordedSteps: string[] = [];
+    const step = (label: string) => { recordedSteps.push(label); emit("step", { label }); };
 
     const runQuestion = async (): Promise<Response> => {
     try {
@@ -2017,6 +2065,7 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one plain sentence 
         // Small charts computed in code from the rows read (never by the model).
         charts: (() => { try { return buildCharts({ question, companyMentions, ...data }); } catch (e) { console.error("[cia-agent] charts:", e); return []; } })(),
         searched: answerMessage.searches.length ? [...searched, `the web (${answerMessage.searches.map((q) => `“${q}”`).join(", ")})`] : searched,
+        steps: recordedSteps,
         ...(DEMO_MODE ? { demo_question_count: demoQuestionCount } : {}),
       };
       // Kept for its share link (/share/<id>); never for the harness or the eval.

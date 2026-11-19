@@ -5,7 +5,6 @@ import { useState, useEffect, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { DEMO_MODE } from "@/lib/constants";
-import { DEMO_ANSWERS } from "@/lib/demoAnswers";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { agentLabel, sourceLabel } from "@/lib/sourceLabels";
@@ -49,6 +48,8 @@ export interface CIAAnswer {
   searched?: string[];
   /** Small charts computed in code from the rows read. */
   charts?: Chart[];
+  /** Set when the demo answered from an answer saved earlier today (same question). */
+  saved_at?: string;
   /** The stored answer, for its share link (/share/<id>). */
   answer_id?: string;
   /** The customers the question names (for the actions under the answer). */
@@ -198,13 +199,6 @@ export default function CIA() {
     setRelated([]);
     setIsLoading(true);
 
-    if (DEMO_MODE && DEMO_ANSWERS[question]) {
-      setAnswer(DEMO_ANSWERS[question]);
-      appendTurn(threadId, { question, answer: DEMO_ANSWERS[question] as unknown as CIAAnswer });
-      setIsLoading(false);
-      return;
-    }
-
     setSteps([]);
     setDraft("");
     abortRef.current?.abort();
@@ -344,7 +338,7 @@ export default function CIA() {
               )}
               {steps.length > 0 && (
                 <details className="mt-3 text-xs text-muted-foreground">
-                  <summary className="cursor-pointer select-none">{steps.length} steps · {answer.searched && answer.searched.length > 0 ? `read ${answer.searched.join(", ")}` : "how this was answered"}</summary>
+                  <summary className="cursor-pointer select-none">{answer.saved_at ? `Answered earlier today at ${new Date(answer.saved_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} · ` : ""}{steps.length} steps · {answer.searched && answer.searched.length > 0 ? `read ${answer.searched.join(", ")}` : "how this was answered"}</summary>
                   <div className="mt-2"><Steps steps={steps} running={false} /></div>
                 </details>
               )}
