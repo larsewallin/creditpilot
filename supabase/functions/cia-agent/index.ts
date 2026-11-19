@@ -1765,7 +1765,7 @@ serve(async (req: Request) => {
 
     try {
       // ── Call 1: plain-text answer — never embedded in JSON ──────────────────
-      step(useWeb ? "Checking the web for current news" : "Writing the answer");
+      step(useWeb ? "Deciding what to look up" : "Writing the answer");
       let wroteStep = !useWeb;
       const answerMessage = await streamClaude(Deno.env.get("ANTHROPIC_API_KEY")!, {
         model,
@@ -1910,7 +1910,13 @@ serve(async (req: Request) => {
         .trim();
       // For the checks below, the answer without its citation numbers.
       const plainAnswerText = cleanAnswerText.replace(/⟦\d+⟧/g, "");
-      const finalAnswerText = cleanAnswerText.replace(/⟦(\d+)⟧/g, "[$1]");
+      // One chip per source per sentence: "$2.4M[1] at 80%[1] of $3M[1]." -> "… of $3M[1]."
+      const dedupedText = cleanAnswerText.replace(/[^\n]+/g, (line) => line.replace(/[^.!?]+[.!?]*/g, (sentence) => {
+        const last = new Map<string, number>();
+        for (const m of sentence.matchAll(/⟦(\d+)⟧/g)) last.set(m[1], m.index!);
+        return sentence.replace(/⟦(\d+)⟧/g, (tok: string, n: string, idx: number) => (last.get(n) === idx ? tok : ""));
+      }));
+      const finalAnswerText = dedupedText.replace(/⟦(\d+)⟧/g, "[$1]");
 
       // ── Call 2: structured metadata only — small JSON, no embedded answer ───
       step("Checking every figure against the data");

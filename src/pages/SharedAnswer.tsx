@@ -43,7 +43,7 @@ export default function SharedAnswer() {
       <div className="flex justify-end">
         <div className="bg-gray-100 rounded-2xl px-4 py-2.5 text-sm text-gray-800 max-w-[80%] whitespace-pre-wrap">{question}</div>
       </div>
-      <div className="prose prose-base max-w-none text-gray-800 prose-p:leading-relaxed">
+      <div className="prose prose-base max-w-none text-gray-800 prose-p:leading-relaxed prose-headings:font-semibold prose-headings:text-gray-900 prose-h1:text-lg prose-h2:text-base prose-h3:text-base prose-h1:mt-5 prose-h2:mt-5 prose-h1:mb-2 prose-h2:mb-2">
         <AnswerMarkdown answer={{ answer: answer.answer, sources }} onCite={setOpen} plainLinks />
       </div>
       {answer.charts && answer.charts.length > 0 && <AnswerCharts charts={answer.charts} />}
