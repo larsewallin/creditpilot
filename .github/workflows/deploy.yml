@@ -220,7 +220,8 @@ jobs:
           if-no-files-found: ignore
 
       - name: CIA harness (every question must pass)
-        if: steps.plan.outputs.any == 'yes'
+        # Only when the assistant itself was redeployed or the schema changed (API cost).
+        if: contains(steps.plan.outputs.deploy, 'cia-agent') || steps.plan.outputs.migrations != '
         run: node tests/cia/run.mjs
 
       - name: Live checks (read-only)

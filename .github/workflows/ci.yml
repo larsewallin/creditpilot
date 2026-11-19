@@ -67,17 +67,33 @@ jobs:
     needs: unit-tests
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # Each harness run spends real API money (founder, 2026-11-19): only a PR that can change
+      # how the assistant answers runs it (the assistant, shared code, the CIA tests).
+      - name: Does this PR touch the assistant?
+        id: paths
+        run: |
+          if git diff --name-only "origin/${{ github.base_ref }}...HEAD" | grep -Eq '^(supabase/functions/(cia-agent|_shared)/|tests/cia/|supabase/migrations/)'; then
+            echo "cia=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "cia=no" >> "$GITHUB_OUTPUT"; echo "::notice::No assistant changes: CIA harness skipped (saves API cost)."
+          fi
       - uses: actions/setup-node@v4
+        if: steps.paths.outputs.cia == 'yes'
         with:
           node-version: 20
           cache: npm
       - run: npm ci
+        if: steps.paths.outputs.cia == 'yes'
       - name: Check target is production
+        if: steps.paths.outputs.cia == 'yes'
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
         run: |
           [[ "$SUPABASE_URL" == *yxqudytimmxufypothis* ]] || { echo "SUPABASE_URL secret is missing or not production"; exit 1; }
       - run: node tests/cia/run.mjs
+        if: steps.paths.outputs.cia == 'yes'
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
