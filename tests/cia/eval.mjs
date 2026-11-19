@@ -179,7 +179,9 @@ const CASES = [
       !/^\W*I don't have/i.test(a) || "opens with what is missing", /insurance/i.test(a) || "should say credit insurance is not tracked"] },
   // A thread: the earlier turns go with the question, so "their" means the customer asked about.
   { q: "Is that more than their limit allows for?", history: [{ question: "What is Arconic's current balance?", answer: "Arconic's current balance is $2,750,000." }],
-    check: (a) => [/arconic/i.test(a) || "lost the customer from the thread", /\$3,000,000|3\.0 ?M|\$3M/i.test(a) || "no credit limit"] },
+    check: (a) => [/arconic/i.test(a) || "lost the customer from the thread", /\$3,000,000|3\.0 ?M|\$3M/i.test(a) || "no credit limit",
+      !/^\W*yes\b/i.test(a) || "says yes: the balance is under the limit (92% used)",
+      (last.customers ?? []).some((c) => /arconic/i.test(c.company_name)) || "no customer for the actions under the answer"] },
   // Charts are computed in code from the rows read: one named customer gets its payment trend.
   { q: "How late does Arconic pay now compared with before?", check: () => [
       (last.charts ?? []).some((c) => /days late/.test(c.title) && c.rows.length === 2) || "no payment-trend chart"] },

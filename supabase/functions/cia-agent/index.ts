@@ -1383,6 +1383,20 @@ serve(async (req: Request) => {
 
       contextParts.push("## CUSTOMERS TABLE\n" + customerLines.map(({ line }) => line).join("\n"));
 
+      // How much of its limit a named customer uses, and whether it is over, computed here
+      // (2026-11-19: "is that more than their limit allows?" got "Yes" at 92%).
+      if (companyMentions.length) {
+        const namedLimit = customerLines.filter(({ customer: c }) =>
+          companyMentions.some((m) => String(c.company_name ?? "").toLowerCase().includes(m.toLowerCase())));
+        const rows = namedLimit.slice(0, 10).flatMap(({ tag, customer: c }) => {
+          const bal = Number(c.current_exposure), lim = Number(c.credit_limit);
+          if (!Number.isFinite(bal) || !Number.isFinite(lim) || lim <= 0) return [];
+          const diff = lim - bal;
+          return [`- [${tag}] ${sanitize(c.company_name)}: balance $${bal.toLocaleString()} of a $${lim.toLocaleString()} limit, ${Math.round((bal / lim) * 1000) / 10}% used — ${diff >= 0 ? `UNDER the limit, $${diff.toLocaleString()} still available` : `OVER the limit by $${(-diff).toLocaleString()}`}`];
+        });
+        if (rows.length) contextParts.push("## LIMIT USE — NAMED CUSTOMER(S) (computed in code; whether a customer is over or under its limit comes from here)\n" + rows.join("\n"));
+      }
+
       // Financial statements of the customer(s) the question names, computed here: the basis
       // for "ask for the latest accounts" in the next steps (2026-11-18: Arconic, score 58,
       // no accounts on file, got "I don't have that information" instead).
@@ -1978,6 +1992,12 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one plain sentence 
         confidence: meta.confidence,
         confidence_reason: meta.confidence_reason,
         relatedQuestions,
+        // The customers the question names, for the actions under the answer (open the customer,
+        // decide its proposed action).
+        customers: companyMentions.length
+          ? (data.customers ?? []).filter((c: any) => companyMentions.some((m) => String(c.company_name ?? "").toLowerCase().includes(m.toLowerCase())))
+              .slice(0, 3).map((c: any) => ({ id: c.id, company_name: c.company_name }))
+          : [],
         // Small charts computed in code from the rows read (never by the model).
         charts: (() => { try { return buildCharts({ question, companyMentions, ...data }); } catch (e) { console.error("[cia-agent] charts:", e); return []; } })(),
         searched: answerMessage.searches.length ? [...searched, `the web (${answerMessage.searches.map((q) => `“${q}”`).join(", ")})`] : searched,
