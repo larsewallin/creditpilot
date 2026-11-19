@@ -177,6 +177,9 @@ const CASES = [
   { q: "Should we approve the proposed actions for Heliogen?", check: (a) => advice(a) },
   { q: "Do we have credit insurance on Kaman?", check: (a) => [
       !/^\W*I don't have/i.test(a) || "opens with what is missing", /insurance/i.test(a) || "should say credit insurance is not tracked"] },
+  // Charts are computed in code from the rows read: one named customer gets its payment trend.
+  { q: "How late does Arconic pay now compared with before?", check: () => [
+      (last.charts ?? []).some((c) => /days late/.test(c.title) && c.rows.length === 2) || "no payment-trend chart"] },
   // ── CIA v2: live web research next to the ledger, each web fact cited to its page ──
   { q: "What's the latest news on American Airlines, and how exposed are we?", check: (a) => [
       /\$[\d,.]+/.test(a) || "no exposure figure from our data",
