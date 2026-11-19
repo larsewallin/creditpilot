@@ -1707,7 +1707,9 @@ serve(async (req: Request) => {
         // A list marker must stand on its own line: the model sometimes wraps it in
         // brackets or puts it mid-sentence ("over their limit [{{HIGH_UTILIZATION_LIST}}].").
         .replace(/\s*[\[(]\s*(\{\{\s*[A-Z_]+\s*\}\})\s*[\])]\.?/g, "\n\n$1\n")
-        .replace(/([^\n])[ \t]*(\{\{\s*[A-Z_]+\s*\}\})/g, "$1\n\n$2");
+        .replace(/([^\n])[ \t]*(\{\{\s*[A-Z_]+\s*\}\})/g, "$1\n\n$2")
+        // A tag closed with the wrong bracket ("$600,000 [C1)]" in the 2026-11-19 eval).
+        .replace(/\[((?:[CIPNFEUMW]\d+\s*,\s*)*[CIPNFEUMW]\d+)\)\]?/g, "[$1]");
       if (answerMessage.stop_reason === "max_tokens") {
         // Drop the unfinished last line (often half a citation tag) and say it was cut.
         rawAnswerText = rawAnswerText.replace(/\n[^\n]*$/, "").trimEnd() +
