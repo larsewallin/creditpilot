@@ -1823,9 +1823,9 @@ serve(async (req: Request) => {
 
 The grade reflects whether the answer's claims are supported by the data provided, nothing else.
 
-- High: every specific claim in the answer (companies, scores, percentages, scenarios, risk tags, event types, dates) maps to a row in one of the provided tables. Drawing facts from multiple tables (customers + credit_events) is normal and does NOT reduce the grade. Absence of credit_events for some companies does NOT reduce the grade — no negative events on file is a positive state, not missing data.
+- High: every specific claim in the answer (companies, scores, percentages, scenarios, risk tags, event types, dates) maps to a row in one of the provided tables or to a listed web page the answer cites (live web research is a normal source, never a reason to lower the grade; an answer may rest on web pages alone when our data has nothing on the question). Drawing facts from multiple tables (customers + credit_events) is normal and does NOT reduce the grade. Absence of credit_events for some companies does NOT reduce the grade — no negative events on file is a positive state, not missing data.
 - Medium: the answer makes at least one specific claim (an event type, an alert, a severity, a date, a name) that does not appear in any provided table.
-- Low: the answer relies primarily on inference, external knowledge, or speculation rather than the data.
+- Low: the answer relies primarily on inference, uncited outside knowledge, or speculation rather than the data and the cited web pages.
 
 RELATIONSHIP-QUALIFIER CHECK: If the answer characterizes a customer's relationship status using words like 'outside', 'not in', 'outside the portfolio', 'outside our portfolio', 'former customer', 'prospect', 'inactive', or implies they are not a current customer — verify against the data. Every company appearing in the customers table IS a current customer. If the answer uses one of these qualifiers about a company that appears in the customers data provided, set confidence to Medium and explain this specifically in confidence_reason. This rule takes priority over the other rubric tiers.
 
