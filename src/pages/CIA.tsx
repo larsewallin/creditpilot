@@ -14,6 +14,8 @@ import { linkCitations, liveText } from "@/lib/ciaText";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Check, ExternalLink, Globe, Loader2 } from "lucide-react";
 import { AnswerCharts, type Chart } from "@/components/cia/AnswerCharts";
+import { appendTurn, getThread, historyFor, newThreadId, type ThreadTurn } from "@/lib/ciaThread";
+import { Plus } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -132,6 +134,33 @@ function hostOf(url?: string) {
   try { return url ? new URL(url).hostname.replace(/^www\./, "") : ""; } catch { return url ?? ""; }
 }
 
+// ─── Answer text with citation chips ─────────────────────────────────────────
+
+function AnswerMarkdown({ answer, onCite }: { answer: CIAAnswer; onCite: (s: Source) => void }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        a: ({ href, children, ...props }) => {
+          const m = href?.match(/^#cite-(\d+)$/);
+          if (!m) return <a href={href} target="_blank" rel="noreferrer" {...props}>{children}</a>;
+          const n = Number(m[1]);
+          const src = answer.sources.find((x) => x.n === n) ?? answer.sources[n - 1];
+          return (
+            <button
+              type="button"
+              onClick={() => src && onCite(src)}
+              title={src ? (src.source_type === "web" ? src.title : `${src.customer_name} · ${sourceLabel(src)}`) : undefined}
+              className={cn("not-prose inline-flex items-center justify-center align-super ml-0.5 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full text-[10px] font-semibold leading-none no-underline",
+                src?.source_type === "web" ? "bg-sky-100 text-sky-800 hover:bg-sky-200" : "bg-gray-100 text-gray-700 hover:bg-gray-200")}
+            >{n}</button>
+          );
+        },
+      }}
+    >{linkCitations(answer.answer)}</ReactMarkdown>
+  );
+}
+
 // ─── Fallback suggestions ─────────────────────────────────────────────────────
 
 // Display only — enforcement is entirely server-side (cia-agent, per IP per day).
@@ -155,6 +184,16 @@ export default function CIA() {
   // Set when the question was a related-question click: the server carries the earlier
   // question's company over to a follow-up that does not name one.
   const previousQuestion = searchParams.get("after") ?? "";
+  // The conversation (thread) this question belongs to; earlier turns stack above it.
+  const threadId = searchParams.get("t");
+  const [earlier, setEarlier] = useState<ThreadTurn[]>([]);
+  useEffect(() => {
+    if (question && !threadId) {
+      const next = new URLSearchParams(searchParams);
+      next.set("t", newThreadId());
+      navigate(`/cia?${next.toString()}`, { replace: true });
+    }
+  }, [question, threadId, searchParams, navigate]);
 
   const [answer, setAnswer] = useState<CIAAnswer | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -171,7 +210,9 @@ export default function CIA() {
 
   // Fetch answer whenever question changes
   useEffect(() => {
-    if (!question) return;
+    if (!question || !threadId) return;
+    const prior = getThread(threadId).filter((x) => x.question !== question);
+    setEarlier(prior);
     setAnswer(null);
     setError(null);
     setRelated([]);
@@ -179,6 +220,7 @@ export default function CIA() {
 
     if (DEMO_MODE && DEMO_ANSWERS[question]) {
       setAnswer(DEMO_ANSWERS[question]);
+      appendTurn(threadId, { question, answer: DEMO_ANSWERS[question] as unknown as CIAAnswer });
       setIsLoading(false);
       return;
     }
@@ -189,7 +231,7 @@ export default function CIA() {
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     askCiaStream(
-      { mode: "question", question, ...(previousQuestion ? { previous_question: previousQuestion } : {}) },
+      { mode: "question", question, ...(prior.length ? { history: historyFor(prior) } : previousQuestion ? { previous_question: previousQuestion } : {}) },
       {
         onStep: (label) => setSteps((s) => (s[s.length - 1] === label ? s : [...s, label])),
         onDelta: (t) => setDraft((d) => d + t),
@@ -201,11 +243,12 @@ export default function CIA() {
         if (ctrl.signal.aborted) return;
         if (DEMO_MODE && typeof data?.demo_question_count === "number") setDemoQuestionCount(data.demo_question_count);
         setAnswer(data as unknown as CIAAnswer);
+        if (!data?.error) appendTurn(threadId, { question, answer: data as unknown as CIAAnswer });
       })
       .catch((err) => { if (!ctrl.signal.aborted) setError(err instanceof Error ? err.message : "Unknown error"); })
       .finally(() => { if (!ctrl.signal.aborted) setIsLoading(false); });
     return () => ctrl.abort();
-  }, [question, previousQuestion]);
+  }, [question, previousQuestion, threadId]);
 
   // Use contextual follow-up questions returned with the answer
   useEffect(() => {
@@ -226,7 +269,7 @@ export default function CIA() {
   };
 
   const handleRelated = (q: string) => {
-    navigate(`/cia?q=${encodeURIComponent(q)}&after=${encodeURIComponent(question)}`);
+    navigate(`/cia?q=${encodeURIComponent(q)}&after=${encodeURIComponent(question)}${threadId ? `&t=${threadId}` : ""}`);
   };
 
   if (!question) {
@@ -239,6 +282,27 @@ export default function CIA() {
 
   return (
     <div className="max-w-[720px] mx-auto py-6 space-y-8">
+      {earlier.length > 0 && (
+        <div className="flex justify-end -mb-4">
+          <button type="button" onClick={() => navigate("/cia")} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+            <Plus className="h-3.5 w-3.5" />New thread
+          </button>
+        </div>
+      )}
+      {earlier.map((turn, i) => {
+        const a = turn.answer as unknown as CIAAnswer;
+        return (
+          <div key={i} className="space-y-4 pb-6 border-b border-gray-100">
+            <div className="flex justify-end">
+              <div className="bg-gray-100 rounded-2xl px-4 py-2.5 text-sm text-gray-800 max-w-[80%]">{turn.question}</div>
+            </div>
+            <div className="prose prose-sm max-w-none text-gray-700 prose-p:leading-relaxed">
+              <AnswerMarkdown answer={{ ...a, sources: a.sources ?? [] }} onCite={setOpenCite} />
+            </div>
+            {a.charts && a.charts.length > 0 && <AnswerCharts charts={a.charts} />}
+          </div>
+        );
+      })}
 
       {isLoading && (steps.length === 0 && !draft ? <AnswerSkeleton question={question} /> : (
         <div className="space-y-6">
@@ -282,26 +346,7 @@ export default function CIA() {
             <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Answer</p>
             <div className="border-t border-gray-100 pt-4">
               <div className="prose prose-base max-w-none text-gray-800 prose-p:leading-relaxed prose-strong:text-gray-900 prose-p:text-base">
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  components={{
-                    a: ({ href, children, ...props }) => {
-                      const m = href?.match(/^#cite-(\d+)$/);
-                      if (!m) return <a href={href} target="_blank" rel="noreferrer" {...props}>{children}</a>;
-                      const n = Number(m[1]);
-                      const src = answer.sources.find((x) => x.n === n) ?? answer.sources[n - 1];
-                      return (
-                        <button
-                          type="button"
-                          onClick={() => src && setOpenCite(src)}
-                          title={src ? (src.source_type === "web" ? src.title : `${src.customer_name} · ${sourceLabel(src)}`) : undefined}
-                          className={cn("not-prose inline-flex items-center justify-center align-super ml-0.5 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full text-[10px] font-semibold leading-none no-underline",
-                            src?.source_type === "web" ? "bg-sky-100 text-sky-800 hover:bg-sky-200" : "bg-gray-100 text-gray-700 hover:bg-gray-200")}
-                        >{n}</button>
-                      );
-                    },
-                  }}
-                >{linkCitations(answer.answer)}</ReactMarkdown>
+                <AnswerMarkdown answer={answer} onCite={setOpenCite} />
               </div>
               {answer.charts && answer.charts.length > 0 && <div className="mt-4"><AnswerCharts charts={answer.charts} /></div>}
               {steps.length > 0 && (

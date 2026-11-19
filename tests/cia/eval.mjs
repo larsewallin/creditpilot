@@ -71,14 +71,14 @@ console.log("Customer-level truth:", JSON.stringify(C, null, 1), "\n");
 // ── asking ──────────────────────────────────────────────────────────────────────
 // The last reply in full (follow-up questions, confidence reason) for the checks below.
 let last = {};
-async function ask(question, previous) {
+async function ask(question, previous, history) {
   const r = await fetch(`${SUPABASE_URL}/functions/v1/cia-agent`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
       ...(CIA_INTERNAL_TEST_SECRET ? { "x-internal-test-secret": CIA_INTERNAL_TEST_SECRET } : {}),
     },
-    body: JSON.stringify({ mode: "question", question, ...(previous ? { previous_question: previous } : {}) }),
+    body: JSON.stringify({ mode: "question", question, ...(previous ? { previous_question: previous } : {}), ...(history ? { history } : {}) }),
   });
   const d = await r.json().catch(() => ({}));
   last = d;
@@ -177,6 +177,9 @@ const CASES = [
   { q: "Should we approve the proposed actions for Heliogen?", check: (a) => advice(a) },
   { q: "Do we have credit insurance on Kaman?", check: (a) => [
       !/^\W*I don't have/i.test(a) || "opens with what is missing", /insurance/i.test(a) || "should say credit insurance is not tracked"] },
+  // A thread: the earlier turns go with the question, so "their" means the customer asked about.
+  { q: "Is that more than their limit allows for?", history: [{ question: "What is Arconic's current balance?", answer: "Arconic's current balance is $2,750,000." }],
+    check: (a) => [/arconic/i.test(a) || "lost the customer from the thread", /\$3,000,000|3\.0 ?M|\$3M/i.test(a) || "no credit limit"] },
   // Charts are computed in code from the rows read: one named customer gets its payment trend.
   { q: "How late does Arconic pay now compared with before?", check: () => [
       (last.charts ?? []).some((c) => /days late/.test(c.title) && c.rows.length === 2) || "no payment-trend chart"] },
@@ -195,7 +198,7 @@ import { appendFileSync } from "node:fs";
 let failed = 0;
 const summary = [];
 for (const [i, c] of CASES.entries()) {
-  const answer = await ask(c.q, c.previous);
+  const answer = await ask(c.q, c.previous, c.history);
   const problems = c.check(answer).filter((x) => x !== true);
   if (/\[(OFFICIAL|[CIPNFEUM]\d+)/.test(answer)) problems.push("internal tag shown in the answer");
   else if (/\[(?!\d{1,3}\])[^\]]+\](?!\()/.test(answer)) problems.push("bracketed text in the answer (looks like a citation label)");
