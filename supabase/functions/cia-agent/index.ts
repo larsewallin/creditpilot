@@ -1075,6 +1075,8 @@ async function fetchRelevantData(
 // ─── Saved answers (demo) ────────────────────────────────────────────────────
 
 const SAVED_ANSWER_MAX_AGE_MS = 6 * 3600 * 1000;
+/** Bump when the way CIA answers changes, so saved demo answers written before are not replayed. */
+const ANSWER_VERSION = 2;
 
 // deno-lint-ignore no-explicit-any
 async function savedAnswer(db: any, question: string): Promise<{ id: string; created_at: string; answer: Record<string, unknown> } | null> {
@@ -1085,7 +1087,7 @@ async function savedAnswer(db: any, question: string): Promise<{ id: string; cre
       .order("created_at", { ascending: false }).limit(1).maybeSingle();
     if (error || !data) return null;
     const a = data.answer as Record<string, unknown>;
-    if (!a?.answer || a.error || !Array.isArray(a.steps)) return null;
+    if (!a?.answer || a.error || !Array.isArray(a.steps) || a.answer_version !== ANSWER_VERSION) return null;
     return data as { id: string; created_at: string; answer: Record<string, unknown> };
   } catch { return null; }
 }
@@ -2076,6 +2078,7 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one plain sentence 
         charts: (() => { try { return buildCharts({ question, companyMentions, ...data }); } catch (e) { console.error("[cia-agent] charts:", e); return []; } })(),
         searched: answerMessage.searches.length ? [...searched, `the web (${answerMessage.searches.map((q) => `“${q}”`).join(", ")})`] : searched,
         steps: recordedSteps,
+        answer_version: ANSWER_VERSION,
         ...(DEMO_MODE ? { demo_question_count: demoQuestionCount } : {}),
       };
       // Kept for its share link (/share/<id>); never for the harness or the eval.
