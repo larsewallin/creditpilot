@@ -38,7 +38,9 @@ export function CIAChat() {
     if (!trimmed) return;
     setInput("");
     setIsOpen(false);
-    navigate(`/cia?q=${encodeURIComponent(trimmed)}`);
+    // On the CIA page a new question continues the conversation (thread) on screen.
+    const t = isOnCIAPage ? new URLSearchParams(location.search).get("t") : null;
+    navigate(`/cia?q=${encodeURIComponent(trimmed)}${t ? `&t=${t}` : ""}`);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
