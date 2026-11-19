@@ -58,6 +58,7 @@ import { AuthError, requireUser } from "../_shared/auth.ts";
 import { agentCallerProblem, sameSecret } from "../_shared/agent_gate.ts";
 import { financialsAge } from "../_shared/onboarding/keen_statements.ts";
 import { streamClaude, WEB_SEARCH_TOOL, type WebSource } from "../_shared/claude_stream.ts";
+import { buildCharts } from "../_shared/cia_charts.ts";
 import { ANSWERABLE_TOPICS, capabilityStatus, isAdviceQuestion, playbookBlock } from "../_shared/cia_playbook.ts";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -1958,6 +1959,8 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one plain sentence 
         confidence: meta.confidence,
         confidence_reason: meta.confidence_reason,
         relatedQuestions,
+        // Small charts computed in code from the rows read (never by the model).
+        charts: (() => { try { return buildCharts({ question, companyMentions, ...data }); } catch (e) { console.error("[cia-agent] charts:", e); return []; } })(),
         searched: answerMessage.searches.length ? [...searched, `the web (${answerMessage.searches.map((q) => `“${q}”`).join(", ")})`] : searched,
         ...(DEMO_MODE ? { demo_question_count: demoQuestionCount } : {}),
       });

@@ -13,6 +13,7 @@ import { askCiaStream } from "@/lib/ciaStream";
 import { linkCitations, liveText } from "@/lib/ciaText";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Check, ExternalLink, Globe, Loader2 } from "lucide-react";
+import { AnswerCharts, type Chart } from "@/components/cia/AnswerCharts";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -41,6 +42,8 @@ export interface CIAAnswer {
   relatedQuestions?: string[];
   /** What was read for the answer, in plain words ("12 invoices"). */
   searched?: string[];
+  /** Small charts computed in code from the rows read. */
+  charts?: Chart[];
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -300,6 +303,7 @@ export default function CIA() {
                   }}
                 >{linkCitations(answer.answer)}</ReactMarkdown>
               </div>
+              {answer.charts && answer.charts.length > 0 && <div className="mt-4"><AnswerCharts charts={answer.charts} /></div>}
               {steps.length > 0 && (
                 <details className="mt-3 text-xs text-muted-foreground">
                   <summary className="cursor-pointer select-none">{steps.length} steps · {answer.searched && answer.searched.length > 0 ? `read ${answer.searched.join(", ")}` : "how this was answered"}</summary>
