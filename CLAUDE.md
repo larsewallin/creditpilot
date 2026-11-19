@@ -2,7 +2,7 @@
 
 This file is read automatically at the start of every Claude Code session in this repo.
 It holds durable engineering principles discovered the hard way — not a status log
-(see docs/CreditPilot_Deferred_Backlog.md for that) — just rules worth never re-learning.
+(see docs/archive/CreditPilot_Deferred_Backlog.md for that) — just rules worth never re-learning.
 
 ## Never let an LLM compute exact arithmetic over multiple records
 

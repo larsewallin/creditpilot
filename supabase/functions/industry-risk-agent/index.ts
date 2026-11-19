@@ -32,7 +32,7 @@
  *
  * Idempotency: same pattern as payment-behaviour-agent — dedup against
  * credit_events directly (agent_processed_events is orphaned, see
- * docs/LEGACY_TABLES.md), scoped to today. Finer-grained than Payment
+ * docs/archive/LEGACY_TABLES.md), scoped to today. Finer-grained than Payment
  * Behaviour's (customer_id, event_type) key, though: a sector can have
  * multiple independent econ indicators (e.g. Energy has both commodity_price
  * and production_output) or multiple independent news articles fire the same

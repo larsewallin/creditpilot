@@ -34,7 +34,7 @@
  * taxonomy_version bump.
  *
  * Idempotency: agent_processed_events is a fully orphaned table (see
- * docs/LEGACY_TABLES.md) — no agent reads or writes it. Every existing agent instead
+ * docs/archive/LEGACY_TABLES.md) — no agent reads or writes it. Every existing agent instead
  * dedups against its own domain table (content_fingerprint on negative_news,
  * accession_number on sec_filings). This agent writes only to credit_events, so it
  * dedups the same way against credit_events itself: fingerprint = customer_id +

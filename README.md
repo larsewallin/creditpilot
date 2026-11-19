@@ -1,189 +1,86 @@
 # CreditPilot
 
-Open-source AI agents exploring trade credit and risk management.
+**Perplexity for trade credit.** Ask anything about your receivables in plain English. The assistant reads your customers, invoices, payments and the alerts its monitoring agents raise, checks the web for current news, and cites every figure it gives you. Agents can propose actions, such as a lower credit limit, but nothing changes until a person approves it.
+
+Open source (MIT). **Live demo: [creditpilot.vercel.app](https://creditpilot.vercel.app)**, no sign-up needed.
+
+![Ask anything about your receivables](docs/images/cia-home.jpg)
 
 ---
 
-## What is CreditPilot?
+## What the assistant (CIA) does
 
-CreditPilot is an open-source project exploring how AI agents can automate parts of credit and risk management for companies that sell on trade terms. Agents monitor overdue AR, scan for negative news, watch SEC filings for distress signals, track payment-timing trends, and monitor sector-level economic and news signals — writing what they find into a shared event log. The Credit Intelligence Agent (CIA) reads that log and answers questions in natural language, citing the specific records behind every claim.
+| | |
+|---|---|
+| **Answers from your data, with sources** | Every claim carries a numbered citation. Click it to see the record behind it: an invoice, a payment, an agent's alert. |
+| **Reads the web too** | For a question about a customer, a sector or "what's happening", it searches the web and puts the news next to your exposure. Web facts are cited to their pages. Figures about your own customers only ever come from your data. |
+| **Shows its work** | You see each step as it happens ("Reading 1 customer, 8 payments, 5 credit events…", "Searching the web: …"), then the answer as it is written. |
+| **Never does the arithmetic itself** | Totals, aging buckets, payment trends, limit use and every chart are computed in code and handed to the model as facts. The model explains numbers; it does not produce them. |
+| **Ends advice with next steps** | "Should I reduce Arconic's limit?" gets the facts, then 2–3 steps you can take, in CreditPilot first. Missing or out-of-date accounts become "ask for the latest annual accounts". |
+| **Lets you act from the answer** | Open the customer, or approve or reject the action an agent proposed, right under the answer. |
+| **Keeps the conversation** | Follow-ups stack on the page and keep the context, so "is that more than their limit?" knows who "their" is. |
+| **Shares an answer** | One link opens the question, the answer, its sources and charts. |
 
-Agents also propose actions, like credit limit reductions or account holds, for a human to approve or reject. Nothing changes without sign-off.
+![An answer with citations, a web source and charts](docs/images/cia-answer.jpg)
 
-The repo is designed for local deployment. Your AR data, customer financials, and credit events can stay on your own infrastructure. The hosted demo uses Supabase, Vercel, and the Anthropic Claude API.
+<details>
+<summary>More screenshots: the steps while it works, and a web source opened</summary>
 
-A live demo is available at creditpilot.vercel.app, a fictional $500M specialty alloys distributor with 59 customers across seven credit scenarios.
+![Steps while answering](docs/images/cia-steps.jpg)
+![A cited web page in the side panel](docs/images/cia-source.jpg)
 
-See the ["What is this?"](https://creditpilot.vercel.app/about) page in the live demo (source: [src/content/user-guide.md](src/content/user-guide.md)) for a non-technical walkthrough of what CreditPilot does and how it's structured.
+</details>
+
+### Try these in the demo
+
+- Should I reduce Arconic's credit limit?
+- What's the latest news on American Airlines, and how exposed are we?
+- Which customers have the highest credit risk right now?
+- Whose payments are getting worse?
+
+The demo runs on a sample portfolio: real company names used for illustration, with every score, invoice, payment, event and news item invented. It replays the same story each day with today's dates. Answers are written live by Claude (10 questions per visitor per day).
 
 ---
 
-## How It Works
+## How it works
 
 ```
-DATA IN
-Customer master data → customers table (manual setup only — AR CSV upload matches existing customers, doesn't create them)
-AR aging export      → invoices table (CSV upload from any ERP)
-News                 → Tavily API (live fetch) or existing rows
-SEC filings          → SEC EDGAR API (live, free, no key required)
-Sector econ data     → FRED/BLS API (live, free key required) or existing rows
-Sector news          → GDELT DOC 2.0 API (live, free, no key required)
-Credit scores        → D&B, Coface, Experian (stubbed, ready to wire)
-
-AGENTS READ AND SIGNAL
-AR Aging Agent       → reads invoices → writes OVERDUE_AR, UTILIZATION_THRESHOLD_BREACH credit_events
-News Agent           → fetches + classifies news → writes NEWS_EVENT credit_events
-SEC Agent            → fetches EDGAR filings → writes GOING_CONCERN, SEC_OTHER credit_events
-(SEC agent automatically skips private companies with no CIK)
-Payment Behaviour Agent → compares 90-day payment-timing windows → writes PAYMENT_DETERIORATION, PAYMENT_IMPROVEMENT, PAYMENT_VOLATILITY credit_events
-Industry Risk Agent  → FRED/BLS econ data + GDELT news, per sector present in the portfolio → writes INDUSTRY_DOWNTURN, INDUSTRY_DISRUPTION credit_events (scope='industry', the only agent not scoped to a single customer)
-
-CIA SYNTHESISES
-Reads all unprocessed credit_events
-Detects multi-signal convergence (same customer flagged by 2+ agents, via fn_multi_signal_convergence)
-Answers natural language questions with cited sources
-
-HUMAN REVIEWS
-Credit Events page → review all signals (read only)
-Actions page       → approve or reject AI-proposed actions
-CIA chat           → ask questions about the portfolio
-Nothing changes without human approval
-
-EXECUTED
-Approved action → customers.credit_limit updated
-Full audit trail written to credit_actions
+DATA IN            customers, AR aging (CSV from any ERP), payments, news, SEC filings,
+                   sector and country data, FX rates, credit scores
+     │
+MONITORING AGENTS  each writes what it finds to one shared event log (credit_events)
+                   AR aging · news · SEC filings · payment behaviour · industry ·
+                   country · FX · credit score · sanctions
+     │
+CIA                reads the log and the data, answers questions with citations,
+                   flags customers several agents agree on
+     │
+PEOPLE             approve or reject proposed actions (Actions page); nothing changes
+                   without sign-off, and every decision is kept in an audit trail
 ```
 
----
+| Agent | What it watches |
+|---|---|
+| AR aging | Overdue invoices and how much of each limit is used |
+| News monitor | Negative news per customer, classified by severity |
+| SEC monitor | Filings with distress signals (EDGAR, no key needed) |
+| Payment behaviour | Customers paying later (or earlier) than they used to |
+| Industry risk | Sector downturns and disruptions (FRED economic data, GDELT news) |
+| Country risk | Country ratings and policy changes for where customers sit |
+| FX risk | Open receivables in currencies that moved against you |
+| Credit score | Score changes from the provider you choose |
+| Sanctions | Customers and their owners against sanctions lists |
+| CIA | Answers, daily briefing, multi-signal convergence |
 
-## Architecture
+New-customer onboarding (register checks via [Company Lookup](https://github.com/larsewallin/company-lookup), sanctions screening, the credit provider's report and a proposed limit for approval) is in the code and works on your own install; it is switched off in the public demo.
 
-```
-React / Vite frontend  →  Supabase Edge Functions (Deno)
-                       →  Supabase Postgres
-                       →  Anthropic Claude API
-```
-
-Agents are Supabase Edge Functions written in TypeScript/Deno. They read from and write to a shared Postgres database. The frontend is a Vite/React SPA that queries Postgres directly via the Supabase client. There is no separate API server.
-
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full system diagram and event-driven design.
-
----
-
-## Data Residency
-
-CreditPilot is designed for self-hosted deployment. Your AR data, customer financials, and credit events never need to leave your infrastructure. The Supabase stack (Postgres + Edge Functions) can run on your own Supabase project or on-premise Postgres. The only external calls are to the Anthropic Claude API for AI synthesis — and this can be replaced with a local LLM if required.
-
-The hosted demo at https://creditpilot.vercel.app uses Supabase Cloud and Anthropic's API. For production deployments handling real company data, self-hosting is strongly recommended.
-
-### What Vercel sees
-Only your compiled frontend code (HTML/JS/CSS). No database queries pass through Vercel — all data fetches go directly from the browser to Supabase.
-
-### What Supabase sees
-All your company data — customers, invoices, AR aging, credit events, agent messages. In self-hosted mode, this runs on your own infrastructure. In cloud mode, Supabase hosts on AWS with SOC 2 Type II compliance.
-
-### What the Anthropic API receives
-The CIA and News Monitor agents make external API calls today. The following data is sent:
-
-| Agent | Mode | Data sent to Anthropic |
-|-------|------|----------------------|
-| News Monitor | Classification | Article headline and summary (already public) |
-| CIA | Briefing | Customer names, credit limits, balances, event types and descriptions |
-| CIA | Question | Same as briefing, filtered to relevant customers + user question text, plus invoice numbers and payment transaction details when relevant to the question |
-| CIA | Suggestions | Event types and severities only |
-
-Dunning-letter composition (`compose-dunning-letter.ts`) is a built skill that would also call Anthropic, but it isn't wired into any agent yet — planned, not currently active.
-
-**Invoice numbers and payment transaction details are sent to the Anthropic API** when the CIA's question-answering mode builds context that includes them (e.g. a question about a specific invoice or a customer's payment history) — this is a correction from an earlier version of this doc, which claimed the opposite. Internal database IDs (UUIDs) are not sent; customer and invoice data is referenced by name/number, not primary key.
-
-**Note on customer data and privacy:** Customer names and financial data — including invoice numbers and payment transaction details when relevant to a question — sent to the CIA agent are processed under Anthropic's API terms. Anthropic does not train on API data by default — see [Anthropic's privacy policy](https://www.anthropic.com/privacy). For deployments where customer identity, invoice numbers, or transaction details must stay on-premise, use the local LLM option or configure CIA to send anonymised identifiers instead of real names/numbers.
-
-### Local LLM option
-Replace the Anthropic API with a local model (e.g. Ollama) by implementing the same interface in `cia-agent/index.ts` and the generative skills. In fully local mode, no data leaves your infrastructure.
+More detail: [docs/AGENTS.md](docs/AGENTS.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ---
 
-## Agents
+## Run it yourself
 
-### AR Aging Agent (`ar-aging-agent`)
-Pure signal agent — scans AR data for overdue buckets and credit utilization. Writes `credit_events` only (OVERDUE_AR, UTILIZATION_THRESHOLD_BREACH). (Dunning-letter and Teams-alert composition are built skills, not yet wired into this agent — planned.)
-
-### News Monitor Agent (`news-monitor-agent`)
-Fetches live news via the Tavily API, classifies severity using Claude Haiku with strict JSON schema and confidence scoring, deduplicates by content fingerprint, and writes to negative_news and credit_events. Falls back to processing existing unreviewed rows if no Tavily API key is set.
-
-### SEC Filing Monitor Agent (`sec-monitor-agent`)
-Fetches live filings from the SEC EDGAR API (free, no API key required). Detects risk signals via keyword matching across 10 signal types. Deduplicates by accession number. Composes email alerts to the credit analysis team via `deliver-message.ts`.
-
-### Payment Behaviour Monitor Agent (`payment-behaviour-agent`)
-Pure signal agent — no external API calls. For each customer with positive exposure, compares two 90-day windows of payment-timing history (`payment_transactions.days_early_late`) and writes `credit_events` only: PAYMENT_DETERIORATION, PAYMENT_IMPROVEMENT, PAYMENT_VOLATILITY. Does not touch `customers.payment_health`/`payment_trend` — that write-back stays with the AR Aging Agent.
-
-### Industry Risk Monitor Agent (`industry-risk-agent`)
-The first sector-scoped agent (`scope='industry'`, not tied to one customer). Only checks sectors actually present in the portfolio. Two independent sources, each toggled on by whether its dependency is available: FRED/BLS economic data (needs a free `FRED_API_KEY`) feeds INDUSTRY_DOWNTURN; GDELT news (public API, no key needed) feeds INDUSTRY_DISRUPTION. Normalizes each economic signal's sign to the sector's producer/consumer exposure direction before applying a firing threshold — e.g. a falling oil price is a downturn signal for Energy (a producer) but not for Transportation (a consumer of fuel), from the same raw market move.
-
-### Credit Intelligence Agent (`cia-agent`)
-Synthesises signals from all five monitoring agents into structured intelligence. Operates in three modes: `briefing` (daily portfolio summary, calls Claude Opus), `question` (answers a specific credit question with cited sources, calls Claude Sonnet), and `suggestions` (generates relevant follow-up questions, calls Claude Haiku). Marks source events as processed after each briefing run.
-
-See [docs/AGENTS.md](docs/AGENTS.md) for full agent documentation including event taxonomies.
-
-More agents will be added.
-
----
-
-## Data Ingestion
-
-### Customer Master Data
-Before agents can run, load your customer portfolio into the `customers` table. The table has 44 columns in total — most are optional or agent-written, so this isn't an exhaustive list. Only two fields are actually required on insert:
-
-| Field | Required | Notes |
-|-------|----------|-------|
-| `company_name` | Yes | Used for news search and display |
-| `sector` | Yes | CHECK-constrained to 7 values: `Aerospace & Defense`, `Energy`, `Industrial Manufacturing`, `Materials`, `Transportation`, `Mining`, `Other` |
-
-A few other fields worth calling out explicitly: `company_type` (`public`, `private`, or `sme` — defaults to `public` if omitted), `credit_limit` (defaults to `0`), and `country_code` (ISO 3166-1 alpha-2, defaults to `US`).
-
-External identifiers (ticker, SEC CIK, DUNS, LEI) are **not** columns on `customers` — they live in the separate `customer_identifiers` table (one row per identifier, supporting multiple identifier types per customer). Public-company tickers and CIKs are loaded there; the SEC agent reads CIKs from it and skips customers with none.
-
-The rest of the schema falls into a few buckets: company/address details added for onboarding (`trade_name`, `website`, `naics_sic_code`, `street_address`, `city`, `postcode`, `international_business_name`); and agent-written fields you should never set manually (`risk_tags`, `payment_health`, `payment_on_time_rate`, `credit_rating_score`, and similar — these are computed and kept current by the agents themselves).
-
-Private and SME companies are fully supported. The news agent searches by company name. The SEC agent automatically skips companies with no CIK. Credit scoring works for all company types via manual entry or CSV import.
-
-The difference between `private` and `sme` is intentional but currently a data quality label — future agents will apply different thresholds and workflows for each. Use `private` for larger private companies and `sme` for smaller suppliers typically under $50M revenue.
-
-**V1 — Manual setup:** Insert customers via the Supabase dashboard or by loading the demo seed (`supabase/seed.sql`). The demo dataset includes 49 public companies and 10 private/SME customers as a reference. Customer records must exist before the AR aging CSV upload can process rows against them — that upload matches rows to existing customers via identifier lookup and reports any it can't match; it does not create new customer records.
-
-**Planned:** CSV import for customer master data, ERP API integration for automatic sync.
-
-### AR Data
-Upload an AR aging CSV export from any ERP (SAP, NetSuite, QuickBooks, Dynamics) via the Upload AR Data button on the AR Aging page. Column headers are auto-detected with 40+ aliases. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the expected schema.
-
-### News
-The News Monitor Agent fetches live news via the Tavily API. Set `TAVILY_API_KEY` in Supabase function secrets. Without a key, the agent processes any existing rows in the `negative_news` table.
-
-### SEC Filings
-The SEC Monitor Agent uses the free SEC EDGAR API — no key required. Monitored companies are configured in the `sec_monitoring` table.
-
-### Credit Scores
-Credit scores from D&B, Coface, Experian, and other providers are normalised to a 0–100 scale via `normalise-credit-signal.ts`. API integrations are stubbed in `fetch-credit-score.ts` — ready to wire when API keys are available. Scores can also be entered manually on the Customers page.
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React 18, Vite, TypeScript, Tailwind CSS, shadcn/ui |
-| Routing | React Router v6 |
-| Data fetching | TanStack Query (React Query) |
-| Backend | Supabase Edge Functions (Deno) |
-| Database | Supabase Postgres (PostgREST) |
-| AI | Anthropic Claude API (Opus, Sonnet, Haiku) |
-| Deployment | Vercel (frontend), Supabase (database + functions) |
-
----
-
-## Getting Started
-
-The demo on your own computer is one command (Docker and Node.js needed):
+The demo on your own computer, with one command (needs Docker and Node.js):
 
 ```bash
 git clone https://github.com/larsewallin/creditpilot.git
@@ -191,166 +88,72 @@ cd creditpilot
 scripts/setup-local.sh
 ```
 
-It starts a local Supabase stack, applies the schema, loads the demo data and prints sign-in accounts; then run `npx supabase@3.1.0 functions serve --env-file supabase/functions/.env.local` and `npm run dev`, and open http://localhost:5173.
+It starts a local Supabase stack, applies the schema, loads the demo data and prints sign-in accounts. Then run `npx supabase@3.1.0 functions serve --env-file supabase/functions/.env.local` and `npm run dev`, and open http://localhost:5173.
 
-For your own production install on a Supabase project (`DEMO_MODE=false`, agent schedules, score sources), follow **[docs/RUN_IT_YOURSELF.md](docs/RUN_IT_YOURSELF.md)**.
-
-> To try the demo without any setup, visit [creditpilot.vercel.app](https://creditpilot.vercel.app).
+For a real install on your own Supabase project (your data, `DEMO_MODE=false`, agent schedules, score sources), follow **[docs/RUN_IT_YOURSELF.md](docs/RUN_IT_YOURSELF.md)**.
 
 ---
 
-## Security
+## Your data
 
-Before loading real company data, lock down your Supabase project:
+CreditPilot is built to run on your own infrastructure: your Supabase project (or Postgres) holds every customer, invoice and event. Vercel only serves the compiled frontend.
 
-1. ✅ Done (2026-09-20) — anon write access removed from `pending_actions`, `customers`, `credit_actions`, `agent_runs`, `credit_events`, `negative_news`, `sec_monitoring`. All 7 tables are anon-read-only now; the two write flows that need them (approve/reject, demo reset) go through the `demo-actions` edge function (service role key). See `supabase/migrations/20260920000000_tighten_anon_write_rls.sql`.
-2. Add authentication (Supabase Auth) — still open
-3. Use a dedicated Supabase project — not the same one as the demo — still open
+The only outside AI calls go to the Anthropic API:
 
-The demo deployment still uses an anon key with no auth, so anyone can read the seed data and trigger the demo-actions flows (by design, for the public demo). Items 2-3 must be done before loading real company data.
+| Feature | What is sent |
+|---|---|
+| CIA answers | The question, plus the records relevant to it: customer names, limits, balances, scores, invoices and payments when the question needs them, and the agents' alerts. No database IDs. |
+| CIA web research | Search queries the model writes (they can include a customer's name), run by Anthropic's web search tool. Switch off with `CIA_WEB_SEARCH=off`. |
+| News monitor | Public headlines and summaries, for classification. |
 
----
+Anthropic does not train on API data by default ([privacy policy](https://www.anthropic.com/privacy)). The model calls sit in a few files (`supabase/functions/cia-agent`, `_shared/claude_stream.ts`, the generative skills), so a local model can replace them.
 
-## Environment Variables
-
-### Frontend (`.env`)
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `VITE_SUPABASE_URL` | Yes | Your Supabase project URL (e.g. `https://xxx.supabase.co`) |
-| `VITE_SUPABASE_PUBLISHABLE_KEY` | Yes | Your Supabase anon/public key |
-| `VITE_DEMO_MODE` | Yes | `true` to use seed data, `false` for live data |
-
-### Supabase Function Secrets
-
-Set these in the Supabase dashboard → Edge Functions → Manage secrets:
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `ANTHROPIC_API_KEY` | Yes (live mode) | Anthropic API key for Claude calls |
-| `DEMO_MODE` | Yes | `true` replays seed data without API calls (except CIA question mode) |
-| `SUPABASE_URL` | Auto | Set automatically by Supabase |
-| `SUPABASE_SERVICE_ROLE_KEY` | Auto | Set automatically by Supabase |
-| `TAVILY_API_KEY` | No | Enables live news fetching via Tavily API |
-| `CREDIT_TEAM_EMAIL` | No | Recipient for SEC alert emails (defaults to `credit-team@company.com`) |
-| `SENDGRID_API_KEY` | No | Enables email delivery via SendGrid |
-| `TEAMS_WEBHOOK_URL` | No | Enables Teams delivery via incoming webhook |
-| `SLACK_WEBHOOK_URL` | No | Enables Slack delivery via incoming webhook |
-
-No delivery keys are needed for demo mode — `LogProvider` fallback logs all messages to the console.
+Security: every table has row-level security with restrictive policies; signed-out visitors can read only when an instance is explicitly a public demo; writes go through edge functions that check the caller's role; `tests/security/check-public-access.sh` runs in CI against a fresh install.
 
 ---
 
-## Database
+## Tech stack
 
-The schema is defined across SQL migration files in `supabase/migrations/`. Key tables:
-
-| Table | Purpose |
-|-------|---------|
-| `customers` | Portfolio of monitored counterparties with credit limits |
-| `customer_identifiers` | External identifiers (ticker, SEC CIK, DUNS, LEI) — one row per identifier, multiple per customer |
-| `credit_events` | Central event log — all agents write here |
-| `agent_messages` | Composed communications (dunning letters, Teams alerts) |
-| `pending_actions` | AI-proposed actions awaiting human approval |
-| `agent_runs` | Audit log of every agent execution |
-| `negative_news` | News items for the news monitor agent to process |
-| `sec_monitoring` | Companies being watched for SEC filing alerts |
-
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for schema details and relationships.
-
----
-
-## Demo Mode
-
-Demo-generated rows are tagged with `is_demo = true`. This column exists on `credit_events`, `agent_messages`, `pending_actions`, `invoices`, `payment_transactions`, `negative_news`, `sec_filings`, and `sec_monitoring`. The Reset Demo button on the Actions page resets demo row state — pending actions back to pending, processed flags cleared, seed credit limits restored — then re-invokes the agents to regenerate their outputs. It does not recreate the underlying seed data (customers, invoices, etc.); those are loaded once via `supabase/seed.sql` and persist.
-
-See [docs/DEMO_MODE.md](docs/DEMO_MODE.md) for full details.
-
----
-
-## Deployment
-
-See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for full deployment instructions including Vercel configuration, Supabase project setup, and promoting from demo to production.
-
----
-
-## Project Structure
+| Layer | Technology |
+|---|---|
+| Frontend | React 18, Vite, TypeScript, Tailwind CSS, shadcn/ui, TanStack Query |
+| Backend | Supabase Edge Functions (Deno, TypeScript) |
+| Database | Supabase Postgres |
+| AI | Anthropic Claude (Haiku in the demo, Sonnet for production answers), with web search |
+| Hosting | Vercel (frontend), Supabase (database and functions) |
 
 ```
-creditpilot/
-├── src/
-│   ├── components/
-│   │   ├── AppSidebar.tsx         # Navigation sidebar with agent run status badges
-│   │   ├── CIAChat.tsx            # CIA launcher bar — bottom of every page
-│   │   ├── AgentPill.tsx          # Colored pill showing which agent produced an event
-│   │   ├── SeverityBadge.tsx      # Critical/high/medium/low severity indicator
-│   │   ├── SkeletonCard.tsx       # Loading skeleton components
-│   │   └── ui/                    # shadcn/ui component library (do not edit)
-│   ├── hooks/
-│   │   └── use-toast.ts           # Toast notification hook
-│   ├── lib/
-│   │   ├── constants.ts           # DEMO_MODE flag, agent config
-│   │   ├── format.ts              # Currency and date formatting
-│   │   ├── initDemo.ts            # Demo reset logic — shared by Reset button and auto-init
-│   │   └── utils.ts               # Tailwind class merging (cn utility)
-│   ├── pages/
-│   │   ├── CreditEvents.tsx       # Default landing page — unified signal log
-│   │   ├── Actions.tsx            # Pending and completed human approvals
-│   │   ├── ArAging.tsx            # AR aging dashboard
-│   │   ├── NewsMonitor.tsx        # Negative news alert feed
-│   │   ├── SecFilings.tsx         # SEC filing monitoring with EDGAR links
-│   │   ├── Customers.tsx          # Customer directory with credit metrics
-│   │   └── CIA.tsx                # Perplexity-style CIA answer page (/cia?q=...)
-│   └── App.tsx                    # Route definitions, SidebarLayout, demo auto-init
-├── supabase/
-│   ├── functions/
-│   │   ├── _shared/
-│   │   │   └── skills/            # Reusable skill functions
-│   │   │       ├── analytical/    # analyse-payment-behaviour, analyse-payment-trend, calculate-credit-limit-proposal,
-│   │   │       │                  #   assess-composite-risk, select-credit-score, sector-exposure-direction,
-│   │   │       │                  #   detect-rating-change, normalise-credit-signal, parse-ar-csv
-│   │   │       ├── integration/   # fetch-sec-filing, fetch-credit-score, fetch-industry-signal, deliver-message, search-news
-│   │   │       └── generative/    # classify-news, compose-dunning-letter, compose-teams-alert
-│   │   ├── ar-aging-agent/        # AR Aging monitoring agent
-│   │   ├── ar-csv-upload/         # CSV ingestion endpoint for AR data
-│   │   ├── news-monitor-agent/    # Negative news monitoring agent
-│   │   ├── sec-monitor-agent/     # SEC filing monitoring agent
-│   │   ├── payment-behaviour-agent/ # Payment-timing trend monitoring agent
-│   │   ├── industry-risk-agent/   # Sector-scoped econ + news monitoring agent
-│   │   └── cia-agent/             # Credit Intelligence Agent (synthesis + Q&A)
-│   ├── migrations/                # Schema baseline (00000000000000_baseline.sql) + dated follow-up migrations
-│   ├── migrations_archive/        # Historical migration chain (reference only)
-│   └── seed.sql                   # Demo dataset (optional, loaded separately)
-├── .env.example                   # Frontend env var template
-├── CONTRIBUTING.md
-└── README.md
+src/                     React app (pages/, components/cia/ for the assistant)
+supabase/functions/      one folder per agent and endpoint; _shared/ for skills and helpers
+supabase/migrations/     the schema, one dated migration per change (each with a rollback)
+tests/                   CIA harness and eval, onboarding golden cases, security check
+docs/                    architecture, agents, deployment, run-it-yourself
 ```
 
 ---
 
-## Testing
+## How it is tested
 
-148 unit tests across 9 test files (5 currently failing in `assess-composite-risk`, tied to deferred composite-risk work).
-
-```bash
-npx vitest run supabase/functions/_shared/skills
-```
-
-Tests cover: `normalise-credit-signal` (36), `parse-ar-csv` (29), `select-credit-score` (5), `detect-rating-change` (14), `assess-composite-risk` (13), `calculate-credit-limit-proposal` (13), `classify-news` (12), `analyse-payment-behaviour` (11), `deliver-message` (5). The `fetch-sec-filing` skill's test requires the Deno runtime (it imports the Supabase client via Deno's remote-import mechanism) and is not part of the Node/vitest suite.
+- **375 unit tests** (Vitest) across the skills, the CIA's helpers and the app, plus a Deno type check of every edge function.
+- **CIA eval**: 45 questions whose answers are checked against the database (totals, lists, payment trends, advice, follow-ups, web sources), run daily and on every change to the assistant.
+- **CIA harness**: questions every pull request must pass against the live assistant.
+- **Onboarding golden cases**: 14 applications with known outcomes.
+- **Fresh install**: CI builds the whole stack from scratch in Docker and checks that a signed-out visitor can read nothing.
+- Every merge to `main` deploys automatically (functions, migrations after a dry run, frontend) and checks the live app afterwards.
 
 ---
+
+## Built with Claude Code
+
+Most of this code was written with [Claude Code](https://claude.com/claude-code), and Claude powers the assistant in the app. [CLAUDE.md](CLAUDE.md) holds the engineering rules learned along the way, for example: never let a language model add up numbers across records.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, branch conventions, how to add a new agent, and the PR checklist.
-
----
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, how to add an agent and the pull-request checklist.
 
 ## License
 
-MIT — use it, fork it, build on it.
-
----
+MIT: use it, fork it, build on it.
 
 ## About
 
