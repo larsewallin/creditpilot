@@ -21,7 +21,7 @@ Open source (MIT). **Live demo: [creditpilot.vercel.app](https://creditpilot.ver
 | **Keeps the conversation** | Follow-ups stack on the page and keep the context, so "is that more than their limit?" knows who "their" is. |
 | **Shares an answer** | One link opens the question, the answer, its sources and charts. |
 
-![An answer with citations, a web source and charts](docs/images/cia-answer.jpg)
+![An answer with citations from the ledger and the web](docs/images/cia-answer.jpg)
 
 <details>
 <summary>More screenshots: the steps while it works, and a web source opened</summary>
