@@ -106,6 +106,8 @@ interface CIARequest {
   /** onboarding mode: the credit application whose proposal becomes a NEW_CREDIT_LIMIT action. */
   application_id?: string;
   question?: string;
+  /** mode "shared": the stored answer a share link opens. */
+  answer_id?: string;
   /** The conversation so far (CIA thread): the last turns, oldest first. */
   history?: { question?: string; answer?: string }[];
   /** Stream the answer as server-sent events: step, delta, reset, done, error (CIA v2). */
@@ -1119,7 +1121,7 @@ serve(async (req: Request) => {
   // answers read the whole portfolio with the service role); a briefing run needs the
   // scheduler or a signed-in admin / credit manager. The demo keeps its per-IP limit.
   if (!DEMO_MODE) {
-    if (mode === "question" || mode === "suggestions") {
+    if (mode === "question" || mode === "suggestions" || mode === "shared") {
       const testSecret = Deno.env.get("CIA_INTERNAL_TEST_SECRET") ?? "";
       if (!sameSecret(req.headers.get("x-internal-test-secret") ?? "", testSecret)) {
         try { await requireUser(req); }
@@ -1129,6 +1131,20 @@ serve(async (req: Request) => {
       const notAllowed = await agentCallerProblem(req);
       if (notAllowed) return notAllowed;
     }
+  }
+
+  // ── SHARED mode: an answer opened from its share link (/share/<id>) ─────────
+  // Only answers cia-agent wrote are stored (cia_answers), so a link never shows text a
+  // visitor supplied other than the question. Open in the public demo; a signed-in user in
+  // production (checked above).
+  if (mode === "shared") {
+    const id = String(body.answer_id ?? "");
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return jsonRes({ error: "Unknown answer" }, 404);
+    const { data, error } = await supabaseClient.from("cia_answers").select("question, answer, created_at")
+      .eq("id", id).eq("is_demo", DEMO_MODE).maybeSingle();
+    if (error) return jsonRes({ error: "Could not open the answer" }, 500);
+    if (!data) return jsonRes({ error: "This answer was not found" }, 404);
+    return jsonRes(data);
   }
 
   // ── ONBOARDING mode (New Customer Onboarding) ─────────────────────────────
@@ -1986,7 +2002,7 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one plain sentence 
         });
       });
 
-      return jsonRes({
+      const payload: Record<string, unknown> = {
         answer: finalAnswerText,
         sources,
         confidence: meta.confidence,
@@ -2002,7 +2018,20 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one plain sentence 
         charts: (() => { try { return buildCharts({ question, companyMentions, ...data }); } catch (e) { console.error("[cia-agent] charts:", e); return []; } })(),
         searched: answerMessage.searches.length ? [...searched, `the web (${answerMessage.searches.map((q) => `“${q}”`).join(", ")})`] : searched,
         ...(DEMO_MODE ? { demo_question_count: demoQuestionCount } : {}),
-      });
+      };
+      // Kept for its share link (/share/<id>); never for the harness or the eval.
+      if (!isInternalTest) {
+        try {
+          const { demo_question_count: _count, ...stored } = payload;
+          const { data: saved, error: saveErr } = await supabaseClient.from("cia_answers")
+            .insert({ is_demo: DEMO_MODE, question: question.slice(0, 1000), answer: stored }).select("id").single();
+          if (saveErr) throw saveErr;
+          payload.answer_id = saved.id;
+        } catch (e) {
+          console.error("[cia-agent] answer not stored:", e instanceof Error ? e.message : e);
+        }
+      }
+      return jsonRes(payload);
     } catch (err) {
       console.error("Question mode inner error (Anthropic):", err);
       return jsonRes({ error: "Failed to generate answer", detail: err instanceof Error ? `${err.name}: ${err.message}`.slice(0, 300) : String(err).slice(0, 300) }, 500);

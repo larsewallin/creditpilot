@@ -29,6 +29,7 @@ import NewCustomers from "@/pages/NewCustomers";
 import NewApplication from "@/pages/NewApplication";
 import Settings from "@/pages/Settings";
 import Prospect from "@/pages/Prospect";
+import SharedAnswer from "@/pages/SharedAnswer";
 import { OnboardingDemoNotice } from "@/components/OnboardingDemoNotice";
 import { AuthProvider, RequireAuth } from "@/lib/auth";
 import NotFound from "./pages/NotFound";
@@ -120,6 +121,7 @@ const App = () => (
             </>)}
             <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
             <Route path="/cia" element={<CIA />} />
+            <Route path="/share/:id" element={<SharedAnswer />} />
             <Route path="/about" element={<About />} />
             <Route path="*" element={<NotFound />} />
           </Route>

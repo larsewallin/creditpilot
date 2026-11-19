@@ -15,8 +15,10 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Check, ExternalLink, Globe, Loader2 } from "lucide-react";
 import { AnswerCharts, type Chart } from "@/components/cia/AnswerCharts";
 import { AnswerActions } from "@/components/cia/AnswerActions";
+import { AnswerMarkdown } from "@/components/cia/AnswerMarkdown";
 import { appendTurn, getThread, historyFor, newThreadId, type ThreadTurn } from "@/lib/ciaThread";
-import { Plus } from "lucide-react";
+import { Plus, Share2 } from "lucide-react";
+import { toast } from "sonner";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -47,6 +49,8 @@ export interface CIAAnswer {
   searched?: string[];
   /** Small charts computed in code from the rows read. */
   charts?: Chart[];
+  /** The stored answer, for its share link (/share/<id>). */
+  answer_id?: string;
   /** The customers the question names (for the actions under the answer). */
   customers?: { id: string; company_name: string }[];
 }
@@ -135,33 +139,6 @@ function Steps({ steps, running }: { steps: string[]; running: boolean }) {
 
 function hostOf(url?: string) {
   try { return url ? new URL(url).hostname.replace(/^www\./, "") : ""; } catch { return url ?? ""; }
-}
-
-// ─── Answer text with citation chips ─────────────────────────────────────────
-
-function AnswerMarkdown({ answer, onCite }: { answer: CIAAnswer; onCite: (s: Source) => void }) {
-  return (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
-      components={{
-        a: ({ href, children, ...props }) => {
-          const m = href?.match(/^#cite-(\d+)$/);
-          if (!m) return <a href={href} target="_blank" rel="noreferrer" {...props}>{children}</a>;
-          const n = Number(m[1]);
-          const src = answer.sources.find((x) => x.n === n) ?? answer.sources[n - 1];
-          return (
-            <button
-              type="button"
-              onClick={() => src && onCite(src)}
-              title={src ? (src.source_type === "web" ? src.title : `${src.customer_name} · ${sourceLabel(src)}`) : undefined}
-              className={cn("not-prose inline-flex items-center justify-center align-super ml-0.5 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full text-[10px] font-semibold leading-none no-underline",
-                src?.source_type === "web" ? "bg-sky-100 text-sky-800 hover:bg-sky-200" : "bg-gray-100 text-gray-700 hover:bg-gray-200")}
-            >{n}</button>
-          );
-        },
-      }}
-    >{linkCitations(answer.answer)}</ReactMarkdown>
-  );
 }
 
 // ─── Fallback suggestions ─────────────────────────────────────────────────────
@@ -353,6 +330,18 @@ export default function CIA() {
               </div>
               {answer.charts && answer.charts.length > 0 && <div className="mt-4"><AnswerCharts charts={answer.charts} /></div>}
               {answer.customers && answer.customers.length > 0 && <div className="mt-4"><AnswerActions customers={answer.customers} /></div>}
+              {answer.answer_id && (
+                <div className="mt-3">
+                  <button type="button" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                    onClick={async () => {
+                      const url = `${window.location.origin}/share/${answer.answer_id}`;
+                      try { await navigator.clipboard.writeText(url); toast.success(DEMO_MODE ? "Link copied: anyone with it can read this answer" : "Link copied: colleagues signed in to CreditPilot can open it"); }
+                      catch { window.prompt("Copy the link:", url); }
+                    }}>
+                    <Share2 className="h-3.5 w-3.5" />Share this answer
+                  </button>
+                </div>
+              )}
               {steps.length > 0 && (
                 <details className="mt-3 text-xs text-muted-foreground">
                   <summary className="cursor-pointer select-none">{steps.length} steps · {answer.searched && answer.searched.length > 0 ? `read ${answer.searched.join(", ")}` : "how this was answered"}</summary>
