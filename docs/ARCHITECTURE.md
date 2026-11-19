@@ -169,7 +169,7 @@ cia-agent reads credit_events where cia_processed = false
     │        events — confirmed BROKEN: these event_type values aren't in the
     │        credit_events CHECK constraint, so every insert silently fails
     │        (error only console.error'd). Zero such rows exist in production.
-    │        Deferred to v3/v4 — see docs/CreditPilot_Deferred_Backlog.md.
+    │        Deferred to v3/v4 — see docs/archive/CreditPilot_Deferred_Backlog.md.
     ├──► writes pending_actions (proposed actions) ← sole owner
     └──► marks source events cia_processed = true
     │

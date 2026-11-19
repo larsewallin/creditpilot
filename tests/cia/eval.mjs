@@ -186,6 +186,12 @@ const CASES = [
   // Charts are computed in code from the rows read: one named customer gets its payment trend.
   { q: "How late does Arconic pay now compared with before?", check: () => [
       (last.charts ?? []).some((c) => /days late/.test(c.title) && c.rows.length === 2) || "no payment-trend chart"] },
+  // Scores on CreditPilot's scale (founder 2026-11-19): 58 is Adequate, not a reason to cut a limit;
+  // an agency's watch is a long-term view, not a reason on its own.
+  { q: "Should I reduce Arconic's credit limit?", check: (a) => [
+      /adequate/i.test(a) || "58/100 not described as Adequate",
+      !/58[^.\n]{0,60}\b(elevated|weak|poor|high|concerning)\b/i.test(a) || "calls a 58 score risky",
+      !/negative watch[^.\n]{0,80}\b(reason|justif|warrant)/i.test(a) || "uses the agency watch as a reason"] },
   // ── CIA v2: live web research next to the ledger, each web fact cited to its page ──
   { q: "What's the latest news on American Airlines, and how exposed are we?", check: (a) => [
       /\$[\d,.]+/.test(a) || "no exposure figure from our data",
