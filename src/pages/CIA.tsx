@@ -14,6 +14,7 @@ import { linkCitations, liveText } from "@/lib/ciaText";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Check, ExternalLink, Globe, Loader2 } from "lucide-react";
 import { AnswerCharts, type Chart } from "@/components/cia/AnswerCharts";
+import { AnswerActions } from "@/components/cia/AnswerActions";
 import { appendTurn, getThread, historyFor, newThreadId, type ThreadTurn } from "@/lib/ciaThread";
 import { Plus } from "lucide-react";
 
@@ -46,6 +47,8 @@ export interface CIAAnswer {
   searched?: string[];
   /** Small charts computed in code from the rows read. */
   charts?: Chart[];
+  /** The customers the question names (for the actions under the answer). */
+  customers?: { id: string; company_name: string }[];
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -349,6 +352,7 @@ export default function CIA() {
                 <AnswerMarkdown answer={answer} onCite={setOpenCite} />
               </div>
               {answer.charts && answer.charts.length > 0 && <div className="mt-4"><AnswerCharts charts={answer.charts} /></div>}
+              {answer.customers && answer.customers.length > 0 && <div className="mt-4"><AnswerActions customers={answer.customers} /></div>}
               {steps.length > 0 && (
                 <details className="mt-3 text-xs text-muted-foreground">
                   <summary className="cursor-pointer select-none">{steps.length} steps · {answer.searched && answer.searched.length > 0 ? `read ${answer.searched.join(", ")}` : "how this was answered"}</summary>
