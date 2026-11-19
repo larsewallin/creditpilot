@@ -12,7 +12,8 @@
  */
 
 export interface WebSource { url: string; title: string; cited_text: string }
-export interface StreamResult { text: string; stop_reason: string | null; web: WebSource[]; searches: string[] }
+export interface Usage { input_tokens: number; output_tokens: number; web_searches: number }
+export interface StreamResult { text: string; stop_reason: string | null; web: WebSource[]; searches: string[]; usage: Usage }
 export interface StreamHandlers {
   onText?: (t: string) => void;
   onStep?: (label: string) => void;
@@ -42,7 +43,7 @@ export async function streamClaude(
     throw new Error(`Anthropic ${res.status}: ${detail.slice(0, 300)}`);
   }
 
-  const out: StreamResult = { text: "", stop_reason: null, web: [], searches: [] };
+  const out: StreamResult = { text: "", stop_reason: null, web: [], searches: [], usage: { input_tokens: 0, output_tokens: 0, web_searches: 0 } };
   const webIndex = new Map<string, number>();
   // Per content block: its type, any tool input being streamed, and the web pages it cites.
   const blocks = new Map<number, { type: string; json: string; cites: number[] }>();
@@ -112,8 +113,19 @@ export async function streamClaude(
         }
         break;
       }
+      case "message_start": {
+        const u = ev.message?.usage ?? {};
+        out.usage.input_tokens += (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0);
+        break;
+      }
       case "message_delta":
         if (ev.delta?.stop_reason) out.stop_reason = ev.delta.stop_reason;
+        if (ev.usage) {
+          // message_delta carries the final counts (input includes the web results read).
+          if (typeof ev.usage.input_tokens === "number") out.usage.input_tokens = ev.usage.input_tokens + (ev.usage.cache_read_input_tokens ?? 0) + (ev.usage.cache_creation_input_tokens ?? 0);
+          if (typeof ev.usage.output_tokens === "number") out.usage.output_tokens = ev.usage.output_tokens;
+          out.usage.web_searches = ev.usage.server_tool_use?.web_search_requests ?? out.usage.web_searches;
+        }
         break;
       case "error":
         throw new Error(`Anthropic stream error: ${ev.error?.message ?? "unknown"}`);

@@ -1072,6 +1072,18 @@ async function fetchRelevantData(
 // signal a naive === could leak, and the bypassed value is a soft demo
 // cost-control limit, not an auth boundary) — but it's ~10 dependency-free
 // lines that close the question permanently rather than leave it open.
+// ─── Cost ──────────────────────────────────────────────────────────────────────
+
+/** List prices per million tokens (Anthropic, 2026) and per web search; an estimate, not the bill. */
+const PRICE: Record<string, { in: number; out: number }> = {
+  "claude-haiku-4-5": { in: 1, out: 5 },
+  "claude-sonnet-5": { in: 3, out: 15 },
+};
+function estimateCost(model: string, u: { input_tokens: number; output_tokens: number; web_searches: number }): number {
+  const p = PRICE[model] ?? PRICE["claude-sonnet-5"];
+  return Math.round(((u.input_tokens * p.in + u.output_tokens * p.out) / 1e6 + u.web_searches * 0.01) * 10000) / 10000;
+}
+
 // ─── Saved answers (demo) ────────────────────────────────────────────────────
 
 const SAVED_ANSWER_MAX_AGE_MS = 6 * 3600 * 1000;
@@ -1276,6 +1288,22 @@ serve(async (req: Request) => {
       if (cached) return replayAnswer(cached, body.stream === true);
     }
 
+    // A ceiling on live demo answers per day across all visitors, so a busy day (a launch post)
+    // cannot run up the bill: CIA_DEMO_DAILY_LIVE_CAP, default 300 (saved answers do not count).
+    if (DEMO_MODE && !isInternalTest) {
+      const cap = Number(Deno.env.get("CIA_DEMO_DAILY_LIVE_CAP") ?? "300");
+      try {
+        const { count } = await supabaseClient.from("cia_answers").select("id", { count: "exact", head: true })
+          .eq("is_demo", true).gte("created_at", lastDemoRefresh().toISOString());
+        if (Number.isFinite(cap) && (count ?? 0) >= cap) {
+          return jsonRes({
+            answer: "The demo has answered all the live questions it can for today. The suggested questions on the Ask page still work (they replay today's answers). New questions open again after the daily refresh at 4 am New York time, or run your own copy from the [GitHub repo](https://github.com/larsewallin/creditpilot).",
+            sources: [], confidence: "Low", confidence_reason: "The demo's daily limit of live answers was reached.", relatedQuestions: [],
+          });
+        }
+      } catch (e) { console.error("[cia-agent] daily cap check failed:", e); }
+    }
+
     const DEMO_QUESTION_LIMIT = 10;
     let demoQuestionCount: number | null = null;
     if (DEMO_MODE && !isInternalTest) {
@@ -1310,6 +1338,13 @@ serve(async (req: Request) => {
     let emit: (event: string, data: unknown) => void = () => {};
     const recordedSteps: string[] = [];
     const step = (label: string) => { recordedSteps.push(label); emit("step", { label }); };
+
+    // What this answer cost, measured from the API's own counts (2026-11-19: the founder hit the
+    // monthly limit; every answer now records its tokens and an estimated cost).
+    const usage = { input_tokens: 0, output_tokens: 0, web_searches: 0, calls: 0 };
+    const addUsage = (u?: { input_tokens?: number; output_tokens?: number }) => {
+      if (!u) return; usage.calls++; usage.input_tokens += u.input_tokens ?? 0; usage.output_tokens += u.output_tokens ?? 0;
+    };
 
     const runQuestion = async (): Promise<Response> => {
     try {
@@ -1793,6 +1828,8 @@ serve(async (req: Request) => {
         onReset: () => emit("reset", {}),
       });
       const webSources: WebSource[] = answerMessage.web;
+      addUsage(answerMessage.usage);
+      usage.web_searches += answerMessage.usage.web_searches;
       let rawAnswerText = answerMessage.text
         // "I don't have that information…" is for an answer with nothing else in it; when the
         // advice answer goes on, the opening only says what is missing (2026-11-18 eval, Kaman
@@ -1950,6 +1987,7 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one plain sentence 
             content: `Based on this answer and data, provide confidence and sources.\n\nAnswer: ${plainAnswerText}\n\nData:\n${context}${webSources.length ? `\n\nWeb pages the answer cites (claims from these count as supported):\n${webSources.map((w, i) => `[W${i + 1}] ${w.title} (${w.url}): ${w.cited_text}`).join("\n")}` : ""}`,
           }],
         });
+        addUsage(metaMessage.usage);
         const metaText = extractText(metaMessage);
         let metaCleaned = metaText.replace(/```json/gi, "").replace(/```/g, "").trim();
         // Isolate the JSON object in case the model added preamble/trailing text
@@ -2010,6 +2048,7 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one plain sentence 
             content: `Question: ${question}\nAnswer just given: ${plainAnswerText.slice(0, 700)}\n\nGenerate 3 follow-up questions.`,
           }],
         });
+        addUsage(followUpMessage.usage);
         const followUpText = extractText(followUpMessage);
         const followUpCleaned = followUpText.replace(/```json|```/g, "").trim();
         const parsed = JSON.parse(followUpCleaned);
@@ -2079,6 +2118,7 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one plain sentence 
         searched: answerMessage.searches.length ? [...searched, `the web (${answerMessage.searches.map((q) => `“${q}”`).join(", ")})`] : searched,
         steps: recordedSteps,
         answer_version: ANSWER_VERSION,
+        usage: { ...usage, est_cost_usd: estimateCost(model, usage) },
         ...(DEMO_MODE ? { demo_question_count: demoQuestionCount } : {}),
       };
       // Kept for its share link (/share/<id>); never for the harness or the eval.
@@ -2096,6 +2136,15 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one plain sentence 
       return jsonRes(payload);
     } catch (err) {
       console.error("Question mode inner error (Anthropic):", err);
+      // The account's spend limit (or rate limit) reached: say so plainly instead of an error.
+      if (err instanceof Error && /usage limits|rate.?limit|credit balance|overloaded/i.test(err.message)) {
+        return jsonRes({
+          answer: DEMO_MODE
+            ? "The assistant has used up its AI budget for now. The suggested questions on the Ask page still work (they replay today's answers); please try your own question later."
+            : "The assistant can't reach the AI service right now (its usage limit was reached). Please try again later.",
+          sources: [], confidence: "Low", confidence_reason: "The AI service's usage limit was reached.", relatedQuestions: [],
+        });
+      }
       return jsonRes({ error: "Failed to generate answer", detail: err instanceof Error ? `${err.name}: ${err.message}`.slice(0, 300) : String(err).slice(0, 300) }, 500);
     }
 
