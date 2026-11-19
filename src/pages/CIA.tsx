@@ -210,7 +210,8 @@ export default function CIA() {
       {
         onStep: (label) => setSteps((s) => (s[s.length - 1] === label ? s : [...s, label])),
         onDelta: (t) => setDraft((d) => d + t),
-        onReset: () => setDraft(""),
+        // Text before a web search is dropped, and so is the "Writing the answer" step it started.
+        onReset: () => { setDraft(""); setSteps((st) => (st[st.length - 1] === "Writing the answer" ? st.slice(0, -1) : st)); },
       },
       ctrl.signal,
     )
@@ -282,7 +283,7 @@ export default function CIA() {
           {draft && (
             <div className="space-y-1">
               <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Answer</p>
-              <div className="border-t border-gray-100 pt-4 prose prose-base max-w-none text-gray-800 prose-p:leading-relaxed prose-strong:text-gray-900 prose-p:text-base">
+              <div className="border-t border-gray-100 pt-4 prose prose-base max-w-none text-gray-800 prose-p:leading-relaxed prose-strong:text-gray-900 prose-p:text-base prose-headings:font-semibold prose-headings:text-gray-900 prose-h1:text-lg prose-h2:text-base prose-h3:text-base prose-h1:mt-5 prose-h2:mt-5 prose-h1:mb-2 prose-h2:mb-2">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{liveText(draft) + " ▍"}</ReactMarkdown>
               </div>
             </div>
@@ -314,7 +315,7 @@ export default function CIA() {
           <div className="space-y-1">
             <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Answer</p>
             <div className="border-t border-gray-100 pt-4">
-              <div className="prose prose-base max-w-none text-gray-800 prose-p:leading-relaxed prose-strong:text-gray-900 prose-p:text-base">
+              <div className="prose prose-base max-w-none text-gray-800 prose-p:leading-relaxed prose-strong:text-gray-900 prose-p:text-base prose-headings:font-semibold prose-headings:text-gray-900 prose-h1:text-lg prose-h2:text-base prose-h3:text-base prose-h1:mt-5 prose-h2:mt-5 prose-h1:mb-2 prose-h2:mb-2">
                 <AnswerMarkdown answer={answer} onCite={setOpenCite} />
               </div>
               {answer.charts && answer.charts.length > 0 && <div className="mt-4"><AnswerCharts charts={answer.charts} /></div>}
