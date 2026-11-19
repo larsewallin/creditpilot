@@ -1905,6 +1905,8 @@ serve(async (req: Request) => {
         .replace(/[ \t]{2,}/g, " ")
         // A citation sits right after the words it supports: "…91.7%[1][2]."
         .replace(/\s+⟦/g, "⟦")
+        // "[3],[4]" or "[3] and [4]" between citations: chips sit side by side.
+        .replace(/⟧\s*(?:,|and)\s*⟦/g, "⟧⟦")
         .trim();
       // For the checks below, the answer without its citation numbers.
       const plainAnswerText = cleanAnswerText.replace(/⟦\d+⟧/g, "");
