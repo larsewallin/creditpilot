@@ -138,7 +138,8 @@ async function attempt(q) {
   try {
     const { json, duration_ms } = await askQuestion(q.question);
     const response = {
-      answer: json.answer ?? json.response ?? "",
+      // Citation numbers ([1], [2]…) are links on the page; the checks read the words.
+      answer: String(json.answer ?? json.response ?? "").replace(/\[\d{1,3}\]/g, ""),
       sources: json.sources ?? [],
       confidence: json.confidence ?? "",
       confidence_reason: json.confidence_reason ?? "",

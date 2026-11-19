@@ -82,7 +82,8 @@ async function ask(question, previous) {
   });
   const d = await r.json().catch(() => ({}));
   last = d;
-  return String(d.answer ?? d.error ?? `HTTP ${r.status}`);
+  // Citation numbers ([1], [2]…) are links on the page; the checks read the words.
+  return String(d.answer ?? d.error ?? `HTTP ${r.status}`).replace(/\[\d{1,3}\]/g, "");
 }
 
 // ── checks ──────────────────────────────────────────────────────────────────────
@@ -176,6 +177,11 @@ const CASES = [
   { q: "Should we approve the proposed actions for Heliogen?", check: (a) => advice(a) },
   { q: "Do we have credit insurance on Kaman?", check: (a) => [
       !/^\W*I don't have/i.test(a) || "opens with what is missing", /insurance/i.test(a) || "should say credit insurance is not tracked"] },
+  // ── CIA v2: live web research next to the ledger, each web fact cited to its page ──
+  { q: "What's the latest news on American Airlines, and how exposed are we?", check: (a) => [
+      /\$[\d,.]+/.test(a) || "no exposure figure from our data",
+      (last.sources ?? []).some((s) => s.source_type === "web" && /^https?:/.test(s.url ?? "")) || "no web page cited",
+      (last.sources ?? []).every((s, i) => s.n === i + 1) || "citation numbers out of order"] },
   // A follow-up that names no company carries the earlier question's company over.
   { q: "And how do they pay?", previous: "What is Arconic's credit limit and current balance?", check: (a) => [
       /arconic/i.test(a) || "lost the company from the earlier question", /on.?time|late|days/i.test(a) || "no payment facts"] },
@@ -189,7 +195,7 @@ for (const [i, c] of CASES.entries()) {
   const answer = await ask(c.q, c.previous);
   const problems = c.check(answer).filter((x) => x !== true);
   if (/\[(OFFICIAL|[CIPNFEUM]\d+)/.test(answer)) problems.push("internal tag shown in the answer");
-  else if (/\[[^\]]+\](?!\()/.test(answer)) problems.push("bracketed text in the answer (looks like a citation label)");
+  else if (/\[(?!\d{1,3}\])[^\]]+\](?!\()/.test(answer)) problems.push("bracketed text in the answer (looks like a citation label)");
   failed += problems.length ? 1 : 0;
   if (problems.length) { console.log(`::warning::CIA eval: "${c.q}": ${problems.join("; ")}`); summary.push(`- ✗ ${c.q}: ${problems.join("; ")}`); }
   console.log(`\n── ${i + 1}. ${c.q}  ${problems.length ? "✗ " + problems.join("; ") : c.check.length || problems.length ? "✓" : "(read)"}`);
