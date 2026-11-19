@@ -221,7 +221,7 @@ jobs:
 
       - name: CIA harness (every question must pass)
         # Only when the assistant itself was redeployed or the schema changed (API cost).
-        if: contains(steps.plan.outputs.deploy, 'cia-agent') || steps.plan.outputs.migrations != '
+        if: contains(steps.plan.outputs.deploy, 'cia-agent') || steps.plan.outputs.migrations != ''
         run: node tests/cia/run.mjs
 
       - name: Live checks (read-only)
