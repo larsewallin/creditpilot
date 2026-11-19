@@ -102,7 +102,7 @@ interface AgentRun {
 }
 
 interface CIARequest {
-  mode?: "briefing" | "question" | "suggestions" | "onboarding";
+  mode?: "briefing" | "question" | "suggestions" | "onboarding" | "shared";
   /** onboarding mode: the credit application whose proposal becomes a NEW_CREDIT_LIMIT action. */
   application_id?: string;
   question?: string;
