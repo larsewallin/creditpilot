@@ -66,7 +66,7 @@ When several agents flag the same customer, the CIA writes one **Several warning
 
 ## The demo, and running it on your own data
 
-**The demo** runs on a sample portfolio, so anyone can try it without setup. On the sign-in page, try it as a credit manager, a credit analyst or a sales rep. The customer names are real companies used for illustration only: every score, limit, invoice, payment, event and news item about them is invented. The demo is shared by every visitor and replays the same story each day with today's dates. Real in the demo: New customers' official registers and sanctions lists (every demo application is scored 55, so the demo follows the workflow, not the data) and the CIA's answers, written live by an AI model (10 questions a day per visitor).
+**The demo** runs on a sample portfolio, so anyone can try it without setup. On the sign-in page, try it as a credit manager, a credit analyst or a sales rep. The customer names are real companies used for illustration only: every score, limit, invoice, payment, event and news item about them is invented. The demo is shared by every visitor and replays the same story each day with today's dates. New customers (onboarding) is not available in the demo; it works on your own CreditPilot. Real in the demo: the CIA's answers, written live by an AI model (10 questions a day per visitor).
 
 **Your own data** stays yours: a company runs CreditPilot in its own Supabase project, or entirely locally, and nothing touches this project's infrastructure. The repo's RUN_IT_YOURSELF guide covers both.
 
