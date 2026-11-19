@@ -65,6 +65,9 @@ export function CIAChat() {
     ? "Ask a follow-up…"
     : "Ask anything about your portfolio…";
 
+  // The CIA home has its own large question box.
+  if (isOnCIAPage && !new URLSearchParams(location.search).get("q")) return null;
+
   return (
     <>
       {/* ── Fixed bottom bar ─────────────────────────────────────────────── */}

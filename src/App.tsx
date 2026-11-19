@@ -98,7 +98,8 @@ const App = () => (
           <Route path="/login" element={<Login />} />
           {/* Outside the demo every page needs a signed-in CreditPilot user; the database enforces the same. */}
           <Route element={DEMO_MODE ? <SidebarLayout /> : <RequireAuth><SidebarLayout /></RequireAuth>}>
-            <Route path="/" element={<Navigate to="/events" replace />} />
+            {/* The assistant is the start page (founder, 2026-11-19: the demo leads with the CIA). */}
+            <Route path="/" element={<Navigate to="/cia" replace />} />
             <Route path="/events" element={<CreditEvents />} />
             <Route path="/actions" element={<Actions />} />
             <Route path="/demo" element={<Navigate to="/events" replace />} />

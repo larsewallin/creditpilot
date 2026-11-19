@@ -15,6 +15,7 @@ import { Check, ExternalLink, Globe, Loader2 } from "lucide-react";
 import { AnswerCharts, type Chart } from "@/components/cia/AnswerCharts";
 import { AnswerActions } from "@/components/cia/AnswerActions";
 import { AnswerMarkdown } from "@/components/cia/AnswerMarkdown";
+import { AskHome } from "@/components/cia/AskHome";
 import { appendTurn, getThread, historyFor, newThreadId, type ThreadTurn } from "@/lib/ciaThread";
 import { Plus, Share2 } from "lucide-react";
 import { toast } from "sonner";
@@ -246,13 +247,7 @@ export default function CIA() {
     navigate(`/cia?q=${encodeURIComponent(q)}&after=${encodeURIComponent(question)}${threadId ? `&t=${threadId}` : ""}`);
   };
 
-  if (!question) {
-    return (
-      <div className="max-w-[720px] mx-auto py-16 text-center text-muted-foreground text-sm">
-        Use the search bar below to ask CIA a question about your portfolio.
-      </div>
-    );
-  }
+  if (!question) return <AskHome />;
 
   return (
     <div className="max-w-[720px] mx-auto py-6 space-y-8">
