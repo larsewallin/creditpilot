@@ -94,7 +94,7 @@ export async function streamClaude(
           if (n === undefined) {
             n = out.web.length + 1;
             webIndex.set(c.url, n);
-            out.web.push({ url: c.url, title: String(c.title ?? c.url), cited_text: String(c.cited_text ?? "").slice(0, 400) });
+            out.web.push({ url: c.url, title: String(c.title ?? c.url), cited_text: String(c.cited_text ?? "").replace(/\*\*|__|#+\s/g, "").slice(0, 400) });
           }
           if (!blk.cites.includes(n)) blk.cites.push(n);
         }
