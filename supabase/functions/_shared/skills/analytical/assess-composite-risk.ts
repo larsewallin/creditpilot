@@ -40,6 +40,8 @@
  * @usedBy cia-agent (briefing mode, Step 6b)
  */
 
+import { POLICY_DEFAULTS, type CreditPolicy } from "../../policy/defaults.ts";
+
 export interface CompositeRiskInput {
   utilization_pct: number;
   credit_score?: number | null;
@@ -63,10 +65,14 @@ export interface CompositeRiskResult {
   adjustments: string[];
 }
 
-const BASE_THRESHOLD = 75;
-const THRESHOLD_FLOOR = 40;
-
-export function assessCompositeRisk(input: CompositeRiskInput): CompositeRiskResult {
+export function assessCompositeRisk(
+  input: CompositeRiskInput,
+  rules: CreditPolicy["composite"] = POLICY_DEFAULTS.composite,
+  scale: Pick<CreditPolicy["limit_review"], "distress_score_below" | "concern_score_up_to"> = POLICY_DEFAULTS.limit_review,
+): CompositeRiskResult {
+  const BASE_THRESHOLD = rules.base_threshold_pct;
+  const THRESHOLD_FLOOR = rules.floor_pct;
+  const DISTRESS = scale.distress_score_below, CONCERN = scale.concern_score_up_to;
   const {
     utilization_pct,
     credit_score = null,
@@ -85,43 +91,44 @@ export function assessCompositeRisk(input: CompositeRiskInput): CompositeRiskRes
   const hasHighSignal = active_signal_severities?.includes("high") ?? false;
 
   if (active_event_types.includes("NEWS_EVENT") && (hasCriticalSignal || hasHighSignal)) {
-    delta += 10;
-    adjustments.push("NEGATIVE_NEWS (−10pp)");
+    delta += rules.negative_news_pts;
+    adjustments.push(`NEGATIVE_NEWS (−${rules.negative_news_pts}pp)`);
   }
 
   if (active_event_types.includes("GOING_CONCERN")) {
-    delta += 15;
-    adjustments.push("GOING_CONCERN (−15pp)");
+    delta += rules.going_concern_pts;
+    adjustments.push(`GOING_CONCERN (−${rules.going_concern_pts}pp)`);
   }
 
   if (active_event_types.includes("COVENANT_WAIVER")) {
-    delta += 12;
-    adjustments.push("COVENANT_WAIVER (−12pp)");
+    delta += rules.covenant_waiver_pts;
+    adjustments.push(`COVENANT_WAIVER (−${rules.covenant_waiver_pts}pp)`);
   }
 
   if (active_event_types.includes("CEO_DEPARTURE")) {
-    delta += 5;
-    adjustments.push("CEO_DEPARTURE (−5pp)");
+    delta += rules.ceo_departure_pts;
+    adjustments.push(`CEO_DEPARTURE (−${rules.ceo_departure_pts}pp)`);
   }
 
   if (active_event_types.includes("CREDIT_RATING_DOWNGRADE")) {
-    delta += 10;
-    adjustments.push("CREDIT_RATING_DOWNGRADE (−10pp)");
+    delta += rules.score_drop_pts;
+    adjustments.push(`CREDIT_RATING_DOWNGRADE (−${rules.score_drop_pts}pp)`);
   }
 
   if (active_event_types.includes("RISK_CHANGE")) {
     const heavy = (macro_dimension_count ?? 2) >= 3;
-    delta += heavy ? 10 : 5;
-    adjustments.push(`MACRO_CONVERGENCE (−${heavy ? 10 : 5}pp)`);
+    const pts = heavy ? rules.macro_three_dimensions_pts : rules.macro_two_dimensions_pts;
+    delta += pts;
+    adjustments.push(`MACRO_CONVERGENCE (−${pts}pp)`);
   }
 
   // Credit score threshold adjustments
-  if (credit_score !== null && credit_score < 20) {
-    delta += 15;
-    adjustments.push(`credit_score distress <20 (−15pp)`);
-  } else if (credit_score !== null && credit_score >= 20 && credit_score <= 40) {
-    delta += 5;
-    adjustments.push(`credit_score concern 20–40 (−5pp)`);
+  if (credit_score !== null && credit_score < DISTRESS) {
+    delta += rules.distress_score_pts;
+    adjustments.push(`credit_score distress <${DISTRESS} (−${rules.distress_score_pts}pp)`);
+  } else if (credit_score !== null && credit_score >= DISTRESS && credit_score <= CONCERN) {
+    delta += rules.concern_score_pts;
+    adjustments.push(`credit_score concern ${DISTRESS}–${CONCERN} (−${rules.concern_score_pts}pp)`);
   }
 
   // Payment behaviour adjusts threshold (same logic as calculate-credit-limit-proposal)
@@ -136,7 +143,7 @@ export function assessCompositeRisk(input: CompositeRiskInput): CompositeRiskRes
 
   // Determine whether action is recommended
   const hasActiveSignals = active_event_types.length > 0;
-  const inDistress = credit_score !== null && credit_score < 20;
+  const inDistress = credit_score !== null && credit_score < DISTRESS;
   const multiAgent = agents_flagging.length >= 3;
 
   const recommend_action =

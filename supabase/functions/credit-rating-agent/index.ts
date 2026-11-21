@@ -38,6 +38,7 @@
  */
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.98.0";
 import { detectRatingChange } from "../_shared/skills/analytical/detect-rating-change.ts";
+import { loadPolicy } from "../_shared/policy/policy.ts";
 import { publishEvent } from "../_shared/publishEvent.ts";
 import { severityToScore } from "../_shared/event_schemas.ts";
 import { keenMayReplace, refreshDue, scoreUpdate, type RefreshCustomer } from "../_shared/skills/analytical/score-refresh.ts";
@@ -263,10 +264,12 @@ Deno.serve(async (req) => {
     }
 
     let conditionsFound = 0;
+    const { policy, warning: policyWarning } = await loadPolicy(supabase);
+    if (policyWarning) console.error("[credit-rating-agent]", policyWarning);
 
     // 3. Evaluate each customer.
     for (const c of (customers ?? []) as any[]) {
-      const change = detectRatingChange(Number(c.credit_rating_previous_score), Number(c.credit_rating_score));
+      const change = detectRatingChange(Number(c.credit_rating_previous_score), Number(c.credit_rating_score), policy.score_change);
       if (!change.type || !change.severity) continue;
 
       const updatedAt = c.credit_rating_updated_at ? new Date(c.credit_rating_updated_at).getTime() : null;

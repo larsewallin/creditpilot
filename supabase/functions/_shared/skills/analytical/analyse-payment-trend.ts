@@ -35,6 +35,8 @@
  * @usedBy payment-behaviour-agent
  */
 
+import { POLICY_DEFAULTS, type CreditPolicy } from "../../policy/defaults.ts";
+
 export interface PaymentTrendTransaction {
   payment_date: string;
   days_early_late: number | null;
@@ -97,32 +99,36 @@ function round1(n: number): number {
   return Math.round(n * 10) / 10;
 }
 
-function deteriorationSeverity(swing: number): DeteriorationSignal {
-  if (swing >= 20) return { trend_direction: "sharply_worsening", severity: "critical" };
-  if (swing >= 10) return { trend_direction: "sharply_worsening", severity: "high" };
+type TrendRules = CreditPolicy["payment_trend"];
+
+function deteriorationSeverity(swing: number, r: TrendRules): DeteriorationSignal {
+  if (swing >= r.swing_critical_days) return { trend_direction: "sharply_worsening", severity: "critical" };
+  if (swing >= r.swing_high_days) return { trend_direction: "sharply_worsening", severity: "high" };
   return { trend_direction: "worsening", severity: "medium" };
 }
 
-function improvementSeverity(swing: number): ImprovementSignal {
-  if (swing >= 10) return { trend_direction: "sharply_improving", severity: "low" };
+function improvementSeverity(swing: number, r: TrendRules): ImprovementSignal {
+  if (swing >= r.swing_high_days) return { trend_direction: "sharply_improving", severity: "low" };
   return { trend_direction: "improving", severity: "info" };
 }
 
-function volatilitySeverity(stddev: number): VolatilitySignal["severity"] {
-  return stddev >= 20 ? "critical" : "high";
+function volatilitySeverity(stddev: number, r: TrendRules): VolatilitySignal["severity"] {
+  return stddev >= r.volatility_critical_days ? "critical" : "high";
 }
 
 export function analysePaymentTrend(
   transactions: PaymentTrendTransaction[],
-  referenceDate: Date = new Date()
+  referenceDate: Date = new Date(),
+  rules: TrendRules = POLICY_DEFAULTS.payment_trend,
 ): PaymentTrendResult {
+  const windowDays = rules.window_days;
   const valid = (transactions ?? []).filter(
     (t): t is PaymentTrendTransaction & { days_early_late: number } => t.days_early_late !== null
   );
 
   const now = referenceDate.getTime();
-  const currentStart = now - OBSERVATION_WINDOW_DAYS * MS_PER_DAY;
-  const priorStart = now - 2 * OBSERVATION_WINDOW_DAYS * MS_PER_DAY;
+  const currentStart = now - windowDays * MS_PER_DAY;
+  const priorStart = now - 2 * windowDays * MS_PER_DAY;
 
   const currentWindow: number[] = [];
   const priorWindow: number[] = [];
@@ -148,14 +154,14 @@ export function analysePaymentTrend(
   const swing = current_avg_days_late - prior_avg_days_late;
 
   const deterioration =
-    swing >= 5 && current_avg_days_late > 0 ? deteriorationSeverity(swing) : null;
+    swing >= rules.swing_days && current_avg_days_late > 0 ? deteriorationSeverity(swing, rules) : null;
 
   const improvement =
-    -swing >= 5 && prior_avg_days_late > 0 ? improvementSeverity(-swing) : null;
+    -swing >= rules.swing_days && prior_avg_days_late > 0 ? improvementSeverity(-swing, rules) : null;
 
   const stddev = round1(populationStdDev(currentWindow));
   const volatility: VolatilitySignal | null =
-    stddev >= 10 ? { severity: volatilitySeverity(stddev), standard_deviation_days: stddev } : null;
+    stddev >= rules.volatility_days ? { severity: volatilitySeverity(stddev, rules), standard_deviation_days: stddev } : null;
 
   return {
     has_sufficient_data: true,

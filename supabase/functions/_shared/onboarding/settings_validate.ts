@@ -9,6 +9,8 @@ import { activeScoreOrder } from "./score_providers.ts";
 import { ONBOARDING_DEFAULTS } from "./settings.ts";
 import { SCORE_PROVIDERS } from "./score_providers.ts";
 import { AGENTS, EVERY_HOURS, SCHEDULE_DEFAULTS, validTimezone } from "../scheduling/schedule.ts";
+import { POLICY_DEFAULTS, POLICY_SECTIONS } from "../policy/defaults.ts";
+import { effectivePolicy } from "../policy/policy.ts";
 
 export const SETTING_KEYS = [
   "onboarding.template",
@@ -20,6 +22,9 @@ export const SETTING_KEYS = [
   "agents.schedule",
 ] as const;
 export type SettingKey = typeof SETTING_KEYS[number];
+
+/** Trade Credit Policy sections, one settings key each (policy.payments, policy.overdue, ...). */
+export const POLICY_KEYS = POLICY_SECTIONS.map((s) => `policy.${s}`);
 
 /** Score sources the pipeline can call, in no particular order. A company's
  *  score_order lists the ones it uses, most trusted first; the first with a score counts. */
@@ -48,8 +53,14 @@ function check(def: Json, val: Json, path: string, errors: string[]) {
 
 /** Returns a list of problems; empty means the value is acceptable. */
 export function validateSetting(key: string, value: Json): string[] {
-  if (!(SETTING_KEYS as readonly string[]).includes(key)) return [`${key}: unknown settings key`];
+  const isPolicy = POLICY_KEYS.includes(key);
+  if (!isPolicy && !(SETTING_KEYS as readonly string[]).includes(key)) return [`${key}: unknown settings key`];
   if (!isObj(value)) return [`${key}: expected an object`];
+  if (isPolicy) {
+    const errors: string[] = [];
+    check(POLICY_DEFAULTS[key.slice("policy.".length) as keyof typeof POLICY_DEFAULTS], value, key, errors);
+    return errors;
+  }
   if (key === "onboarding.approval") return [];
   const errors: string[] = [];
   if (key === "agents.schedule") {
@@ -94,6 +105,7 @@ export function effectiveSettings(overrides: Record<string, Json>) {
   if (src?.score_order) out.sources = { ...src, score_order: activeScoreOrder(src.score_order) };
   out.approval = overrides["onboarding.approval"] ?? {};
   const sched = (overrides["agents.schedule"] ?? {}) as Record<string, Json>;
+  out.policy = effectivePolicy(overrides);
   out.agents = Object.fromEntries(Object.entries(SCHEDULE_DEFAULTS).map(([k, d]) => [k, merge(d, sched[k])]));
   return out;
 }
