@@ -461,7 +461,7 @@ async function decide(db: SupabaseClient, user: AuthedUser, body: Record<string,
   const { policy } = await loadPolicy(db);
   if (!mayApprove(user, policy, approved)) {
     await db.from("pending_actions").update({ recommended_by_user: user.user_id, recommended_by: user.display_name,
-      recommended_value: approved, recommended_note: note || null, recommended_at: now }).eq("id", action.id);
+      escalated_value: approved, recommended_note: note || null, recommended_at: now }).eq("id", action.id);
     return { application_id: row.id, decision: "recommended", recommended_limit_usd: approved,
       next: `Recommended at ${approved.toLocaleString("en-US")} USD. That is above your approval authority (${authorityText(authorityOf(user, policy))}), so it waits for someone whose authority covers it.` };
   }

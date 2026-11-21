@@ -266,9 +266,9 @@ export default function Actions() {
                   {action.rationale && (
                     <p className="text-muted-foreground italic">"{action.rationale}"</p>
                   )}
-                  {action.recommended_value != null && (
+                  {action.recommended_by_user && action.escalated_value != null && (
                     <p className="rounded-md bg-amber-500/10 px-3 py-2 text-foreground">
-                      <span className="font-medium">Recommended at {formatCurrency(action.recommended_value)}</span> by {action.recommended_by ?? "a colleague"}: above their approval authority, so it needs someone whose authority covers it.
+                      <span className="font-medium">Recommended at {formatCurrency(action.escalated_value)}</span> by {action.recommended_by ?? "a colleague"}: above their approval authority, so it needs someone whose authority covers it.
                       {action.recommended_note ? <> Note: “{action.recommended_note}”</> : null}
                     </p>
                   )}

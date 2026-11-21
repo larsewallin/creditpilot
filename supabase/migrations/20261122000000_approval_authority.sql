@@ -12,8 +12,6 @@ COMMENT ON COLUMN public.app_users.approval_limit_usd IS
 
 ALTER TABLE public.pending_actions ADD COLUMN IF NOT EXISTS recommended_by_user uuid REFERENCES auth.users(id);
 ALTER TABLE public.pending_actions ADD COLUMN IF NOT EXISTS recommended_by text;
-ALTER TABLE public.pending_actions ADD COLUMN IF NOT EXISTS recommended_value bigint;
+ALTER TABLE public.pending_actions ADD COLUMN IF NOT EXISTS recommended_value bigint; -- already existed (20261014010000); not used for authority, see 20261122010000
 ALTER TABLE public.pending_actions ADD COLUMN IF NOT EXISTS recommended_note text;
 ALTER TABLE public.pending_actions ADD COLUMN IF NOT EXISTS recommended_at timestamptz;
-COMMENT ON COLUMN public.pending_actions.recommended_value IS
-  'A user without enough authority recommended this amount; someone with authority for it must approve.';
