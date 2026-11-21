@@ -8,8 +8,7 @@
  *   needs        = monthly purchases × (terms ÷ 30) × (1 + buffer)       (falls back to the request)
  *   caps         = lowest of: working capital × wc%, net worth × nw%     (both × (1 − the statements' quality haircut))
  *                  and any bureau / Keen maximum credit recommendation
- *   risk-adjusted = cap × the score label's multiplier × (1 − macro haircut, once, if a Country or FX signal applies);
- *                  Elevated gets the full cap when the request is at most the policy's % of the company's revenue
+ *   risk-adjusted = cap × the score label's multiplier × (1 − macro haircut, once, if a Country or FX signal applies)
  *   supportable  = risk-adjusted, rounded down
  *   recommended  = lowest of needs and risk-adjusted, rounded down
  *   decision     = request ≤ recommended → approve as requested; otherwise counteroffer at recommended;
@@ -106,12 +105,7 @@ export function calculateOnboardingLimit(input: OnboardingLimitInput): Onboardin
   const macroHit = input.macro.country || input.macro.fx;
   if (input.macro.country) reason_codes.push("MACRO_COUNTRY_RISK");
   if (input.macro.fx) reason_codes.push("MACRO_FX_RISK");
-  // Elevated: the full cap when the request is small for the company's size.
-  const revenue = s?.revenue;
-  const smallRequest = input.band === "elevated" && !!revenue && revenue > 0
-    && requested <= revenue * L.elevated_full_if_request_pct_of_revenue_up_to / 100;
-  if (smallRequest) reason_codes.push("SMALL_REQUEST_FOR_SIZE");
-  const multiplier = smallRequest ? 1 : L.score_multipliers[input.band] ?? 0;
+  const multiplier = L.score_multipliers[input.band] ?? 0;
   const riskAdjusted = cap * multiplier * (macroHit ? 1 - L.macro_haircut_pct / 100 : 1);
 
   const binding: BindingMethod = needs <= riskAdjusted ? "needs_based" : capMethod;

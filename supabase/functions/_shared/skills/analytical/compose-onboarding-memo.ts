@@ -41,7 +41,6 @@ export const REASON_TEXT: Record<string, string> = {
   NO_SCORE_AVAILABLE: "No credit score could be obtained from any configured source.",
   NO_CAP_BASIS: "There are no financial statements or bureau recommendation to base a limit on.",
   SCORE_HIGH_RISK: "The score is High risk on the company's policy, which supports no unsecured limit.",
-  SMALL_REQUEST_FOR_SIZE: "The score is Elevated risk, but the request is small for the company's size, so the full cap applies (policy).",
   TRADE_REFERENCES_SHORT: "Fewer trade references than the policy asks for this company's size and score.",
   NO_SUPPORTABLE_LIMIT: "The evidence supports no limit.",
   FINANCIALS_STALE: "The accounts are older than this score allows; ask the customer for newer (or interim) accounts.",

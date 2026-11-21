@@ -77,7 +77,7 @@ describe("calculateOnboardingLimit", () => {
   });
 
   // Founder, 2026-11-20: Adequate and better are good credits (100%); Watch 80%; Elevated 50%,
-  // or 100% when the request is small for the company's size; High risk 0%.
+  // High risk 0%.
   it("gives Adequate the full cap, Watch 80% and Elevated 50%", () => {
     const big = { ...base, requested_usd: 500_000, monthly_purchases_usd: 300_000 };
     expect(calculateOnboardingLimit({ ...big, band: "adequate" }).risk_adjusted_cap_usd).toBe(38_000);
@@ -85,12 +85,9 @@ describe("calculateOnboardingLimit", () => {
     expect(calculateOnboardingLimit({ ...big, band: "elevated" }).risk_adjusted_cap_usd).toBe(19_000);
   });
 
-  it("gives Elevated the full cap when the request is small for the company's revenue", () => {
+  it("gives Elevated 50% whatever the company's size (no size exception)", () => {
     const r = calculateOnboardingLimit({ ...base, band: "elevated", statement: stmt({ revenue: 100_000_000 }) });
-    expect(r.reason_codes).toContain("SMALL_REQUEST_FOR_SIZE");
-    expect(r.risk_adjusted_cap_usd).toBe(38_000);
-    const big = calculateOnboardingLimit({ ...base, band: "elevated", requested_usd: 200_000, statement: stmt({ revenue: 100_000_000 }) });
-    expect(big.reason_codes).not.toContain("SMALL_REQUEST_FOR_SIZE");
+    expect(r.risk_adjusted_cap_usd).toBe(19_000);
   });
 
   it("haircuts each statement quality by the policy", () => {
