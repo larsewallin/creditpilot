@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { DEMO_MODE } from "@/lib/constants";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
+import { isApprover } from "@/lib/authority";
 
 const money = (v: number | null) => (v == null ? "—" : v >= 1_000_000 ? `$${(v / 1_000_000).toFixed(v % 1_000_000 ? 2 : 1).replace(/\.?0+$/, "")}M` : `$${Math.round(v).toLocaleString("en-US")}`);
 const ACTION_LABEL: Record<string, string> = {
@@ -27,7 +28,7 @@ interface PendingAction { id: string; customer_id: string; action_type: string; 
 export function AnswerActions({ customers }: { customers?: { id: string; company_name: string }[] }) {
   const qc = useQueryClient();
   const { appUser } = useAuth();
-  const canDecide = DEMO_MODE || (!!appUser && ["admin", "credit_manager"].includes(appUser.role));
+  const canDecide = DEMO_MODE || (!!appUser && isApprover(appUser.role));
   const ids = (customers ?? []).map((c) => c.id).filter(Boolean);
   const [done, setDone] = useState<Record<string, "approved" | "rejected">>({});
   const [busy, setBusy] = useState<string | null>(null);

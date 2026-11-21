@@ -9,6 +9,8 @@
  *                                 or overdue alert a policy change would change; nothing is saved
  *   POST { assign_group: { customer_id, group } }
  *                              -> admin or credit_manager only; puts a customer in a policy group (null: none)
+ *   POST { set_user: { user_id, role?, approval_limit_usd? } }
+ *                              -> admin only; a user's role and own approval amount (null: the role's amount)
  *   Demo accounts (app_users.is_demo) get 403 on every POST: the demo's settings are shared.
  *
  * The browser never writes company_settings directly (no write policy).
@@ -99,6 +101,30 @@ Deno.serve(async (req) => {
 
     const user = await requireUser(req, ["admin", "credit_manager"]);
     if (user.is_demo) return json({ error: "Demo accounts can look at the settings but not change them." }, 403);
+
+    // Users and authorities: admins only; nobody changes their own role (no accidental lock-out).
+    if (body?.set_user) {
+      if (user.role !== "admin") return json({ error: "Only an admin can change users' roles and approval authority." }, 403);
+      const id = String(body.set_user.user_id ?? "");
+      const update: Record<string, unknown> = {};
+      if ("role" in body.set_user) {
+        const role = String(body.set_user.role);
+        if (!["admin", "credit_manager", "credit_analyst", "sales", "viewer"].includes(role)) return json({ error: `Unknown role "${role}".` }, 400);
+        if (id === user.user_id) return json({ error: "You cannot change your own role; ask another admin." }, 400);
+        update.role = role;
+      }
+      if ("approval_limit_usd" in body.set_user) {
+        const v = body.set_user.approval_limit_usd;
+        if (v !== null && !(typeof v === "number" && Number.isFinite(v) && v >= 0)) return json({ error: "Approval authority must be an amount of 0 or more, or empty for the role's amount." }, 400);
+        update.approval_limit_usd = v === null ? null : Math.round(v);
+      }
+      if (!Object.keys(update).length) return json({ error: "Nothing to change." }, 400);
+      const { data: row, error } = await db.from("app_users").update(update).eq("user_id", id).select("user_id").maybeSingle();
+      if (error) throw new Error(error.message);
+      if (!row) return json({ error: "User not found." }, 404);
+      await db.from("company_settings_history").insert({ key: `user:${id}`, value: update, changed_by: user.user_id });
+      return json({ ok: true });
+    }
 
     // A customer's policy group: one column on customers, logged like a setting change.
     if (body?.assign_group) {

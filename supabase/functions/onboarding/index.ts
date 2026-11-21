@@ -29,6 +29,8 @@
  * score_results, and onboarding events via publishEvent (cia_processed = true, so the
  * monitoring briefing never reads prospects).
  */
+import { loadPolicy } from "../_shared/policy/policy.ts";
+import { authorityOf, authorityText, mayApprove } from "../_shared/policy/authority.ts";
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.98.0";
 import { AuthError, requireUser, type AuthedUser } from "../_shared/auth.ts";
 import { runOnboarding, type RunOptions } from "../_shared/onboarding/pipeline.ts";
@@ -50,7 +52,8 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
 const RUNNERS = ["admin", "credit_manager", "credit_analyst"] as const;
-const DISPOSERS = ["admin", "credit_manager"] as const;
+// Approvers; how large a limit each may approve is set by the policy (policy.approvals, founder 2026-11-21).
+const DISPOSERS = ["admin", "credit_manager", "credit_analyst"] as const;
 const REG_B_DAYS = 30;
 const DAY = 86_400_000;
 /** Every application's credit score in the public demo (founder, 2026-11-18). */
@@ -453,6 +456,15 @@ async function decide(db: SupabaseClient, user: AuthedUser, body: Record<string,
   if (!Number.isFinite(approved) || approved <= 0) throw new UserError("approved_value must be a positive amount");
   const override = approved !== Number(action.proposed_value) || outcome.proposal?.decision === "decline_review";
   if (override && note.length < 10) throw new UserError("A note is required when the amount differs from the proposal or the proposal was not to approve");
+
+  // Approval authority: above this person's amount they recommend, and someone with enough approves.
+  const { policy } = await loadPolicy(db);
+  if (!mayApprove(user, policy, approved)) {
+    await db.from("pending_actions").update({ recommended_by_user: user.user_id, recommended_by: user.display_name,
+      recommended_value: approved, recommended_note: note || null, recommended_at: now }).eq("id", action.id);
+    return { application_id: row.id, decision: "recommended", recommended_limit_usd: approved,
+      next: `Recommended at ${approved.toLocaleString("en-US")} USD. That is above your approval authority (${authorityText(authorityOf(user, policy))}), so it waits for someone whose authority covers it.` };
+  }
 
   await db.from("pending_actions").update({ status: "approved", reviewed_by: user.email, reviewed_by_user: user.user_id,
     reviewed_at: now, review_note: note || null, decided_value: approved }).eq("id", action.id);

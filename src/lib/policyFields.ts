@@ -30,6 +30,8 @@ export const POLICY_SECTIONS: PolicySectionInfo[] = [
     blurb: "Each open signal lowers the limit use at which action is recommended, by the points shown." },
   { key: "policy.score_change", title: "Score changes", preview: false,
     blurb: "How large a drop in a customer's own score must be to raise an alert." },
+  { key: "policy.approvals", title: "Approval authority", preview: false,
+    blurb: "The largest credit limit each role may approve (0 = no ceiling). An admin can give a person their own amount in Settings › Users. Above it, the person recommends and the action waits for someone whose authority covers it. Cutting a limit needs no authority. Sales and viewers never approve." },
   { key: "policy.fx", title: "Currency exposure", preview: false,
     blurb: "When receivables in another currency raise an alert." },
   { key: "onboarding.template", title: "New customers: what to ask for", preview: false,
@@ -87,6 +89,10 @@ export const FIELD_INFO: Record<string, FieldInfo> = {
   "policy.score_change:medium_from": { label: "Medium alert from a drop of", unit: "points" },
   "policy.score_change:high_from": { label: "High alert from", unit: "points" },
   "policy.score_change:critical_from": { label: "Critical alert from", unit: "points" },
+
+  "policy.approvals:credit_analyst_usd": { label: "Credit analyst may approve up to", unit: "USD (0 = no ceiling)" },
+  "policy.approvals:credit_manager_usd": { label: "Credit manager may approve up to", unit: "USD (0 = no ceiling)" },
+  "policy.approvals:admin_usd": { label: "Admin may approve up to", unit: "USD (0 = no ceiling)" },
 
   "policy.fx:UNHEDGED_FLOOR_USD": { label: "Large unhedged exposure from", unit: "USD" },
   "policy.fx:UNHEDGED_SHARE_PCT": { label: "or from", unit: "% of the portfolio" },

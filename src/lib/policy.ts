@@ -25,3 +25,7 @@ export const assignGroup = (customer_id: string, group: string | null) =>
 
 /** Back to CreditPilot's defaults for one section. */
 export const resetSetting = (key: string) => call<{ ok: true }>({ key, reset: true });
+
+/** Admins: a user's role and own approval amount (null: the role's amount in the policy). */
+export const setUser = (v: { user_id: string; role?: string; approval_limit_usd?: number | null }) =>
+  call<{ ok: true }>({ set_user: v });

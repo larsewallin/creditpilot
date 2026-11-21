@@ -23,6 +23,8 @@ export interface AppUser {
   role: AppRole;
   is_demo: boolean;
   active: boolean;
+  /** Own approval amount in USD; null = the role's amount in the policy. */
+  approval_limit_usd?: number | null;
 }
 
 interface AuthState {
@@ -43,7 +45,7 @@ async function loadAppUser(userId: string): Promise<AppUser | null> {
   // app_users is not in the generated Supabase types yet (types regeneration is a backlog item).
   const { data, error } = await supabase
     .from("app_users" as never)
-    .select("user_id, email, display_name, role, is_demo, active")
+    .select("user_id, email, display_name, role, is_demo, active, approval_limit_usd")
     .eq("user_id", userId)
     .maybeSingle();
   if (error) {
