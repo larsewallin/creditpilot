@@ -1,4 +1,5 @@
 import { DemoDataNotice } from "@/components/DemoDataNotice";
+import { POLICY_GROUP_DEFAULTS } from "../../supabase/functions/_shared/policy/defaults";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { scoreLabel } from "@/lib/scoreLabel";
@@ -36,7 +37,8 @@ export default function Customers() {
 
   // Policy group names (Settings › Credit policy › Customer groups); signed-out readers see the key.
   const { data: settings } = useQuery({ queryKey: ["settings"], queryFn: getSettings, staleTime: 60_000, retry: false });
-  const groups = ((settings?.settings as { policy_groups?: Record<string, { name: string }> } | undefined)?.policy_groups) ?? {};
+  // Signed out (the public demo), the starter groups' names stand in.
+  const groups = ((settings?.settings as { policy_groups?: Record<string, { name: string }> } | undefined)?.policy_groups) ?? POLICY_GROUP_DEFAULTS;
 
   useEffect(() => {
     if (!customerIdParam || !customers) return;

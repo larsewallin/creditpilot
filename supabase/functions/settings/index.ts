@@ -85,7 +85,7 @@ Deno.serve(async (req) => {
       const proposed = { ...stored, [key]: body.preview.value };
       const today = new Date().toISOString().slice(0, 10);
       const [cust, tx, inv] = await Promise.all([
-        db.from("customers").select("id, company_name, credit_limit, current_exposure, credit_rating_score, payment_terms_days, policy_group"),
+        db.from("customers").select("id, company_name, credit_limit, current_exposure, credit_rating_score, payment_terms_days, policy_group").eq("lifecycle_status", "active"),
         db.from("payment_transactions").select("customer_id, payment_date, days_to_pay, days_early_late, on_time, amount:amount_paid").order("payment_date", { ascending: false }).limit(50_000),
         db.from("invoices").select("customer_id, amount_outstanding, due_date, status").lt("due_date", today).gt("amount_outstanding", 0).limit(50_000),
       ]);

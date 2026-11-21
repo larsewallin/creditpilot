@@ -455,7 +455,9 @@ async function decide(db: SupabaseClient, user: AuthedUser, body: Record<string,
   const approved = Math.round(Number(body.approved_value ?? action.proposed_value));
   if (!Number.isFinite(approved) || approved <= 0) throw new UserError("approved_value must be a positive amount");
   const override = approved !== Number(action.proposed_value) || outcome.proposal?.decision === "decline_review";
-  if (override && note.length < 10) throw new UserError("A note is required when the amount differs from the proposal or the proposal was not to approve");
+  // Approving a colleague's escalated amount carries their note (they explained the amount).
+  const acceptsEscalation = action.escalated_value != null && approved === Number(action.escalated_value) && !!action.recommended_note;
+  if (override && note.length < 10 && !acceptsEscalation) throw new UserError("A note is required when the amount differs from the proposal or the proposal was not to approve");
 
   // Approval authority: above this person's amount they recommend, and someone with enough approves.
   const { policy } = await loadPolicy(db);

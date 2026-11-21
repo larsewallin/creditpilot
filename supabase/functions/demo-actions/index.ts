@@ -91,7 +91,7 @@ Deno.serve(async (req) => {
       // approve what an agent proposed, not set any customer's limit to any number.
       const { data: pa, error: e0 } = await supabase
         .from("pending_actions")
-        .select("id, status, is_demo, action_type, customer_id, current_value, proposed_value, agent_name, rationale")
+        .select("id, status, is_demo, action_type, customer_id, current_value, proposed_value, agent_name, rationale, escalated_value, recommended_note")
         .eq("id", pending_action_id)
         .maybeSingle();
       if (e0) return json({ error: e0.message }, 500);
@@ -106,7 +106,8 @@ Deno.serve(async (req) => {
       if (approver && body.approved_value != null && pa.action_type === "CREDIT_LIMIT_REDUCTION") {
         const v = Math.round(Number(body.approved_value));
         if (!Number.isFinite(v) || v < 0) return json({ error: "approved_value must be an amount of 0 or more" }, 400);
-        if (v !== Number(pa.proposed_value) && String(note ?? "").trim().length < 10) {
+        const acceptsEscalation = pa.escalated_value != null && v === Number(pa.escalated_value) && !!pa.recommended_note;
+        if (v !== Number(pa.proposed_value) && String(note ?? "").trim().length < 10 && !acceptsEscalation) {
           return json({ error: "A note is required when the amount differs from the proposal" }, 400);
         }
         newLimit = v;

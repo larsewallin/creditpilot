@@ -4,6 +4,7 @@
  * a preview of what a change would change before it is saved. Read-only in the demo and for
  * users who are not admins or credit managers.
  */
+import { SCORE_BANDS } from "@/lib/scoreLabel";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -15,10 +16,8 @@ import { db, saveSetting, type SettingsAnswer } from "@/lib/onboarding";
 import { assignGroup, previewPolicy, resetSetting, type PolicyChange, type PolicyGroup } from "@/lib/policy";
 import { POLICY_SECTIONS, fieldInfo, flatten, fromShown, policyMarkdown, toShown, unflatten, type PolicySectionInfo } from "@/lib/policyFields";
 
-const SCALE = [
-  ["85–100", "Very strong"], ["70–84", "Strong"], ["55–69", "Adequate"],
-  ["40–54", "Watch"], ["25–39", "Elevated risk"], ["0–24", "High risk"],
-];
+// The scale from the engine's own file, so this page can never disagree with the agents.
+const SCALE = SCORE_BANDS.map((b, i) => [i === 0 ? `${b.min}–100` : `${b.min}–${SCORE_BANDS[i - 1].min - 1}`, b.label]);
 
 /** The section's current value from the settings answer. */
 function sectionValue(data: SettingsAnswer, key: string): unknown {
