@@ -4,6 +4,11 @@
  *   GET  (any signed-in user)  -> { settings: effective, overrides, score_providers, connectors (status from setting names only) }
  *   POST { key, value }        -> admin or credit_manager only; validates, saves, logs history
  *   POST { key, reset: true }  -> admin or credit_manager only; removes the override (back to defaults)
+ *   POST { preview: { key, value } }
+ *                              -> any signed-in user: which customers' payment health, limit-use alert
+ *                                 or overdue alert a policy change would change; nothing is saved
+ *   POST { assign_group: { customer_id, group } }
+ *                              -> admin or credit_manager only; puts a customer in a policy group (null: none)
  *   Demo accounts (app_users.is_demo) get 403 on every POST: the demo's settings are shared.
  *
  * The browser never writes company_settings directly (no write policy).
@@ -14,6 +19,8 @@ import { effectiveSettings, validateSetting } from "../_shared/onboarding/settin
 import { PROVIDER_LIST } from "../_shared/onboarding/score_providers.ts";
 import { AGENTS } from "../_shared/scheduling/schedule.ts";
 import { CATEGORIES, connectorStatuses } from "../_shared/connectors.ts";
+import { effectiveGroups, effectivePolicy } from "../_shared/policy/policy.ts";
+import { previewPolicyChange } from "../_shared/policy/preview.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -63,10 +70,49 @@ Deno.serve(async (req) => {
     }
 
     if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
+    const body = await req.json().catch(() => null);
+
+    // Preview: read-only, so any signed-in user (the demo too) may ask what a change would do.
+    if (body?.preview) {
+      await requireUser(req);
+      const key = String(body.preview.key ?? "");
+      if (!key.startsWith("policy.")) return json({ error: "Preview covers the credit policy (policy.*) only." }, 400);
+      const problems = validateSetting(key, body.preview.value);
+      if (problems.length) return json({ error: problems.join("; ") }, 400);
+      const stored = await load();
+      const proposed = { ...stored, [key]: body.preview.value };
+      const today = new Date().toISOString().slice(0, 10);
+      const [cust, tx, inv] = await Promise.all([
+        db.from("customers").select("id, company_name, credit_limit, current_exposure, credit_rating_score, payment_terms_days, policy_group"),
+        db.from("payment_transactions").select("customer_id, payment_date, days_to_pay, days_early_late, on_time, amount:amount_paid").order("payment_date", { ascending: false }).limit(50_000),
+        db.from("invoices").select("customer_id, amount_outstanding, due_date, status").lt("due_date", today).gt("amount_outstanding", 0).limit(50_000),
+      ]);
+      const err = cust.error ?? tx.error ?? inv.error;
+      if (err) throw new Error(err.message);
+      const changes = previewPolicyChange(
+        { customers: cust.data ?? [], transactions: tx.data ?? [], invoices: inv.data ?? [], today },
+        { policy: effectivePolicy(stored), groups: effectiveGroups(stored) },
+        { policy: effectivePolicy(proposed), groups: effectiveGroups(proposed) },
+      );
+      return json({ changes, customers: (cust.data ?? []).length });
+    }
 
     const user = await requireUser(req, ["admin", "credit_manager"]);
     if (user.is_demo) return json({ error: "Demo accounts can look at the settings but not change them." }, 403);
-    const body = await req.json();
+
+    // A customer's policy group: one column on customers, logged like a setting change.
+    if (body?.assign_group) {
+      const id = String(body.assign_group.customer_id ?? "");
+      const group = body.assign_group.group ?? null;
+      const groups = effectiveGroups(await load());
+      if (group !== null && !(typeof group === "string" && group in groups)) return json({ error: `Unknown policy group "${group}".` }, 400);
+      const { data: row, error } = await db.from("customers").update({ policy_group: group }).eq("id", id).select("id").maybeSingle();
+      if (error) throw new Error(error.message);
+      if (!row) return json({ error: "Customer not found." }, 404);
+      await db.from("company_settings_history").insert({ key: `customer_group:${id}`, value: { group }, changed_by: user.user_id });
+      return json({ ok: true });
+    }
+
     const key = String(body?.key ?? "");
 
     if (body?.reset === true) {
