@@ -95,7 +95,8 @@ export default function CreditEvents() {
     queryKey: ["pending-actions-count"],
     queryFn: async () => {
       const { count } = await supabase.from("pending_actions").select("*", { count: "exact", head: true })
-        .eq("status", "pending").eq("is_demo", DEMO_MODE);
+        .eq("status", "pending").eq("is_demo", DEMO_MODE)
+        .neq("action_type", DEMO_MODE ? "NEW_CREDIT_LIMIT" : "__none__");
       return count ?? 0;
     },
     refetchInterval: 30000,

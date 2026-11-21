@@ -54,6 +54,8 @@ export default function Actions() {
         .select("*, customers(company_name, credit_limit)")
         .eq("status", "pending")
         .eq("is_demo", DEMO_MODE);
+      // Onboarding is off in the demo, so its new-customer proposals are not shown there.
+      if (DEMO_MODE) query = query.neq("action_type", "NEW_CREDIT_LIMIT");
       if (filterCustomerId) query = query.eq("customer_id", filterCustomerId);
       const { data } = await query.order("created_at", { ascending: false });
       return data ?? [];
