@@ -2,10 +2,14 @@
  * Reading the Trade Credit Policy.
  *
  *   effectivePolicy(overrides)  defaults + the company's stored policy.* rows (pure)
+ *   effectiveGroups(overrides)  the company's customer groups (policy.groups), or the starter groups
+ *   policyFor(policy, groups, groupKey)
+ *                               the rules for one customer: its group's overrides on the company's
+ *                               policy; the most specific value wins
  *   loadPolicy(db)              reads policy.* from company_settings, never throws:
  *                               a read failure falls back to the defaults and says so
  */
-import { POLICY_DEFAULTS, POLICY_SECTIONS, type CreditPolicy } from "./defaults.ts";
+import { POLICY_DEFAULTS, POLICY_GROUP_DEFAULTS, POLICY_SECTIONS, type CreditPolicy, type PolicyGroup } from "./defaults.ts";
 
 type Json = unknown;
 const isObj = (v: Json): v is Record<string, Json> => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -24,16 +28,39 @@ export function effectivePolicy(overrides: Record<string, Json> = {}): CreditPol
   return out as CreditPolicy;
 }
 
+/** The company's customer groups; with none stored, the starter groups. */
+export function effectiveGroups(overrides: Record<string, Json> = {}): Record<string, PolicyGroup> {
+  const stored = overrides["policy.groups"];
+  return isObj(stored) ? stored as Record<string, PolicyGroup> : POLICY_GROUP_DEFAULTS;
+}
+
+/** The rules for one customer: its group's overrides on top of the company's policy. */
+export function policyFor(policy: CreditPolicy, groups: Record<string, PolicyGroup>, groupKey?: string | null): CreditPolicy {
+  const g = groupKey ? groups[groupKey] : undefined;
+  if (!g || !isObj(g.overrides)) return policy;
+  const out: Record<string, Json> = {};
+  for (const s of POLICY_SECTIONS) out[s] = merge(policy[s], (g.overrides as Record<string, Json>)[s]);
+  return out as CreditPolicy;
+}
+
 // deno-lint-ignore no-explicit-any
 type Db = { from: (t: string) => any };
 
-export async function loadPolicy(db: Db): Promise<{ policy: CreditPolicy; warning?: string }> {
+export interface LoadedPolicy {
+  policy: CreditPolicy;
+  groups: Record<string, PolicyGroup>;
+  warning?: string;
+}
+
+export async function loadPolicy(db: Db): Promise<LoadedPolicy> {
+  const fallback = (why: string) => ({ policy: effectivePolicy(), groups: effectiveGroups(), warning: `policy read failed, defaults used: ${why}` });
   try {
     const { data, error } = await db.from("company_settings").select("key, value").like("key", "policy.%");
-    if (error) return { policy: effectivePolicy(), warning: `policy read failed, defaults used: ${error.message}` };
+    if (error) return fallback(error.message);
     const rows = (data ?? []) as { key: string; value: Json }[];
-    return { policy: effectivePolicy(Object.fromEntries(rows.map((r) => [r.key, r.value]))) };
+    const overrides = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+    return { policy: effectivePolicy(overrides), groups: effectiveGroups(overrides) };
   } catch (e) {
-    return { policy: effectivePolicy(), warning: `policy read failed, defaults used: ${e instanceof Error ? e.message : String(e)}` };
+    return fallback(e instanceof Error ? e.message : String(e));
   }
 }

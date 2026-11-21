@@ -63,6 +63,8 @@ export const POLICY_DEFAULTS = {
     critical_utilization_pct: 85,
     strategic_latitude_pct: 10,
     max_reduction_usd: 1_000_000,
+    /** No single proposal cuts a limit by more than this %. */
+    max_reduction_pct: 50,
   },
   /** Composite risk across agents (assess-composite-risk). */
   composite: {
@@ -92,3 +94,31 @@ export const POLICY_DEFAULTS = {
 export type CreditPolicy = typeof POLICY_DEFAULTS;
 export type PolicySection = keyof CreditPolicy;
 export const POLICY_SECTIONS = Object.keys(POLICY_DEFAULTS) as PolicySection[];
+
+/** Partial policy: only the rules a group changes. */
+export type PolicyOverrides = { [S in PolicySection]?: Partial<CreditPolicy[S]> };
+
+/**
+ * A customer group overrides only the rules it needs (customers.policy_group = the group's key).
+ * Stored whole as company_settings "policy.groups"; these starter groups are the default and
+ * every one is editable (founder, 2026-11-20). Values are judgment starting points.
+ */
+export interface PolicyGroup { name: string; note: string; overrides: PolicyOverrides }
+
+export const POLICY_GROUP_DEFAULTS: Record<string, PolicyGroup> = {
+  strategic: {
+    name: "Strategic",
+    note: "Key accounts: more room on limit use before a cut, and smaller cuts.",
+    overrides: { limit_review: { high_utilization_pct: 80, critical_utilization_pct: 95, max_reduction_pct: 20 } },
+  },
+  high_risk: {
+    name: "High risk",
+    note: "Customers the credit team watches closely: no grace days and an earlier limit-use alert.",
+    overrides: { payments: { grace_days: 0 }, utilization: { high_pct: 70 } },
+  },
+  export: {
+    name: "Export",
+    note: "Cross-border customers: payments take longer to arrive.",
+    overrides: { payments: { grace_days: 10 } },
+  },
+};

@@ -10,7 +10,7 @@ import { ONBOARDING_DEFAULTS } from "./settings.ts";
 import { SCORE_PROVIDERS } from "./score_providers.ts";
 import { AGENTS, EVERY_HOURS, SCHEDULE_DEFAULTS, validTimezone } from "../scheduling/schedule.ts";
 import { POLICY_DEFAULTS, POLICY_SECTIONS } from "../policy/defaults.ts";
-import { effectivePolicy } from "../policy/policy.ts";
+import { effectiveGroups, effectivePolicy } from "../policy/policy.ts";
 
 export const SETTING_KEYS = [
   "onboarding.template",
@@ -23,8 +23,24 @@ export const SETTING_KEYS = [
 ] as const;
 export type SettingKey = typeof SETTING_KEYS[number];
 
-/** Trade Credit Policy sections, one settings key each (policy.payments, policy.overdue, ...). */
-export const POLICY_KEYS = POLICY_SECTIONS.map((s) => `policy.${s}`);
+/** Trade Credit Policy sections, one settings key each (policy.payments, policy.overdue, ...), and the customer groups. */
+export const POLICY_KEYS = [...POLICY_SECTIONS.map((s) => `policy.${s}`), "policy.groups"];
+
+/** policy.groups: { <key>: { name, note, overrides: { <section>: { <field>: value } } } }. */
+function checkGroups(value: Record<string, Json>, errors: string[]) {
+  for (const [k, g] of Object.entries(value)) {
+    const where = `policy.groups.${k}`;
+    if (!/^[a-z0-9_]{1,40}$/.test(k)) { errors.push(`${where}: a group key uses lowercase letters, digits and _ only`); continue; }
+    if (!isObj(g)) { errors.push(`${where}: expected an object`); continue; }
+    if (typeof g.name !== "string" || !g.name.trim()) errors.push(`${where}.name: give the group a name`);
+    if ("note" in g && typeof g.note !== "string") errors.push(`${where}.note: expected text`);
+    if (!isObj(g.overrides)) { errors.push(`${where}.overrides: expected an object`); continue; }
+    for (const [s, v] of Object.entries(g.overrides)) {
+      if (!(POLICY_SECTIONS as string[]).includes(s)) { errors.push(`${where}.overrides.${s}: unknown policy section`); continue; }
+      check(POLICY_DEFAULTS[s as keyof typeof POLICY_DEFAULTS], v, `${where}.overrides.${s}`, errors);
+    }
+  }
+}
 
 /** Score sources the pipeline can call, in no particular order. A company's
  *  score_order lists the ones it uses, most trusted first; the first with a score counts. */
@@ -58,6 +74,7 @@ export function validateSetting(key: string, value: Json): string[] {
   if (!isObj(value)) return [`${key}: expected an object`];
   if (isPolicy) {
     const errors: string[] = [];
+    if (key === "policy.groups") { checkGroups(value, errors); return errors; }
     check(POLICY_DEFAULTS[key.slice("policy.".length) as keyof typeof POLICY_DEFAULTS], value, key, errors);
     return errors;
   }
@@ -106,6 +123,7 @@ export function effectiveSettings(overrides: Record<string, Json>) {
   out.approval = overrides["onboarding.approval"] ?? {};
   const sched = (overrides["agents.schedule"] ?? {}) as Record<string, Json>;
   out.policy = effectivePolicy(overrides);
+  out.policy_groups = effectiveGroups(overrides);
   out.agents = Object.fromEntries(Object.entries(SCHEDULE_DEFAULTS).map(([k, d]) => [k, merge(d, sched[k])]));
   return out;
 }

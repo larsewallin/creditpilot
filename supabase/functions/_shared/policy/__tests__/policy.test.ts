@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { POLICY_DEFAULTS } from "../defaults.ts";
-import { effectivePolicy, loadPolicy } from "../policy.ts";
+import { effectiveGroups, effectivePolicy, loadPolicy, policyFor } from "../policy.ts";
 import { effectiveSettings, validateSetting } from "../../onboarding/settings_validate.ts";
 import { analysePaymentBehaviour } from "../../skills/analytical/analyse-payment-behaviour.ts";
 import { analysePaymentTrend } from "../../skills/analytical/analyse-payment-trend.ts";
@@ -95,5 +95,42 @@ describe("skills follow the policy", () => {
     const input = { utilization_pct: 50, active_event_types: ["GOING_CONCERN"], agents_flagging: ["sec"] };
     expect(assessCompositeRisk(input).adjusted_threshold).toBe(60);
     expect(assessCompositeRisk(input, { ...POLICY_DEFAULTS.composite, going_concern_pts: 30 }).adjusted_threshold).toBe(45);
+  });
+});
+
+describe("customer groups", () => {
+  it("starts with Strategic, High risk and Export", () => {
+    expect(Object.keys(effectiveGroups())).toEqual(["strategic", "high_risk", "export"]);
+  });
+
+  it("a group overrides only its own rules; no group means the company policy", () => {
+    const company = effectivePolicy({ "policy.payments": { grace_days: 3 } });
+    const groups = effectiveGroups();
+    expect(policyFor(company, groups, null)).toBe(company);
+    expect(policyFor(company, groups, "unknown")).toBe(company);
+    const exp = policyFor(company, groups, "export");
+    expect(exp.payments.grace_days).toBe(10);
+    expect(exp.payments.watch_on_time_below).toBe(company.payments.watch_on_time_below);
+    expect(exp.overdue).toEqual(company.overdue);
+  });
+
+  it("caps a Strategic customer's limit cut at 20%", () => {
+    const rules = policyFor(effectivePolicy(), effectiveGroups(), "strategic").limit_review;
+    const input = { current_limit: 1_000_000, current_exposure: 900_000, days_over_90: 200_000, utilization_pct: 98, credit_score: 10 };
+    expect(calculateCreditLimitProposal(input).reduction_pct).toBe(50);
+    expect(calculateCreditLimitProposal(input, rules).reduction_pct).toBe(20);
+  });
+
+  it("validates stored groups", () => {
+    const ok = { vip: { name: "VIP", note: "", overrides: { payments: { grace_days: 7 } } } };
+    expect(validateSetting("policy.groups", ok)).toEqual([]);
+    expect(validateSetting("policy.groups", { "Bad Key": ok.vip })[0]).toMatch(/lowercase/);
+    expect(validateSetting("policy.groups", { vip: { ...ok.vip, overrides: { nope: {} } } })[0]).toMatch(/unknown policy section/);
+    expect(validateSetting("policy.groups", { vip: { ...ok.vip, overrides: { payments: { grace_days: -1 } } } })[0]).toMatch(/>= 0/);
+  });
+
+  it("uses the stored groups when the company has saved some", () => {
+    const g = effectiveGroups({ "policy.groups": { vip: { name: "VIP", note: "", overrides: {} } } });
+    expect(Object.keys(g)).toEqual(["vip"]);
   });
 });
