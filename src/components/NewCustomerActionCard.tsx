@@ -33,8 +33,8 @@ interface Action {
   application_id?: string | null;
   memo: { headline: string; sections: MemoSection[] } | null;
   customers?: { company_name?: string } | null;
-  /** Set when someone without enough approval authority recommended an amount. */
-  recommended_value?: number | null;
+  /** Set when someone without enough approval authority recommended an amount (escalated_value). */
+  escalated_value?: number | null;
   recommended_by?: string | null;
   recommended_by_user?: string | null;
   recommended_note?: string | null;
@@ -118,9 +118,9 @@ export function NewCustomerActionCard({ action }: { action: Action }) {
         <div><div className="text-muted-foreground font-sans text-[10px]">Supportable</div>{action.supportable_value != null ? formatCurrency(action.supportable_value) : "—"}</div>
       </div>
       {why && <p className="text-muted-foreground">{why}</p>}
-      {action.recommended_value != null && (
+      {action.recommended_by_user && action.escalated_value != null && (
         <p className="rounded-md bg-amber-500/10 px-3 py-2 text-foreground">
-          <span className="font-medium">Recommended at {formatCurrency(action.recommended_value)}</span> by {action.recommended_by ?? "a colleague"}
+          <span className="font-medium">Recommended at {formatCurrency(action.escalated_value)}</span> by {action.recommended_by ?? "a colleague"}
           {action.recommended_at ? ` on ${format(new Date(action.recommended_at), "MMM d")}` : ""}: above their approval authority, so it needs someone whose authority covers it.
           {action.recommended_note ? <> Note: “{action.recommended_note}”</> : null}
         </p>

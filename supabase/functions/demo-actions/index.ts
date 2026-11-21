@@ -116,7 +116,7 @@ Deno.serve(async (req) => {
         const { policy } = await loadPolicy(supabase);
         if (!mayApprove(approver, policy, newLimit, Number(pa.current_value) || 0)) {
           await supabase.from("pending_actions").update({ recommended_by_user: approver.user_id, recommended_by: approver.display_name,
-            recommended_value: newLimit, recommended_note: note || null, recommended_at: new Date().toISOString() }).eq("id", pending_action_id);
+            escalated_value: newLimit, recommended_note: note || null, recommended_at: new Date().toISOString() }).eq("id", pending_action_id);
           return json({ ok: true, decision: "recommended",
             message: `Recommended at ${newLimit.toLocaleString("en-US")} USD. That is above your approval authority (${authorityText(authorityOf(approver, policy))}), so it waits for someone whose authority covers it.` });
         }
