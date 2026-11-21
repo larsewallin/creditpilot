@@ -1,7 +1,7 @@
 -- Demo sample data: no real rating agency or bureau names on invented scores, ratings
 -- or news. Every sample score reads "Third-party rating" (provider id "other": a
 -- company brings its own provider in Settings › Credit score source).
--- Run by migration 20261117020000 on the hosted demo (as public.is_public_demo(), before
+-- Run by migration 20261117020000 on the hosted demo (as private.is_public_demo(), before
 -- 20261117030000 moved it to the private schema) and by scripts/setup-local.sh
 -- after it loads the demo data. Touches demo rows only.
 UPDATE public.customers
@@ -64,6 +64,6 @@ UPDATE public.credit_events
 
 UPDATE public.customers
    SET notes = 'Covenant waiver obtained Q4 2024. Suppliers report slower payments since early 2025.'
- WHERE public.is_public_demo()
+ WHERE private.is_public_demo()
    AND company_name = 'Arconic Corporation'
    AND notes ~ '(B1|Ba3)';

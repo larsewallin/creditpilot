@@ -23,6 +23,6 @@ UPDATE public.credit_events
 
 UPDATE public.customers
    SET notes = 'Covenant waiver obtained Q4 2024. Suppliers report slower payments since early 2025.'
- WHERE public.is_public_demo()
+ WHERE private.is_public_demo()
    AND company_name = 'Arconic Corporation'
    AND notes ~ '(B1|Ba3)';
