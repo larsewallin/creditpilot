@@ -283,7 +283,7 @@ export default function Actions() {
                       {!DEMO_MODE && action.action_type === "CREDIT_LIMIT_REDUCTION" && (
                         <label className="block space-y-1">
                           <span className="text-[10px] text-muted-foreground">New limit (USD); change it to approve a different amount</span>
-                          <Input value={approveAmount} inputMode="numeric" placeholder={String(action.proposed_value ?? "")}
+                          <Input value={approveAmount} inputMode="numeric" placeholder={String(action.escalated_value ?? action.proposed_value ?? "")}
                             onChange={(e) => setApproveAmount(e.target.value.replace(/[^0-9]/g, ""))} className="text-xs h-8 font-mono max-w-[200px]" />
                         </label>
                       )}
@@ -297,7 +297,7 @@ export default function Actions() {
                         <Button
                           size="sm"
                           className="h-7 text-xs bg-risk-current hover:bg-risk-current/90 text-primary-foreground"
-                          onClick={() => approveMutation.mutate({ action, note: approveNote, amount: !DEMO_MODE && approveAmount ? Number(approveAmount) : undefined })}
+                          onClick={() => approveMutation.mutate({ action, note: approveNote, amount: !DEMO_MODE ? (approveAmount ? Number(approveAmount) : action.escalated_value ?? undefined) : undefined })}
                           disabled={approveMutation.isPending}
                         >
                           {approveMutation.isPending && <Loader2 className="h-3 w-3 animate-spin mr-1" />}

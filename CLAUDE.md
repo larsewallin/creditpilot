@@ -140,3 +140,23 @@ the same thing `usedb prod` used to, for that terminal session only.
 Local frontend dev (`npm run dev`) is unaffected by any of this: Vite auto-loads `.env`
 (anon-level `VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_KEY` / `VITE_DEMO_MODE`
 only), which was never in `~/.zshrc` and needs no wrapper.
+
+## One rule, one place; check what users see before merging
+
+Found the hard way (2026-11-21): in one day, four mistakes reached production that every
+unit test passed. A migration "added" a column that already existed (`ADD COLUMN IF NOT
+EXISTS` skipped it silently) and the code reused it with another meaning; a demo script
+called a function by a schema it had been moved out of; the Payments view and the screens'
+score colours kept old copies of rules the agents had just changed.
+
+**The rules:**
+- A rule lives in one file. Screens import the engine's own module (`score_scale.ts`,
+  `policy/defaults.ts`) rather than retyping thresholds; SQL that applies a policy reads
+  `company_settings`. Before changing a rule, grep for every other copy of its numbers.
+- Before a migration adds a column, check that it does not exist yet: read
+  `src/integrations/supabase/types.ts` and the earlier migrations. `tests/guards/migrations.test.ts`
+  fails on an `ADD COLUMN IF NOT EXISTS` of an existing column and on a call to a function by
+  a schema it was moved out of.
+- Before merging a PR that changes what users see, open the affected pages on the PR's Vercel
+  preview (read-only; never ask the CIA, it costs money) and look for codes, `undefined`, `NaN`,
+  wrong labels and numbers that disagree with another page. Note in the PR what was checked.

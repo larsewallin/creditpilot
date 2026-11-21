@@ -1,4 +1,5 @@
 import { DEMO_MODE } from "@/lib/constants";
+import { POLICY_GROUP_DEFAULTS } from "../../supabase/functions/_shared/policy/defaults";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -99,7 +100,7 @@ export function CustomerDetail({ customer }: { customer: any }) {
           {customer.company_name}
         </SheetTitle>
       </SheetHeader>
-      {customer.policy_group ? <div className="mt-2 mb-4 text-[10px] text-muted-foreground">Policy group: {customer.policy_group.replace(/_/g, " ")}</div> : <div className="mb-2" />}
+      {customer.policy_group ? <div className="mt-2 mb-4 text-[10px] text-muted-foreground">Policy group: {POLICY_GROUP_DEFAULTS[customer.policy_group]?.name ?? customer.policy_group.replace(/_/g, " ")}</div> : <div className="mb-2" />}
 
       <Tabs defaultValue="overview">
         <TabsList className="w-full h-8">

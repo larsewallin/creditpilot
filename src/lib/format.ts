@@ -1,3 +1,4 @@
+import { scoreBand } from "../../supabase/functions/_shared/score_scale";
 import { formatDistanceToNow, isToday, isYesterday, format } from "date-fns";
 
 export function relativeTime(date: string | Date): string {
@@ -27,9 +28,10 @@ export function formatPct(value: number | null | undefined): string {
  * good credits, Watch is amber, Elevated orange, High risk red.
  */
 export function scoreColor(score: number | null): string {
-  if (score == null) return "";
-  if (score >= 55) return "text-risk-current";
-  if (score >= 40) return "text-agent-aging";
-  if (score >= 25) return "text-severity-high";
+  const key = scoreBand(score)?.key;
+  if (!key) return "";
+  if (key === "very_strong" || key === "strong" || key === "adequate") return "text-risk-current";
+  if (key === "watch") return "text-agent-aging";
+  if (key === "elevated") return "text-severity-high";
   return "text-severity-critical";
 }

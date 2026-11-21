@@ -60,7 +60,8 @@ export function NewCustomerActionCard({ action }: { action: Action }) {
   const queryClient = useQueryClient();
   const { appUser } = useAuth();
   const [mode, setMode] = useState<"idle" | "approve" | "decline">("idle");
-  const [amount, setAmount] = useState(String(action.proposed_value ?? ""));
+  // An amount a colleague recommended above their authority is what the approver decides on.
+  const [amount, setAmount] = useState(String((action as { escalated_value?: number | null }).escalated_value ?? action.proposed_value ?? ""));
   const [note, setNote] = useState("");
   const canDecide = !!appUser && isApprover(appUser.role);
   // Approval authority from the company's policy (Settings › Credit policy › Approval authority).
