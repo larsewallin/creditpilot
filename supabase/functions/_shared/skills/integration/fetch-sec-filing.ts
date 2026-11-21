@@ -211,7 +211,7 @@ export async function fetchSeedSecFilings(input: {
       cik:              row.cik,
       company_name:     row.company_name,
       filing_type:      mapFilingType(row.filing_type) as SecFiling["filing_type"],
-      filing_date:      row.filing_date,
+      filing_date:      rollSeedFilingDate(row.filing_date),
       accession_number: row.accession_number,
       document_url:     row.document_url,
       risk_signals:     row.risk_signals ?? [],
@@ -221,4 +221,15 @@ export async function fetchSeedSecFilings(input: {
   } catch {
     return [];
   }
+}
+
+// Demo seed filings are dated around SEED_FILING_ANCHOR (2025-03-27, the newest seed filing).
+// Like the demo news, each run keeps every filing's age relative to that anchor but ends it
+// 10 days before today, so the demo never alerts on a filing that reads as 20 months old.
+// Production reads live EDGAR with days_back and is not affected.
+const SEED_FILING_ANCHOR = Date.UTC(2025, 2, 27);
+export function rollSeedFilingDate(filed: string, today = new Date()): string {
+  if (!filed) return today.toISOString().slice(0, 10);
+  const daysBefore = Math.max(0, Math.round((SEED_FILING_ANCHOR - Date.parse(filed.slice(0, 10))) / 86_400_000));
+  return new Date(today.getTime() - (daysBefore + 10) * 86_400_000).toISOString().slice(0, 10);
 }

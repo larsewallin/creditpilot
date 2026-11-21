@@ -47,6 +47,7 @@ function SidebarLayout() {
       .select("*", { count: "exact", head: true })
       .eq("is_demo", true)
       .eq("status", "pending")
+      .neq("action_type", "NEW_CREDIT_LIMIT") // onboarding is off in the demo
       .then(({ count }) => {
         if (!count || count < 5) {
           return initDemo().then(() => queryClient.invalidateQueries());

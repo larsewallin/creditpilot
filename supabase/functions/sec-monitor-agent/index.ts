@@ -235,7 +235,7 @@ Deno.serve(async (req) => {
             console.warn(`No document_url for ${companyName} ${filing.accession_number} — skipping credit event`);
           } else if (isGoingConcern) {
             const title = `${companyName}: Going-concern doubt flagged in ${filing.filing_type} filing`;
-            const summaryText = `${title}. Risk signals: ${filing.risk_signals.join(", ")}.`;
+            const summaryText = `${title}. Warning signs: ${filing.risk_signals.map(secSignalLabel).join(", ")}.`;
             await publishEvent({
               event_type:   "GOING_CONCERN",
               severity,
@@ -263,7 +263,7 @@ Deno.serve(async (req) => {
               : concernCategory === "ceo_departure"
               ? `${companyName}: CEO departure disclosed in ${filing.filing_type} filing`
               : `${companyName}: Notable item flagged in ${filing.filing_type} filing`;
-            const summaryText = `${title}. Risk signals: ${filing.risk_signals.join(", ")}.`;
+            const summaryText = `${title}. Warning signs: ${filing.risk_signals.map(secSignalLabel).join(", ")}.`;
             await publishEvent({
               event_type:   "SEC_OTHER",
               severity,
@@ -294,7 +294,7 @@ Deno.serve(async (req) => {
             `Filing Type: ${filing.filing_type}`,
             `Filing Date: ${filing.filing_date}`,
             ``,
-            `Risk Signals: ${filing.risk_signals.join(", ")}`,
+            `Warning signs: ${filing.risk_signals.map(secSignalLabel).join(", ")}`,
             ``,
             `Key Findings: ${filing.key_findings || "(text not extracted)"}`,
             ``,
