@@ -44,13 +44,14 @@ export const POLICY_DEFAULTS = {
   utilization: {
     high_pct: 80,
     critical_pct: 95,
-    /** Below the limit, high use is an alert only with a weak signal: a score below this, or payments at risk / deteriorating. */
-    weak_score_below: 50,
+    /** Below the limit, high use is an alert only with a weak signal: a score below this (Watch or lower), or payments at risk / deteriorating. */
+    weak_score_below: 55,
   },
   /** Limit reduction proposals for existing customers (calculate-credit-limit-proposal). */
   limit_review: {
-    distress_score_below: 20,
-    concern_score_up_to: 40,
+    // On CreditPilot's one scale (score_scale.ts): High risk below 25, Elevated risk 25–39.
+    distress_score_below: 25,
+    concern_score_up_to: 39,
     high_overdue_pct_of_limit: 10,
     high_utilization_pct: 70,
     critical_utilization_pct: 85,

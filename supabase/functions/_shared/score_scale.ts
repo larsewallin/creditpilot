@@ -3,15 +3,16 @@
  * reason to reduce a limit"). The bands are Keen's published labels, on a short-term trade-credit
  * horizon (receivables due within a year), not a rating agency's 3–5-year view.
  */
-export interface ScoreBand { min: number; label: string; meaning: string }
+export type ScoreKey = "very_strong" | "strong" | "adequate" | "watch" | "elevated" | "high_risk";
+export interface ScoreBand { key: ScoreKey; min: number; label: string; meaning: string }
 
 export const SCORE_BANDS: ScoreBand[] = [
-  { min: 85, label: "Very strong", meaning: "very low short-term risk" },
-  { min: 70, label: "Strong", meaning: "low short-term risk" },
-  { min: 55, label: "Adequate", meaning: "acceptable risk for normal trade terms; not by itself a reason to cut a limit" },
-  { min: 40, label: "Watch", meaning: "keep an eye on it; act if payments or other short-term signals weaken" },
-  { min: 25, label: "Elevated risk", meaning: "tighter terms or a lower limit are reasonable" },
-  { min: 0, label: "High risk", meaning: "high short-term risk; secure or reduce exposure" },
+  { key: "very_strong", min: 85, label: "Very strong", meaning: "very low short-term risk" },
+  { key: "strong", min: 70, label: "Strong", meaning: "low short-term risk" },
+  { key: "adequate", min: 55, label: "Adequate", meaning: "acceptable risk for normal trade terms; not by itself a reason to cut a limit" },
+  { key: "watch", min: 40, label: "Watch", meaning: "keep an eye on it; act if payments or other short-term signals weaken" },
+  { key: "elevated", min: 25, label: "Elevated risk", meaning: "tighter terms or a lower limit are reasonable" },
+  { key: "high_risk", min: 0, label: "High risk", meaning: "high short-term risk; secure or reduce exposure" },
 ];
 
 export function scoreBand(score: number | null | undefined): ScoreBand | null {

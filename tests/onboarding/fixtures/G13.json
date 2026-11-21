@@ -1,7 +1,7 @@
 {
   "id": "G13",
   "title": "Keen times out",
-  "why": "Keen times out -> falls back to the uploaded bureau report score 88 (band B), and the memo says so. Caps: WC 90,000; NW 120,000; bureau 150,000 -> 90,000 x 0.75 = 67,500 -> supportable 65,000. needs = 45,000 x 1 x 1.15 = 51,750 -> recommended 50,000. Request 50,000 -> approve; 65,000 >= 60,000 -> higher-limit note.",
+  "why": "Keen times out -> falls back to the uploaded bureau report score 88 (Very strong), and the memo says so. Reviewed statements: 15% haircut. Caps: WC 90,000 -> 76,500; NW 120,000 -> 102,000; bureau 150,000 -> 76,500 x 1.00 -> supportable 75,000. needs = 45,000 x 1 x 1.15 = 51,750 -> recommended 50,000. Request 50,000 -> approve; 75,000 >= 60,000 -> higher-limit note.",
   "application": {
     "application_id": "G13",
     "submitted_by": "credit_team",
@@ -102,7 +102,7 @@
     "analysis": {
       "financials_source": "uploaded_statements",
       "score_source": "bureau_report",
-      "band": "B",
+      "band": "very_strong",
       "fallbacks": [
         {
           "provider": "keen",
@@ -113,7 +113,7 @@
     "proposal": {
       "decision": "approve_as_requested",
       "recommended_usd": 50000,
-      "supportable_usd": 65000,
+      "supportable_usd": 75000,
       "proposed_usd": 50000,
       "binding_method": "needs_based",
       "higher_limit_note": true,

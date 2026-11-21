@@ -18,6 +18,7 @@ import type {
   OnboardingProviders, OnboardingSettings, Person, ScreeningHit,
 } from "./types.ts";
 import { ONBOARDING_DEFAULTS } from "./settings.ts";
+import { requiredTradeReferences } from "./trade_references.ts";
 import { financialsAge, statementFromKeen } from "./keen_statements.ts";
 import { activeScoreOrder, PROVIDER, SCORE_PROVIDERS } from "./score_providers.ts";
 import { selectCreditScore } from "../skills/analytical/select-credit-score.ts";
@@ -194,6 +195,12 @@ export async function runOnboarding(
     limits: settings.limits,
   });
   const reason_codes = [...limit.reason_codes];
+  // Trade references are judged once size and score are known (policy: by revenue and score).
+  // Short is shown to the approver; it does not stop the application.
+  const refsNeeded = requiredTradeReferences(
+    (settings.template ?? ONBOARDING_DEFAULTS.template).trade_references ?? ONBOARDING_DEFAULTS.template.trade_references,
+    statement?.currency?.toUpperCase() === "USD" ? statement?.revenue : undefined, band);
+  if ((app.trade_references?.length ?? 0) < refsNeeded) reason_codes.push("TRADE_REFERENCES_SHORT");
   if (picked.used_fallback) reason_codes.push("SCORE_FALLBACK");
   if (financials_age?.status === "stale") reason_codes.push("FINANCIALS_STALE");
 
@@ -212,6 +219,7 @@ export async function runOnboarding(
     needs_usd: limit.needs_usd,
     caps: limit.caps,
     risk_adjusted_cap_usd: limit.risk_adjusted_cap_usd,
+    trade_references: { required: refsNeeded, provided: app.trade_references?.length ?? 0 },
   };
   return out;
 }
@@ -223,7 +231,6 @@ function completenessGaps(app: CreditApplication, s: OnboardingSettings, asOf: s
   if (!app.legal_name?.trim()) missing.push("legal_name");
   if (!app.country_code) missing.push("country_code");
   if (!app.credit_request.amount_usd) missing.push("credit_request.amount_usd");
-  if ((app.trade_references?.length ?? 0) < s.template.min_trade_references) missing.push("trade_references");
   // Above the threshold a credit score is needed. With Keen: a private company's statements (a
   // listed one is read from its 10-K) or a third-party score. Keen paused (founder, 2026-11-18):
   // every company needs the credit provider's report.

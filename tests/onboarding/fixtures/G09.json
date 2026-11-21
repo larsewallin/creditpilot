@@ -101,7 +101,7 @@
       "financials_source": "sec_edgar",
       "statement_quality": "audited",
       "score_source": "keen",
-      "band": "A"
+      "band": "very_strong"
     },
     "proposal": {
       "decision": "approve_as_requested",

@@ -218,7 +218,11 @@ export interface OnboardingProviders {
 
 export interface OnboardingSettings {
   template: {
-    min_trade_references: number;
+    trade_references: {
+      large_revenue_usd: number; large: number;
+      mid_revenue_usd: number; mid: number;
+      small: number; fewer_if_strong_or_better: number;
+    };
     statements_required_above_usd: number;      // private companies only
     guarantee_required_if_entity_younger_than_months: number;
   };
@@ -234,9 +238,10 @@ export interface OnboardingSettings {
     needs_buffer_pct: number;
     working_capital_pct: number;
     net_worth_pct: number;
-    compiled_statement_haircut_pct: number;
+    statement_haircuts_pct: Record<FinancialStatement["statement_quality"], number>;
     macro_haircut_pct: number;                  // once, if country or currency has high+ event
-    band_multipliers: { A: number; B: number; C: number; D: number; E: number };
+    score_multipliers: Record<import("../score_scale.ts").ScoreKey, number>;
+    elevated_full_if_request_pct_of_revenue_up_to: number;
     higher_limit_note_ratio: number;            // supportable ≥ ratio × requested
     rounding_usd: number;                       // round down to this step
   };
@@ -307,7 +312,8 @@ export interface OnboardingOutcome {
     score?: number;
     /** The provider's own value as shown to people (e.g. "D&B report"). */
     score_raw?: string;
-    band?: "A" | "B" | "C" | "D" | "E";
+    /** The score's label on CreditPilot's scale (score_scale.ts). */
+    band?: import("../score_scale.ts").ScoreKey;
     /** Set when the score came from Keen. */
     keen?: KeenDetail;
     fallbacks: { provider: string; reason: string }[];
@@ -330,5 +336,7 @@ export interface OnboardingOutcome {
     needs_usd?: number;
     caps?: { working_capital?: number; net_worth?: number; bureau_recommendation?: number };
     risk_adjusted_cap_usd?: number;
+    /** Trade references the policy asks of this applicant (by size and score), and how many were given. */
+    trade_references?: { required: number; provided: number };
   };
 }

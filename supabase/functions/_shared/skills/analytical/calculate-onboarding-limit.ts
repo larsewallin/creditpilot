@@ -6,9 +6,10 @@
  *   company's onboarding.limits settings (defaults in onboarding/settings.ts).
  *
  *   needs        = monthly purchases × (terms ÷ 30) × (1 + buffer)       (falls back to the request)
- *   caps         = lowest of: working capital × wc%, net worth × nw%     (both × (1 − haircut) for compiled statements)
+ *   caps         = lowest of: working capital × wc%, net worth × nw%     (both × (1 − the statements' quality haircut))
  *                  and any bureau / Keen maximum credit recommendation
- *   risk-adjusted = cap × score-band multiplier × (1 − macro haircut, once, if a Country or FX signal applies)
+ *   risk-adjusted = cap × the score label's multiplier × (1 − macro haircut, once, if a Country or FX signal applies);
+ *                  Elevated gets the full cap when the request is at most the policy's % of the company's revenue
  *   supportable  = risk-adjusted, rounded down
  *   recommended  = lowest of needs and risk-adjusted, rounded down
  *   decision     = request ≤ recommended → approve as requested; otherwise counteroffer at recommended;
@@ -20,8 +21,10 @@
  * @usedBy onboarding pipeline (_shared/onboarding/pipeline.ts), cia-agent onboarding mode (planned)
  */
 import type { FinancialStatement, OnboardingSettings } from "../../onboarding/types.ts";
+import { scoreBand, type ScoreKey } from "../../score_scale.ts";
 
-export type Band = "A" | "B" | "C" | "D" | "E";
+/** The score's label on CreditPilot's one scale (score_scale.ts). */
+export type Band = ScoreKey;
 export type BindingMethod = "needs_based" | "working_capital" | "net_worth" | "bureau_recommendation";
 
 export interface OnboardingLimitInput {
@@ -55,12 +58,7 @@ export interface OnboardingLimitResult {
 }
 
 export function scoreToBand(score: number | null | undefined): Band | null {
-  if (score === null || score === undefined || !Number.isFinite(score)) return null;
-  if (score >= 90) return "A";
-  if (score >= 80) return "B";
-  if (score >= 70) return "C";
-  if (score >= 60) return "D";
-  return "E";
+  return scoreBand(score)?.key ?? null;
 }
 
 const BINDING_CODE: Record<Exclude<BindingMethod, "needs_based">, string> = {
@@ -82,8 +80,9 @@ export function calculateOnboardingLimit(input: OnboardingLimitInput): Onboardin
   const caps: OnboardingLimitResult["caps"] = {};
   const s = input.statement;
   if (s) {
-    const quality = s.statement_quality === "compiled" ? 1 - L.compiled_statement_haircut_pct / 100 : 1;
-    if (s.statement_quality === "compiled") reason_codes.push("STATEMENT_QUALITY_COMPILED");
+    const haircut = L.statement_haircuts_pct[s.statement_quality] ?? 0;
+    const quality = 1 - haircut / 100;
+    if (haircut > 0) reason_codes.push(`STATEMENT_QUALITY_${s.statement_quality.toUpperCase()}`);
     if (s.current_assets !== undefined && s.current_liabilities !== undefined) {
       caps.working_capital = Math.max(0, s.current_assets - s.current_liabilities) * (L.working_capital_pct / 100) * quality;
     }
@@ -107,7 +106,13 @@ export function calculateOnboardingLimit(input: OnboardingLimitInput): Onboardin
   const macroHit = input.macro.country || input.macro.fx;
   if (input.macro.country) reason_codes.push("MACRO_COUNTRY_RISK");
   if (input.macro.fx) reason_codes.push("MACRO_FX_RISK");
-  const riskAdjusted = cap * L.band_multipliers[input.band] * (macroHit ? 1 - L.macro_haircut_pct / 100 : 1);
+  // Elevated: the full cap when the request is small for the company's size.
+  const revenue = s?.revenue;
+  const smallRequest = input.band === "elevated" && !!revenue && revenue > 0
+    && requested <= revenue * L.elevated_full_if_request_pct_of_revenue_up_to / 100;
+  if (smallRequest) reason_codes.push("SMALL_REQUEST_FOR_SIZE");
+  const multiplier = smallRequest ? 1 : L.score_multipliers[input.band] ?? 0;
+  const riskAdjusted = cap * multiplier * (macroHit ? 1 - L.macro_haircut_pct / 100 : 1);
 
   const binding: BindingMethod = needs <= riskAdjusted ? "needs_based" : capMethod;
   if (binding !== "needs_based") reason_codes.push(BINDING_CODE[binding]);
@@ -120,7 +125,7 @@ export function calculateOnboardingLimit(input: OnboardingLimitInput): Onboardin
     macro_haircut_applied: macroHit,
   };
 
-  if (recommended <= 0) { reason_codes.push(input.band === "E" ? "SCORE_BAND_E" : "NO_SUPPORTABLE_LIMIT"); return result; }
+  if (recommended <= 0) { reason_codes.push(multiplier === 0 ? "SCORE_HIGH_RISK" : "NO_SUPPORTABLE_LIMIT"); return result; }
 
   if (requested <= recommended) { result.decision = "approve_as_requested"; result.proposed_usd = requested; }
   else { result.decision = "counteroffer"; result.proposed_usd = recommended; }
