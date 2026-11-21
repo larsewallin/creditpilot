@@ -136,7 +136,7 @@ Deno.serve(async (req) => {
     // 1. Load candidate customers (current_exposure > 0).
     const { data: customers, error: customersError } = await supabase
       .from("customers")
-      .select("id, company_name, current_exposure")
+      .select("id, company_name, current_exposure, payment_terms_days")
       .gt("current_exposure", 0)
       .order("current_exposure", { ascending: false })
       .limit(MAX_CUSTOMERS);
@@ -187,7 +187,7 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      const trend = analysePaymentTrend(transactions ?? [], now, policy.payment_trend);
+      const trend = analysePaymentTrend(transactions ?? [], now, policy.payment_trend, Number((customer as any).payment_terms_days) || 30);
       if (!trend.has_sufficient_data) continue;
 
       const swing = trend.current_avg_days_late - trend.prior_avg_days_late;

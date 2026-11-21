@@ -128,11 +128,11 @@ Deno.serve(async (req) => {
     // does not expose it and the client can't embed-join a view, so fetch it in
     // one batched query keyed by the breaching customer ids.
     const breachingIds = (rows ?? []).map((r) => r.customer_id);
-    const exposureById = new Map<string, { current_exposure: number; credit_rating_score: number | null }>();
+    const exposureById = new Map<string, { current_exposure: number; credit_rating_score: number | null; payment_terms_days: number }>();
     if (breachingIds.length > 0) {
       const { data: custRows, error: custError } = await supabase
         .from("customers")
-        .select("id, current_exposure, credit_rating_score")
+        .select("id, current_exposure, credit_rating_score, payment_terms_days")
         .in("id", breachingIds);
       if (custError) {
         console.error("[ar-aging-agent] customers exposure query failed:", JSON.stringify(custError));
@@ -142,6 +142,7 @@ Deno.serve(async (req) => {
         exposureById.set(c.id as string, {
           current_exposure: Number(c.current_exposure) || 0,
           credit_rating_score: c.credit_rating_score as number | null,
+          payment_terms_days: Number(c.payment_terms_days) || 30,
         });
       }
     }
@@ -167,7 +168,7 @@ Deno.serve(async (req) => {
         .limit(24);
       if (transactionsError) console.error("[ar-aging-agent] payment_transactions query failed:", transactionsError.message);
 
-      const behaviour = analysePaymentBehaviour(transactions ?? [], policy.payments);
+      const behaviour = analysePaymentBehaviour(transactions ?? [], policy.payments, custInfo?.payment_terms_days ?? 30);
 
       const { error: behaviourError } = await supabase.from("customers").update({
         payment_on_time_rate: behaviour.on_time_rate,
@@ -293,7 +294,11 @@ Deno.serve(async (req) => {
         let severity: "critical" | "high" | "medium" | "low";
         let severityScore: number;
         let worstBucket: string;
-        if (buckets.bucket_over_90 > 0)      { severity = "critical"; severityScore = 92; worstBucket = "90+"; }
+        // Over 90 days is critical only when material against the limit (policy.overdue.critical_min_pct_of_limit).
+        const limit = limitById.get(custId) ?? 0;
+        const over90Material = limit <= 0 || buckets.bucket_over_90 >= limit * policy.overdue.critical_min_pct_of_limit / 100;
+        if (buckets.bucket_over_90 > 0 && over90Material) { severity = "critical"; severityScore = 92; worstBucket = "90+"; }
+        else if (buckets.bucket_over_90 > 0) { severity = "high"; severityScore = 75; worstBucket = "90+"; }
         else if (buckets.bucket_61_90 > 0)   { severity = "high";     severityScore = 75; worstBucket = "61–90"; }
         else if (buckets.bucket_31_60 > 0)   { severity = "medium";   severityScore = 55; worstBucket = "31–60"; }
         else                                  { severity = "low";      severityScore = 30; worstBucket = "1–30"; }

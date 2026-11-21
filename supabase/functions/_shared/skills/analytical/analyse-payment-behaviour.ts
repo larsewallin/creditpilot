@@ -5,11 +5,13 @@
  *   metrics: on-time rate, average days early/late, trend, and an overall health signal.
  *   All numeric metrics are amount-weighted so large invoices influence results more
  *   than small ones. Trend compares amount-weighted halves of the transaction history.
- *   Trend threshold: delta > 3 days = deteriorating, < -3 days = improving.
+ *   Every threshold comes from the company's policy (policy.payments) and lateness is measured
+ *   against the customer's own terms: on time = paid within the grace days of the due date;
+ *   trend = average lateness up (down) by more than trend_pct_of_terms % of the terms.
  *
- *   Health logic:
+ *   Health logic (defaults):
  *     at_risk  = deteriorating trend AND on_time_rate < 0.85 (getting worse over time)
- *     watch    = consistently late but stable (on_time_rate < 0.70 OR avg_days_early_late > 15)
+ *     watch    = consistently late but stable (on_time_rate < 0.70 OR average lateness > 25% of terms)
  *              = deteriorating but still paying well overall (on_time_rate >= 0.85)
  *     healthy  = on time and stable/improving
  *     unknown  = no transaction history
@@ -42,9 +44,14 @@ export interface PaymentBehaviourResult {
 export function analysePaymentBehaviour(
   transactions: PaymentTransaction[],
   rules: CreditPolicy["payments"] = POLICY_DEFAULTS.payments,
+  /** The customer's payment terms in days; lateness is judged as a share of them. */
+  termsDays = 30,
 ): PaymentBehaviourResult {
-  // With grace days, a payment within that many days of its due date counts as on time.
-  const onTime = (t: PaymentTransaction) => rules.grace_days > 0 ? (t.days_early_late ?? 0) <= rules.grace_days : t.on_time;
+  const terms = termsDays > 0 ? termsDays : 30;
+  // A payment within the grace days of its due date counts as on time.
+  const onTime = (t: PaymentTransaction) => (t.days_early_late ?? 0) <= rules.grace_days;
+  const trendDays = terms * rules.trend_pct_of_terms / 100;
+  const watchLateDays = terms * rules.watch_avg_late_pct_of_terms / 100;
   if (!transactions || transactions.length === 0) {
     return {
       on_time_rate: null,
@@ -95,8 +102,8 @@ export function analysePaymentBehaviour(
     const lateHalfAvg = lateHalf.reduce((s, t) => s + t.days_early_late * (t.amount ?? 1), 0) / lateAmount;
 
     const delta = lateHalfAvg - earlyHalfAvg;
-    if (delta > rules.trend_days) trend = "deteriorating";
-    else if (delta < -rules.trend_days) trend = "improving";
+    if (delta > trendDays) trend = "deteriorating";
+    else if (delta < -trendDays) trend = "improving";
     else trend = "stable";
   }
 
@@ -107,7 +114,7 @@ export function analysePaymentBehaviour(
   let health: PaymentBehaviourResult["health"] = "healthy";
   if (trend === "deteriorating" && on_time_rate < rules.at_risk_on_time_below) {
     health = "at_risk";
-  } else if (on_time_rate < rules.watch_on_time_below || avg_days_early_late > rules.watch_avg_late_days) {
+  } else if (on_time_rate < rules.watch_on_time_below || avg_days_early_late > watchLateDays) {
     health = "watch";
   } else if (trend === "deteriorating") {
     health = "watch"; // deteriorating but still paying well overall

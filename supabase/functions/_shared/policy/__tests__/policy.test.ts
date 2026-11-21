@@ -14,15 +14,15 @@ describe("effectivePolicy", () => {
   });
 
   it("applies a company override and keeps the other values", () => {
-    const p = effectivePolicy({ "policy.payments": { grace_days: 5 } });
-    expect(p.payments.grace_days).toBe(5);
-    expect(p.payments.trend_days).toBe(POLICY_DEFAULTS.payments.trend_days);
+    const p = effectivePolicy({ "policy.payments": { grace_days: 3 } });
+    expect(p.payments.grace_days).toBe(3);
+    expect(p.payments.trend_pct_of_terms).toBe(POLICY_DEFAULTS.payments.trend_pct_of_terms);
     expect(p.overdue).toEqual(POLICY_DEFAULTS.overdue);
   });
 
   it("ignores unknown fields and values of the wrong type", () => {
-    const p = effectivePolicy({ "policy.payments": { grace_days: "5", nonsense: 1 } });
-    expect(p.payments.grace_days).toBe(0);
+    const p = effectivePolicy({ "policy.payments": { grace_days: "9", nonsense: 1 } });
+    expect(p.payments.grace_days).toBe(POLICY_DEFAULTS.payments.grace_days);
     expect("nonsense" in p.payments).toBe(false);
   });
 });
@@ -61,22 +61,23 @@ describe("settings validation for policy keys", () => {
 });
 
 describe("skills follow the policy", () => {
-  it("grace days turn a 3-day-late payment into an on-time one", () => {
+  it("grace days decide whether a 3-day-late payment is on time", () => {
     const tx = [{ payment_date: "2026-10-01", days_to_pay: 33, days_early_late: 3, on_time: false, amount: 100 }];
-    expect(analysePaymentBehaviour(tx).on_time_rate).toBe(0);
-    expect(analysePaymentBehaviour(tx, { ...POLICY_DEFAULTS.payments, grace_days: 5 }).on_time_rate).toBe(1);
+    expect(analysePaymentBehaviour(tx).on_time_rate).toBe(1);
+    expect(analysePaymentBehaviour(tx, { ...POLICY_DEFAULTS.payments, grace_days: 0 }).on_time_rate).toBe(0);
   });
 
-  it("a stricter trend swing raises a deterioration the default does not", () => {
+  it("trend swings are a share of the customer's terms", () => {
     const ref = new Date("2026-11-20T00:00:00Z");
     const tx = [
       { payment_date: "2026-07-15", days_early_late: 2 },
       { payment_date: "2026-10-15", days_early_late: 5 },
     ];
-    const def = analysePaymentTrend(tx, ref);
-    const strict = analysePaymentTrend(tx, ref, { ...POLICY_DEFAULTS.payment_trend, swing_days: 3 });
-    expect(def.has_sufficient_data && def.deterioration).toBeNull();
-    expect(strict.has_sufficient_data && strict.deterioration?.severity).toBe("medium");
+    // +3 days: under 15% of net 30 (4.5 days), over 15% of net 15 (2.25 days)
+    const net30 = analysePaymentTrend(tx, ref, undefined, 30);
+    const net15 = analysePaymentTrend(tx, ref, undefined, 15);
+    expect(net30.has_sufficient_data && net30.deterioration).toBeNull();
+    expect(net15.has_sufficient_data && net15.deterioration?.severity).toBe("medium");
   });
 
   it("score change thresholds come from the policy", () => {

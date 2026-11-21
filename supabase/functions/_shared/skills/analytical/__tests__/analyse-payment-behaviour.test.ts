@@ -59,7 +59,7 @@ describe("analysePaymentBehaviour", () => {
     const transactions: PaymentTransaction[] = [
       tx("2025-01-01", -1, true),
       tx("2025-02-01", 0, true),
-      tx("2025-03-01", 5, false),
+      tx("2025-03-01", 6, false),
       tx("2025-04-01", 12, false),
       tx("2025-05-01", 18, false),
       tx("2025-06-01", 25, false),
@@ -72,7 +72,7 @@ describe("analysePaymentBehaviour", () => {
   });
 
   it("handles a single transaction without crashing", () => {
-    const result = analysePaymentBehaviour([tx("2025-06-01", 5, false)]);
+    const result = analysePaymentBehaviour([tx("2025-06-01", 6, false)]); // beyond the 5 grace days
 
     expect(result.total_transactions).toBe(1);
     expect(result.on_time_rate).toBe(0);
@@ -162,5 +162,18 @@ describe("analysePaymentBehaviour", () => {
     const result = analysePaymentBehaviour(transactions);
     expect(result.recent_on_time_rate).toBe(1);
     expect(result.on_time_rate).toBeLessThan(1); // overall is lower
+  });
+
+  // Policy (founder, 2026-11-20): grace days and lateness as a share of the customer's terms.
+  it("counts a payment within the 5 grace days as on time", () => {
+    expect(analysePaymentBehaviour([tx("2025-06-01", 5, false)]).on_time_rate).toBe(1);
+  });
+
+  it("judges average lateness against the customer's terms", () => {
+    const late10 = [tx("2025-01-01", 10, false), tx("2025-02-01", 10, false), tx("2025-03-01", 10, false)];
+    expect(analysePaymentBehaviour(late10, undefined, 30).health).toBe("watch");   // 10 > 25% of 30
+    // on time below 70% still makes it watch; with a high enough on-time rate, net 60 is not watch at 10 days
+    const mostlyOnTime = [tx("2025-01-01", 0, true), tx("2025-02-01", 0, true), tx("2025-03-01", 0, true), tx("2025-04-01", 40, false)];
+    expect(analysePaymentBehaviour(mostlyOnTime, undefined, 60).health).not.toBe("watch");
   });
 });

@@ -101,14 +101,20 @@ function round1(n: number): number {
 
 type TrendRules = CreditPolicy["payment_trend"];
 
-function deteriorationSeverity(swing: number, r: TrendRules): DeteriorationSignal {
-  if (swing >= r.swing_critical_days) return { trend_direction: "sharply_worsening", severity: "critical" };
-  if (swing >= r.swing_high_days) return { trend_direction: "sharply_worsening", severity: "high" };
+/** Swing thresholds in days for a customer's terms. */
+function swingDays(r: TrendRules, termsDays: number) {
+  const t = termsDays > 0 ? termsDays : 30;
+  return { base: t * r.swing_pct_of_terms / 100, high: t * r.swing_high_pct_of_terms / 100, critical: t * r.swing_critical_pct_of_terms / 100 };
+}
+
+function deteriorationSeverity(swing: number, d: ReturnType<typeof swingDays>): DeteriorationSignal {
+  if (swing >= d.critical) return { trend_direction: "sharply_worsening", severity: "critical" };
+  if (swing >= d.high) return { trend_direction: "sharply_worsening", severity: "high" };
   return { trend_direction: "worsening", severity: "medium" };
 }
 
-function improvementSeverity(swing: number, r: TrendRules): ImprovementSignal {
-  if (swing >= r.swing_high_days) return { trend_direction: "sharply_improving", severity: "low" };
+function improvementSeverity(swing: number, d: ReturnType<typeof swingDays>): ImprovementSignal {
+  if (swing >= d.high) return { trend_direction: "sharply_improving", severity: "low" };
   return { trend_direction: "improving", severity: "info" };
 }
 
@@ -120,7 +126,10 @@ export function analysePaymentTrend(
   transactions: PaymentTrendTransaction[],
   referenceDate: Date = new Date(),
   rules: TrendRules = POLICY_DEFAULTS.payment_trend,
+  /** The customer's payment terms in days; swings are judged as a share of them. */
+  termsDays = 30,
 ): PaymentTrendResult {
+  const d = swingDays(rules, termsDays);
   const windowDays = rules.window_days;
   const valid = (transactions ?? []).filter(
     (t): t is PaymentTrendTransaction & { days_early_late: number } => t.days_early_late !== null
@@ -154,10 +163,10 @@ export function analysePaymentTrend(
   const swing = current_avg_days_late - prior_avg_days_late;
 
   const deterioration =
-    swing >= rules.swing_days && current_avg_days_late > 0 ? deteriorationSeverity(swing, rules) : null;
+    swing >= d.base && current_avg_days_late > 0 ? deteriorationSeverity(swing, d) : null;
 
   const improvement =
-    -swing >= rules.swing_days && prior_avg_days_late > 0 ? improvementSeverity(-swing, rules) : null;
+    -swing >= d.base && prior_avg_days_late > 0 ? improvementSeverity(-swing, d) : null;
 
   const stddev = round1(populationStdDev(currentWindow));
   const volatility: VolatilitySignal | null =
