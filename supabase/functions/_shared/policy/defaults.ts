@@ -11,34 +11,40 @@
 import { FX_POLICY_DEFAULTS } from "../skills/analytical/analyse-fx-exposure.ts";
 
 export const POLICY_DEFAULTS = {
-  /** How payment history is judged (analyse-payment-behaviour). */
+  /**
+   * How payment history is judged (analyse-payment-behaviour). Lateness is measured against
+   * each customer's own payment terms (customers.payment_terms_days), so one policy fits
+   * net 15 and net 90 alike (founder, 2026-11-20).
+   */
   payments: {
     /** Days after the due date a payment still counts as on time. */
-    grace_days: 0,
-    /** Change in average days late, first half vs second half of history, that counts as a trend. */
-    trend_days: 3,
+    grace_days: 5,
+    /** Average lateness rising by more than this % of the customer's terms (first half vs second half of history): deteriorating. */
+    trend_pct_of_terms: 10,
     /** Deteriorating and an on-time rate below this: at risk. */
     at_risk_on_time_below: 0.85,
     /** On-time rate below this: watch. */
     watch_on_time_below: 0.70,
-    /** Average days late above this: watch. */
-    watch_avg_late_days: 15,
+    /** Average lateness above this % of the customer's terms: watch. */
+    watch_avg_late_pct_of_terms: 25,
   },
-  /** 90-day against the previous 90 days (analyse-payment-trend). */
+  /** The last 90 days against the 90 before (analyse-payment-trend). Swings are % of the customer's terms. */
   payment_trend: {
     window_days: 90,
-    swing_days: 5,
-    swing_high_days: 10,
-    swing_critical_days: 20,
+    swing_pct_of_terms: 15,
+    swing_high_pct_of_terms: 30,
+    swing_critical_pct_of_terms: 60,
     volatility_days: 10,
     volatility_critical_days: 20,
   },
-  /** Overdue invoices (ar-aging-agent). 0 = no minimum. */
+  /** Overdue invoices (ar-aging-agent). */
   overdue: {
     /** Overdue below this amount raises no alert. */
-    materiality_usd: 0,
+    materiality_usd: 1_000,
     /** Overdue below this % of the customer's limit raises no alert. */
-    materiality_pct_of_limit: 0,
+    materiality_pct_of_limit: 2,
+    /** Over 90 days is critical only when it is at least this % of the limit; otherwise high. */
+    critical_min_pct_of_limit: 10,
   },
   /** Limit use (ar-aging-agent). */
   utilization: {
