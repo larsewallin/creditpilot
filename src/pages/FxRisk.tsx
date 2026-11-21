@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { eventLabel } from "@/lib/eventLabels";
 import { supabase } from "@/integrations/supabase/client";
 import { SeverityBadge } from "@/components/SeverityBadge";
 import { formatCurrency, relativeTime } from "@/lib/format";
@@ -221,7 +222,7 @@ export default function FxRisk() {
                               </p>
                               <p className="text-[11px] text-muted-foreground mt-0.5">{e.summary}</p>
                               <p className="text-[10px] text-muted-foreground/70 mt-1 font-mono">
-                                {e.event_type} · {relativeTime(e.created_at)}
+                                {eventLabel(e.event_type)} · {relativeTime(e.created_at)}
                               </p>
                             </div>
                           </div>

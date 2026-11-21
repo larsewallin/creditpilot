@@ -2,6 +2,7 @@ import { DemoDataNotice } from "@/components/DemoDataNotice";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { RiskTierBadge } from "@/components/RiskTierBadge";
+import { cn } from "@/lib/utils";
 import { formatCurrency, formatPct } from "@/lib/format";
 import { SkeletonCard, SkeletonTable } from "@/components/SkeletonCard";
 import { Button } from "@/components/ui/button";
@@ -241,7 +242,7 @@ export default function ArAging() {
               <thead className="bg-secondary/50 sticky top-0">
                 <tr className="text-muted-foreground">
                   <th className="text-left p-3 font-medium whitespace-nowrap">Customer</th>
-                  <th className="text-left p-3 font-medium">Risk</th>
+                  <th className="text-left p-3 font-medium">Oldest overdue</th>
                   <th className="text-right p-3 font-medium whitespace-nowrap">Current</th>
                   <th className="text-right p-3 font-medium whitespace-nowrap">1–30</th>
                   <th className="text-right p-3 font-medium whitespace-nowrap">31–60</th>
@@ -269,7 +270,7 @@ export default function ArAging() {
                     <td className="p-3 text-right font-mono tabular-nums">{formatCurrency(c.bucket_61_90)}</td>
                     <td className="p-3 text-right font-mono tabular-nums">{formatCurrency(c.bucket_over_90)}</td>
                     <td className="p-3 text-right font-mono tabular-nums font-semibold">{formatCurrency(c.total_outstanding)}</td>
-                    <td className="p-3 text-right font-mono tabular-nums">{formatPct(c.utilization_pct)}</td>
+                    <td className={cn("p-3 text-right font-mono tabular-nums", Number(c.utilization_pct) > 100 && "text-severity-critical font-semibold")} title={Number(c.utilization_pct) > 100 ? "Over the credit limit" : undefined}>{formatPct(c.utilization_pct)}</td>
                   </tr>
                 ))}
               </tbody>

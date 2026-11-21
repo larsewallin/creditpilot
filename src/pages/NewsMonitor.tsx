@@ -69,7 +69,7 @@ export default function NewsMonitor() {
                 <th className="text-left p-3 font-medium">Headline</th>
                 <th className="text-left p-3 font-medium">Category</th>
                 <th className="text-left p-3 font-medium">Severity</th>
-                <th className="text-left p-3 font-medium">Sentiment</th>
+                <th className="text-left p-3 font-medium">Tone</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -93,9 +93,9 @@ export default function NewsMonitor() {
                       n.headline
                     )}
                   </td>
-                  <td className="p-3"><Badge variant="secondary" className="text-[10px]">{n.category}</Badge></td>
+                  <td className="p-3"><Badge variant="secondary" className="text-[10px]">{newsCategory(n.category)}</Badge></td>
                   <td className="p-3"><SeverityBadge severity={n.severity} /></td>
-                  <td className="p-3 text-xs font-mono">{n.sentiment_score?.toFixed(2)}</td>
+                  <td className="p-3 text-xs" title={n.sentiment_score != null ? `Sentiment ${n.sentiment_score.toFixed(2)} on a −1 to +1 scale` : undefined}>{tone(n.sentiment_score)}</td>
                 </tr>
               ))}
             </tbody>
@@ -104,4 +104,17 @@ export default function NewsMonitor() {
       </div>
     </div>
   );
+}
+
+const NEWS_CATEGORY: Record<string, string> = {
+  credit_rating: "Credit rating", financial_results: "Financial results", bankruptcy: "Insolvency",
+  restructuring: "Restructuring", operational: "Operations", legal: "Legal", management: "Management",
+};
+function newsCategory(c: string | null): string {
+  if (!c) return "Other";
+  return NEWS_CATEGORY[c] ?? c.replace(/_/g, " ").replace(/^./, (x) => x.toUpperCase());
+}
+function tone(s: number | null | undefined): string {
+  if (s == null) return "—";
+  return s <= -0.7 ? "Very negative" : s <= -0.3 ? "Negative" : s < 0.3 ? "Mixed" : "Positive";
 }

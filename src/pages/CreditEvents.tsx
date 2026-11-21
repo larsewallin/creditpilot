@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { plainSecText } from "@/lib/secSignalLabels";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { AgentPill } from "@/components/AgentPill";
@@ -274,7 +275,7 @@ function EventCard({ evt, highlighted, onOpen }: { evt: Evt; highlighted: boolea
           </div>
           <p className="text-sm"><Subject evt={evt} /></p>
           {evt.title && <p className="text-sm text-foreground mt-0.5">{evt.title}</p>}
-          {evt.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{evt.description}</p>}
+          {evt.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{plainSecText(evt.description)}</p>}
         </div>
         <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0 mt-1">{relativeTime(evt.created_at)}</span>
       </div>

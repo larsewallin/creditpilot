@@ -2,8 +2,8 @@ import { DEMO_MODE } from "@/lib/constants";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { ScenarioBadge } from "@/components/ScenarioBadge";
 import { formatCurrency, relativeTime, scoreColor } from "@/lib/format";
+import { scoreLabel } from "@/lib/scoreLabel";
 import { Badge } from "@/components/ui/badge";
 import { SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -99,7 +99,7 @@ export function CustomerDetail({ customer }: { customer: any }) {
           {customer.company_name}
         </SheetTitle>
       </SheetHeader>
-      <div className="mt-2 mb-4"><ScenarioBadge scenario={customer.scenario} /></div>
+      {customer.policy_group ? <div className="mt-2 mb-4 text-[10px] text-muted-foreground">Policy group: {customer.policy_group.replace(/_/g, " ")}</div> : <div className="mb-2" />}
 
       <Tabs defaultValue="overview">
         <TabsList className="w-full h-8">
@@ -114,7 +114,7 @@ export function CustomerDetail({ customer }: { customer: any }) {
           <div className="bg-secondary/50 rounded-lg p-3">
             <p className="text-[10px] text-muted-foreground uppercase">Credit Score</p>
             <p className={cn("text-2xl font-bold", score == null ? "text-muted-foreground" : scoreColor(score))}>
-              {score != null ? score : "No Rating"}
+              {score != null ? <>{score} <span className="text-sm font-semibold">{scoreLabel(score)}</span></> : "No score"}
             </p>
             {score != null && customer.credit_rating_source ? (
               <p className="text-[10px] text-muted-foreground mt-0.5">{formatRatingSource(customer.credit_rating_source)}</p>

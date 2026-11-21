@@ -1,4 +1,6 @@
 import { DEMO_MODE } from "@/lib/constants";
+import { plainSecText } from "@/lib/secSignalLabels";
+import { eventLabel } from "@/lib/eventLabels";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { SkeletonCard } from "@/components/SkeletonCard";
@@ -143,8 +145,8 @@ export default function SecFilings() {
                   <div className="mt-3 flex items-start gap-1.5 bg-agent-sec/5 rounded-lg p-2">
                     <ShieldAlert className="h-3.5 w-3.5 text-agent-sec mt-0.5 shrink-0" />
                     <p className="text-xs text-muted-foreground">
-                      {customerEvents.description.slice(0, 150)}
-                      {customerEvents.description.length > 150 ? "…" : ""}
+                      {plainSecText(customerEvents.description).slice(0, 180)}
+                      {plainSecText(customerEvents.description).length > 180 ? "…" : ""}
                     </p>
                   </div>
                 )}
@@ -154,7 +156,7 @@ export default function SecFilings() {
                   <div className="flex gap-1.5 mt-3 flex-wrap">
                     {events.map((e) => (
                       <Badge key={e} variant="secondary" className="text-[10px]">
-                        {e.replace(/_/g, " ")}
+                        {eventLabel(e)}
                       </Badge>
                     ))}
                   </div>
