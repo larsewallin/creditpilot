@@ -29,6 +29,8 @@ const one = (q) => sql(q)[0]?.[0];
 const col = (q) => sql(q).map((r) => r[0]);
 
 const ACTIVE = "lifecycle_status = 'active'";
+// The company's grace days: its stored policy, else CreditPilot's default (5).
+const policyGrace = Number(one(`select value->>'grace_days' from company_settings where key = 'policy.payments'`) || 5);
 const truth = {
   overdue: Number(one("select total_1_30 + total_31_60 + total_61_90 + total_over_90 from v_ar_aging_portfolio")),
   outstanding: Number(one("select total_outstanding from v_ar_aging_portfolio")),
@@ -201,6 +203,11 @@ const CASES = [
   { q: "And how do they pay?", previous: "What is Arconic's credit limit and current balance?", check: (a) => [
       /arconic/i.test(a) || "lost the company from the earlier question", /on.?time|late|days/i.test(a) || "no payment facts"] },
   { q: "Summarize the portfolio's credit risk in three sentences.", check: () => [] },
+  // ── Trade Credit Policy: the CIA states the company's own rule with its value ──
+  { q: "How many days late can a customer pay and still count as on time?", check: (a) => [
+      hasNumber(a, policyGrace) || `grace days ${policyGrace} not in answer`, /polic/i.test(a) || "does not say it is the company's policy"] },
+  { q: "When does an overdue balance raise an alert?", check: (a) => [
+      /1,000|\$1k|1000/i.test(a) || "minimum amount not in answer", /2\s?%/.test(a) || "share of limit not in answer"] },
 ];
 
 import { appendFileSync } from "node:fs";

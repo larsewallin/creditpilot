@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { POLICY_DEFAULTS, POLICY_GROUP_DEFAULTS } from "../../supabase/functions/_shared/policy/defaults";
 import { ONBOARDING_DEFAULTS } from "../../supabase/functions/_shared/onboarding/settings";
-import { FIELD_INFO, POLICY_SECTIONS, flatten, fromShown, toShown, unflatten } from "./policyFields";
+import { FIELD_INFO, POLICY_SECTIONS, flatten, fromShown, policyMarkdown, toShown, unflatten } from "./policyFields";
 
 const sectionValue = (key: string): unknown => {
   const [ns, s] = key.split(".");
@@ -40,5 +40,15 @@ describe("flatten / unflatten", () => {
     expect(toShown(0.85, "fraction")).toBe("85");
     expect(fromShown("85", "fraction")).toBe(0.85);
     expect(toShown(5)).toBe("5");
+  });
+});
+
+describe("policyMarkdown", () => {
+  it("writes every section and group as a readable document", () => {
+    const md = policyMarkdown(sectionValue, POLICY_GROUP_DEFAULTS as never, "2026-11-20");
+    expect(md).toContain("# Trade Credit Policy");
+    expect(md).toContain("| Grace days after the due date (still on time) | 5 days |");
+    expect(md).toContain("### Strategic");
+    expect(md).toContain("Share of the cap: Adequate | 100 %");
   });
 });
