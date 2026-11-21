@@ -7,13 +7,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Download, Loader2, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { db, saveSetting, type SettingsAnswer } from "@/lib/onboarding";
 import { assignGroup, previewPolicy, resetSetting, type PolicyChange, type PolicyGroup } from "@/lib/policy";
-import { POLICY_SECTIONS, fieldInfo, flatten, fromShown, toShown, unflatten, type PolicySectionInfo } from "@/lib/policyFields";
+import { POLICY_SECTIONS, fieldInfo, flatten, fromShown, policyMarkdown, toShown, unflatten, type PolicySectionInfo } from "@/lib/policyFields";
 
 const SCALE = [
   ["85–100", "Very strong"], ["70–84", "Strong"], ["55–69", "Adequate"],
@@ -222,7 +222,17 @@ export function CreditPolicyPanel({ data, canEdit }: { data: SettingsAnswer; can
   return (
     <div className="space-y-5">
       <section className="bg-card rounded-xl border p-4 space-y-2 text-xs">
-        <h2 className="text-sm font-semibold">Your Trade Credit Policy</h2>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold">Your Trade Credit Policy</h2>
+          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => {
+            const md = policyMarkdown((k) => sectionValue(data, k), ((data.settings as Record<string, unknown>).policy_groups ?? {}) as Record<string, PolicyGroup>, new Date().toISOString().slice(0, 10));
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(new Blob([md], { type: "text/markdown" }));
+            a.download = "trade-credit-policy.md";
+            a.click();
+            URL.revokeObjectURL(a.href);
+          }}><Download className="h-3 w-3 mr-1" />Download policy</Button>
+        </div>
         <p className="text-muted-foreground">Every alert, limit proposal and answer in CreditPilot follows these rules. Set them to match your business and your written credit policy; CreditPilot's defaults are a starting point, not an industry standard. Each change is kept in the settings history with who made it.</p>
         {data.demo && <p className="rounded-md bg-muted px-3 py-2">In the demo the policy is read-only: it shows CreditPilot's defaults. On your own install your team sets it.</p>}
         <p className="font-medium pt-1">Score scale (0–100, higher is safer)</p>

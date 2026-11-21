@@ -158,3 +158,31 @@ export function fieldInfo(sectionKey: string, path: string): FieldInfo {
 /** Shown value for an input: a fraction as a percent, rounded to avoid 0.85 × 100 = 85.00000000000001. */
 export const toShown = (v: number, kind?: FieldKind) => kind === "fraction" ? String(Math.round(v * 10000) / 100) : String(v);
 export const fromShown = (s: string, kind?: FieldKind) => kind === "fraction" ? Number(s) / 100 : Number(s);
+
+/** The whole policy as a readable document (Settings › Credit policy › Download). */
+export function policyMarkdown(
+  sectionValue: (key: string) => unknown,
+  groups: Record<string, { name: string; note: string; overrides: Record<string, unknown> }>,
+  asOf: string,
+): string {
+  const out = [`# Trade Credit Policy`, ``, `As of ${asOf}. Exported from CreditPilot (Settings › Credit policy).`, ``,
+    `## Score scale`, ``, `85–100 Very strong · 70–84 Strong · 55–69 Adequate · 40–54 Watch · 25–39 Elevated risk · 0–24 High risk`, ``];
+  for (const s of POLICY_SECTIONS) {
+    out.push(`## ${s.title}`, ``, s.blurb, ``, `| Rule | Value |`, `|---|---|`);
+    for (const [p, v] of flatten(sectionValue(s.key))) {
+      const f = fieldInfo(s.key, p);
+      out.push(`| ${f.label} | ${toShown(v, f.kind)} ${f.unit ?? ""} |`);
+    }
+    out.push(``);
+  }
+  out.push(`## Customer groups`, ``, `A group changes only the rules listed; everything else follows the policy above.`, ``);
+  for (const g of Object.values(groups)) {
+    out.push(`### ${g.name}`, ``, ...(g.note ? [g.note, ``] : []));
+    const rules = Object.entries(g.overrides ?? {}).flatMap(([s, v]) => flatten(v).map(([p, n]) => {
+      const f = fieldInfo(`policy.${s}`, p);
+      return `- ${POLICY_SECTIONS.find((x) => x.key === `policy.${s}`)?.title}: ${f.label}: ${toShown(n, f.kind)} ${f.unit ?? ""}`;
+    }));
+    out.push(...(rules.length ? rules : ["- No rules changed."]), ``);
+  }
+  return out.join("\n");
+}
