@@ -22,10 +22,14 @@ export function formatPct(value: number | null | undefined): string {
   return `${value.toFixed(1)}%`;
 }
 
+/**
+ * Colour for a score on CreditPilot's one scale (score_scale.ts): Adequate (55) and better are
+ * good credits, Watch is amber, Elevated orange, High risk red.
+ */
 export function scoreColor(score: number | null): string {
   if (score == null) return "";
-  if (score >= 80) return "text-risk-current";
-  if (score >= 60) return "text-agent-aging";
-  if (score >= 40) return "text-severity-high";
+  if (score >= 55) return "text-risk-current";
+  if (score >= 40) return "text-agent-aging";
+  if (score >= 25) return "text-severity-high";
   return "text-severity-critical";
 }

@@ -12,3 +12,10 @@ export function bandLabel(band: string | null | undefined): string {
   if (!band) return "n/a";
   return LABELS[band] ?? `band ${band}`;
 }
+
+/** The label for a 0–100 score on CreditPilot's scale. */
+export function scoreLabel(score: number | null | undefined): string | null {
+  if (score == null || !Number.isFinite(score)) return null;
+  return score >= 85 ? "Very strong" : score >= 70 ? "Strong" : score >= 55 ? "Adequate"
+    : score >= 40 ? "Watch" : score >= 25 ? "Elevated risk" : "High risk";
+}

@@ -34,6 +34,7 @@
  *   MAX_CUSTOMERS_PER_RUN_LIVE / MAX_CUSTOMERS_PER_RUN_DEMO. Ordered by
  *   last_checked_at ascending so coverage rotates fairly under the live cap.
  */
+import { secSignalLabel } from "../_shared/sec_signal_labels.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.98.0";
 import { fetchSecFilings, fetchSeedSecFilings } from "../_shared/skills/integration/fetch-sec-filing.ts";
 import { deliverMessage, LogProvider } from "../_shared/skills/integration/deliver-message.ts";
@@ -243,7 +244,7 @@ Deno.serve(async (req) => {
               source_agent: agent_name,
               run_id,
               title,
-              description:  `Risk signals in ${filing.filing_type} (${filing.filing_date}): ${filing.risk_signals.join(", ")}`,
+              description:  `Warning signs in its ${filing.filing_type} filed ${filing.filing_date}: ${filing.risk_signals.map(secSignalLabel).join(", ")}`,
               summary:      summaryText,
               payload: {
                 severity_score:     severityScore,
@@ -271,7 +272,7 @@ Deno.serve(async (req) => {
               source_agent: agent_name,
               run_id,
               title,
-              description:  `Risk signals in ${filing.filing_type} (${filing.filing_date}): ${filing.risk_signals.join(", ")}`,
+              description:  `Warning signs in its ${filing.filing_type} filed ${filing.filing_date}: ${filing.risk_signals.map(secSignalLabel).join(", ")}`,
               summary:      summaryText,
               payload: {
                 severity_score:     severityScore,

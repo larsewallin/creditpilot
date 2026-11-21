@@ -1,7 +1,8 @@
 import { DemoDataNotice } from "@/components/DemoDataNotice";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { ScenarioBadge } from "@/components/ScenarioBadge";
+import { scoreLabel } from "@/lib/scoreLabel";
+import { getSettings } from "@/lib/onboarding";
 import { formatCurrency, scoreColor } from "@/lib/format";
 import { SkeletonTable } from "@/components/SkeletonCard";
 import { Input } from "@/components/ui/input";
@@ -16,7 +17,7 @@ import { cn } from "@/lib/utils";
 
 export default function Customers() {
   const [search, setSearch] = useState("");
-  const [scenarioFilter, setScenarioFilter] = useState("all");
+  const [labelFilter, setLabelFilter] = useState("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [searchParams] = useSearchParams();
   const customerIdParam = searchParams.get("customer_id");
@@ -33,6 +34,10 @@ export default function Customers() {
     },
   });
 
+  // Policy group names (Settings › Credit policy › Customer groups); signed-out readers see the key.
+  const { data: settings } = useQuery({ queryKey: ["settings"], queryFn: getSettings, staleTime: 60_000, retry: false });
+  const groups = ((settings?.settings as { policy_groups?: Record<string, { name: string }> } | undefined)?.policy_groups) ?? {};
+
   useEffect(() => {
     if (!customerIdParam || !customers) return;
     if (customers.some((c) => c.id === customerIdParam)) setSelectedId(customerIdParam);
@@ -42,7 +47,7 @@ export default function Customers() {
 
   const filtered = (customers ?? []).filter((c: any) => {
     if (search && !c.company_name.toLowerCase().includes(search.toLowerCase())) return false;
-    if (scenarioFilter !== "all" && c.scenario !== scenarioFilter) return false;
+    if (labelFilter !== "all" && (scoreLabel(c.credit_rating_score) ?? "No score") !== labelFilter) return false;
     return true;
   });
 
@@ -52,17 +57,11 @@ export default function Customers() {
 
       <div className="flex gap-3">
         <Input placeholder="Search customers..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-64 h-8 text-xs" />
-        <Select value={scenarioFilter} onValueChange={setScenarioFilter}>
-          <SelectTrigger className="w-52 h-8 text-xs"><SelectValue placeholder="All risk categories" /></SelectTrigger>
+        <Select value={labelFilter} onValueChange={setLabelFilter}>
+          <SelectTrigger className="w-52 h-8 text-xs" aria-label="Filter by score"><SelectValue placeholder="All scores" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All risk categories</SelectItem>
-            <SelectItem value="normal_operations">Normal</SelectItem>
-            <SelectItem value="payment_issues">Payment Issues</SelectItem>
-            <SelectItem value="credit_deterioration">Credit Deterioration</SelectItem>
-            <SelectItem value="negative_news">Negative News</SelectItem>
-            <SelectItem value="bankruptcy">Bankruptcy</SelectItem>
-            <SelectItem value="growth_opportunity">Growth</SelectItem>
-            <SelectItem value="sec_filing_monitoring">SEC Monitoring</SelectItem>
+            <SelectItem value="all">All scores</SelectItem>
+            {["Very strong", "Strong", "Adequate", "Watch", "Elevated risk", "High risk", "No score"].map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
           </SelectContent>
         </Select>
       </div>
@@ -74,7 +73,7 @@ export default function Customers() {
             <thead className="bg-secondary/50 sticky top-0">
               <tr className="text-muted-foreground">
                 <th className="text-left p-3 font-medium">Company</th>
-                <th className="text-left p-3 font-medium">Risk Category</th>
+                <th className="text-left p-3 font-medium">Policy group</th>
                 <th className="text-right p-3 font-medium">Credit Limit</th>
                 <th className="text-right p-3 font-medium">Exposure</th>
                 <th className="text-right p-3 font-medium">Util%</th>
@@ -90,12 +89,12 @@ export default function Customers() {
                     <td className="p-3">
                       <span className="font-medium">{c.company_name}</span>
                     </td>
-                    <td className="p-3"><ScenarioBadge scenario={c.scenario} /></td>
+                    <td className="p-3 text-muted-foreground">{c.policy_group ? (groups[c.policy_group]?.name ?? c.policy_group) : "—"}</td>
                     <td className="p-3 text-right">{formatCurrency(c.credit_limit)}</td>
                     <td className="p-3 text-right">{formatCurrency(c.current_exposure)}</td>
-                    <td className="p-3 text-right">{util.toFixed(1)}%</td>
-                    <td className={cn("p-3 text-right font-medium", scoreColor(score))}>
-                      {score != null ? score : <span className="text-muted-foreground font-normal">NR</span>}
+                    <td className={cn("p-3 text-right", util > 100 && "text-severity-critical font-medium")} title={util > 100 ? "Over the credit limit" : undefined}>{util.toFixed(1)}%</td>
+                    <td className={cn("p-3 text-right font-medium whitespace-nowrap", scoreColor(score))}>
+                      {score != null ? <>{score} <span className="font-normal">· {scoreLabel(score)}</span></> : <span className="text-muted-foreground font-normal">No score</span>}
                     </td>
                   </tr>
                 );
