@@ -72,6 +72,7 @@ export const FIELD_INFO: Record<string, FieldInfo> = {
   "policy.limit_review:strategic_latitude_pct": { label: "Extra room for strategic accounts", unit: "points" },
   "policy.limit_review:max_reduction_usd": { label: "Largest single cut", unit: "USD" },
   "policy.limit_review:max_reduction_pct": { label: "Largest single cut", unit: "% of limit" },
+  "policy.limit_review:high_risk_headroom_pct": { label: "High risk: limit cut to what is owed plus", unit: "% headroom" },
 
   "policy.composite:base_threshold_pct": { label: "Act at limit use of", unit: "% (no signals)" },
   "policy.composite:floor_pct": { label: "Never lower than", unit: "%" },

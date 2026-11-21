@@ -167,30 +167,24 @@ export function assessCompositeRisk(
     severity = "info";
   }
 
-  // Build rationale
+  // Build the rationale in plain words: what the policy acts at, why it is lower for this
+  // customer, and which monitors flag it (the codes stay in `adjustments`).
+  const reasons = adjustments.map(plainReason).filter(Boolean);
   const parts: string[] = [];
-
-  if (adjustments.length > 0) {
-    parts.push(`Threshold adjusted from ${BASE_THRESHOLD}% to ${adjusted_threshold}% due to: ${adjustments.join(", ")}.`);
-  } else {
-    parts.push(`No active signals; utilization threshold remains at ${BASE_THRESHOLD}%.`);
-  }
-
   if (utilization_pct >= adjusted_threshold) {
-    parts.push(`Utilization ${utilization_pct}% meets or exceeds adjusted threshold ${adjusted_threshold}%.`);
+    parts.push(adjusted_threshold < BASE_THRESHOLD
+      ? `${utilization_pct}% of the limit is in use. The policy acts from ${BASE_THRESHOLD}% limit use, and from ${adjusted_threshold}% for this customer because of ${listJoin(reasons)}.`
+      : `${utilization_pct}% of the limit is in use; the policy acts from ${BASE_THRESHOLD}%.`);
+  } else if (reasons.length) {
+    parts.push(`Warning signs: ${listJoin(reasons)}.`);
   }
-
   if (inDistress && hasActiveSignals) {
-    parts.push(`Distress credit score (${credit_score}) with active signals — immediate review warranted.`);
+    parts.push(`The score (${credit_score}) is High risk on the policy's scale, so it needs a review whatever the limit use.`);
   }
-
   if (agents_flagging.length >= 2) {
-    parts.push(`${agents_flagging.length} agents flagging (${agents_flagging.join(", ")}) — multi-signal convergence.`);
+    parts.push(`${agents_flagging.length} monitors flag it: ${listJoin(agents_flagging.map(plainAgent))}.`);
   }
-
-  if (!recommend_action) {
-    parts.push("No action required at this time.");
-  }
+  if (!recommend_action) parts.push("No action needed now.");
 
   return {
     adjusted_threshold,
@@ -199,4 +193,35 @@ export function assessCompositeRisk(
     rationale: parts.join(" "),
     adjustments,
   };
+}
+
+const AGENT_NAMES: Record<string, string> = {
+  payment_behaviour_agent: "payments", ar_aging_agent: "AR aging", news_monitor_agent: "news",
+  sec_monitor_agent: "SEC filings", credit_rating_agent: "credit score", country_risk_agent: "country risk",
+  industry_risk_agent: "industry risk", fx_risk_agent: "currency risk", macro_risk_agent: "country, industry and currency risk",
+};
+function plainAgent(a: string): string {
+  return AGENT_NAMES[a] ?? a.replace(/_agent$/, "").replace(/[_-]/g, " ");
+}
+
+/** An adjustment code ("on_time_rate <50% (−15pp)") as the reason a person reads. */
+function plainReason(code: string): string {
+  const pts = code.match(/\(−(\d+)pp\)/)?.[1];
+  const by = pts ? ` (${pts} points lower)` : "";
+  if (code.startsWith("NEGATIVE_NEWS")) return `serious negative news${by}`;
+  if (code.startsWith("GOING_CONCERN")) return `doubt about its future in its filings${by}`;
+  if (code.startsWith("COVENANT_WAIVER")) return `a covenant waiver${by}`;
+  if (code.startsWith("CEO_DEPARTURE")) return `its CEO leaving${by}`;
+  if (code.startsWith("CREDIT_RATING_DOWNGRADE")) return `a drop in its score${by}`;
+  if (code.startsWith("MACRO_CONVERGENCE")) return `country, industry or currency risk${by}`;
+  if (code.startsWith("credit_score distress")) return `a High risk score${by}`;
+  if (code.startsWith("credit_score concern")) return `an Elevated risk score${by}`;
+  if (code.startsWith("on_time_rate <50%")) return `paying on time less than half the time${by}`;
+  if (code.startsWith("on_time_rate <70%")) return `paying on time less than 70% of the time${by}`;
+  if (code.startsWith("on_time_rate <85%")) return `paying on time less than 85% of the time${by}`;
+  return code;
+}
+
+function listJoin(items: string[]): string {
+  return items.length <= 1 ? (items[0] ?? "") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }

@@ -65,6 +65,11 @@ export const POLICY_DEFAULTS = {
     max_reduction_usd: 1_000_000,
     /** No single proposal cuts a limit by more than this %. */
     max_reduction_pct: 50,
+    /**
+     * A High risk score (below distress_score_below) always gets a proposal (founder, 2026-11-21):
+     * the limit comes down to what the customer owes plus this % headroom (0 = no new credit).
+     */
+    high_risk_headroom_pct: 0,
   },
   /** Composite risk across agents (assess-composite-risk). */
   composite: {
