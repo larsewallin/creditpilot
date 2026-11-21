@@ -125,6 +125,9 @@ export function calculateCreditLimitProposal(
     rationale = `Critical utilization (${utilization_pct}%) with ${(inGrey || inDistress) ? `a weak credit score (${credit_score})` : "a poor on-time payment rate"} (on-time rate ${Math.round(on_time_rate * 100)}%), no aged overdue balance yet. Early warning-tier reduction.`;
   }
 
+  // The policy's ceiling on any single cut (a customer group can set a lower one).
+  reductionFactor = Math.min(reductionFactor, rules.max_reduction_pct / 100);
+
   if (reductionFactor === 0) {
     return {
       proposed_limit: current_limit,

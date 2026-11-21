@@ -33,7 +33,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.98.0";
 import { analysePaymentBehaviour } from "../_shared/skills/analytical/analyse-payment-behaviour.ts";
 import { publishEvent } from "../_shared/publishEvent.ts";
 import { severityToScore } from "../_shared/event_schemas.ts";
-import { loadPolicy } from "../_shared/policy/policy.ts";
+import { loadPolicy, policyFor } from "../_shared/policy/policy.ts";
 import { agentCallerProblem } from "../_shared/agent_gate.ts";
 
 const corsHeaders = {
@@ -103,7 +103,7 @@ Deno.serve(async (req) => {
 
   try {
     // Thresholds come from the company's Trade Credit Policy (Settings › Credit policy).
-    const { policy, warning: policyWarning } = await loadPolicy(supabase);
+    const { policy, groups, warning: policyWarning } = await loadPolicy(supabase);
     if (policyWarning) console.error("[ar-aging-agent]", policyWarning);
     const UTILIZATION_HIGH = policy.utilization.high_pct;
     const UTILIZATION_CRITICAL = policy.utilization.critical_pct;
@@ -128,11 +128,11 @@ Deno.serve(async (req) => {
     // does not expose it and the client can't embed-join a view, so fetch it in
     // one batched query keyed by the breaching customer ids.
     const breachingIds = (rows ?? []).map((r) => r.customer_id);
-    const exposureById = new Map<string, { current_exposure: number; credit_rating_score: number | null; payment_terms_days: number }>();
+    const exposureById = new Map<string, { current_exposure: number; credit_rating_score: number | null; payment_terms_days: number; policy_group: string | null }>();
     if (breachingIds.length > 0) {
       const { data: custRows, error: custError } = await supabase
         .from("customers")
-        .select("id, current_exposure, credit_rating_score, payment_terms_days")
+        .select("id, current_exposure, credit_rating_score, payment_terms_days, policy_group")
         .in("id", breachingIds);
       if (custError) {
         console.error("[ar-aging-agent] customers exposure query failed:", JSON.stringify(custError));
@@ -143,6 +143,7 @@ Deno.serve(async (req) => {
           current_exposure: Number(c.current_exposure) || 0,
           credit_rating_score: c.credit_rating_score as number | null,
           payment_terms_days: Number(c.payment_terms_days) || 30,
+          policy_group: (c.policy_group as string | null) ?? null,
         });
       }
     }
@@ -158,6 +159,8 @@ Deno.serve(async (req) => {
       const custInfo = exposureById.get(customerId);
       const currentExposure: number = custInfo?.current_exposure ?? 0;
       const creditRatingScore: number | null = custInfo?.credit_rating_score ?? null;
+      // This customer's rules: its group's overrides on the company policy.
+      const rules = policyFor(policy, groups, custInfo?.policy_group);
 
       // --- Payment-behaviour refresh (CIA depends on these fields; AR is sole writer) ---
       const { data: transactions, error: transactionsError } = await supabase
@@ -168,7 +171,7 @@ Deno.serve(async (req) => {
         .limit(24);
       if (transactionsError) console.error("[ar-aging-agent] payment_transactions query failed:", transactionsError.message);
 
-      const behaviour = analysePaymentBehaviour(transactions ?? [], policy.payments, custInfo?.payment_terms_days ?? 30);
+      const behaviour = analysePaymentBehaviour(transactions ?? [], rules.payments, custInfo?.payment_terms_days ?? 30);
 
       const { error: behaviourError } = await supabase.from("customers").update({
         payment_on_time_rate: behaviour.on_time_rate,
@@ -190,7 +193,7 @@ Deno.serve(async (req) => {
       // 'watch' is the mild monitoring tier, not a concern signal — only
       // 'at_risk' (deteriorating AND paying poorly) counts as a weak signal.
       const weakSignal =
-        (creditRatingScore !== null && creditRatingScore < policy.utilization.weak_score_below) ||
+        (creditRatingScore !== null && creditRatingScore < rules.utilization.weak_score_below) ||
         behaviour.health === "at_risk" ||
         behaviour.trend === "deteriorating";
 
@@ -277,17 +280,19 @@ Deno.serve(async (req) => {
       const overdueIds = [...overdueByCustomer.keys()];
       const { data: overdueCusts, error: overdueCustsError } = await supabase
         .from("customers")
-        .select("id, company_name, credit_limit")
+        .select("id, company_name, credit_limit, policy_group")
         .in("id", overdueIds);
       if (overdueCustsError) console.error("[ar-aging-agent] customers lookup failed:", overdueCustsError.message);
       const nameById = new Map((overdueCusts ?? []).map((c: any) => [c.id as string, c.company_name as string]));
       const limitById = new Map((overdueCusts ?? []).map((c: any) => [c.id as string, Number(c.credit_limit) || 0]));
+      const groupById = new Map((overdueCusts ?? []).map((c: any) => [c.id as string, (c.policy_group as string | null) ?? null]));
 
       for (const [custId, buckets] of overdueByCustomer) {
         const companyName: string = nameById.get(custId) ?? custId;
         const total = buckets.bucket_1_30 + buckets.bucket_31_60 + buckets.bucket_61_90 + buckets.bucket_over_90;
         // Policy materiality: overdue below the company's minimum raises no alert.
-        const minimum = Math.max(policy.overdue.materiality_usd, (limitById.get(custId) ?? 0) * policy.overdue.materiality_pct_of_limit / 100);
+        const overdueRules = policyFor(policy, groups, groupById.get(custId)).overdue;
+        const minimum = Math.max(overdueRules.materiality_usd, (limitById.get(custId) ?? 0) * overdueRules.materiality_pct_of_limit / 100);
         if (total < minimum) continue;
 
         // Severity by worst non-empty bucket
@@ -296,7 +301,7 @@ Deno.serve(async (req) => {
         let worstBucket: string;
         // Over 90 days is critical only when material against the limit (policy.overdue.critical_min_pct_of_limit).
         const limit = limitById.get(custId) ?? 0;
-        const over90Material = limit <= 0 || buckets.bucket_over_90 >= limit * policy.overdue.critical_min_pct_of_limit / 100;
+        const over90Material = limit <= 0 || buckets.bucket_over_90 >= limit * overdueRules.critical_min_pct_of_limit / 100;
         if (buckets.bucket_over_90 > 0 && over90Material) { severity = "critical"; severityScore = 92; worstBucket = "90+"; }
         else if (buckets.bucket_over_90 > 0) { severity = "high"; severityScore = 75; worstBucket = "90+"; }
         else if (buckets.bucket_61_90 > 0)   { severity = "high";     severityScore = 75; worstBucket = "61–90"; }

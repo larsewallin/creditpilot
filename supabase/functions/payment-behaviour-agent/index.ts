@@ -56,7 +56,7 @@
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.98.0";
 import { analysePaymentTrend } from "../_shared/skills/analytical/analyse-payment-trend.ts";
-import { loadPolicy } from "../_shared/policy/policy.ts";
+import { loadPolicy, policyFor } from "../_shared/policy/policy.ts";
 import { publishEvent } from "../_shared/publishEvent.ts";
 import { severityToScore } from "../_shared/event_schemas.ts";
 import { agentCallerProblem } from "../_shared/agent_gate.ts";
@@ -129,14 +129,14 @@ Deno.serve(async (req) => {
   try {
     const now = new Date();
     // Window and thresholds from the company's Trade Credit Policy.
-    const { policy, warning: policyWarning } = await loadPolicy(supabase);
+    const { policy, groups, warning: policyWarning } = await loadPolicy(supabase);
     if (policyWarning) console.error("[payment-behaviour-agent]", policyWarning);
     const OBSERVATION_WINDOW_DAYS = policy.payment_trend.window_days;
 
     // 1. Load candidate customers (current_exposure > 0).
     const { data: customers, error: customersError } = await supabase
       .from("customers")
-      .select("id, company_name, current_exposure, payment_terms_days")
+      .select("id, company_name, current_exposure, payment_terms_days, policy_group")
       .gt("current_exposure", 0)
       .order("current_exposure", { ascending: false })
       .limit(MAX_CUSTOMERS);
@@ -187,7 +187,7 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      const trend = analysePaymentTrend(transactions ?? [], now, policy.payment_trend, Number((customer as any).payment_terms_days) || 30);
+      const trend = analysePaymentTrend(transactions ?? [], now, policyFor(policy, groups, (customer as any).policy_group).payment_trend, Number((customer as any).payment_terms_days) || 30);
       if (!trend.has_sufficient_data) continue;
 
       const swing = trend.current_avg_days_late - trend.prior_avg_days_late;

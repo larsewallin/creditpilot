@@ -49,7 +49,7 @@ import Anthropic from "https://esm.sh/@anthropic-ai/sdk@0.27.0";
 import { assessCompositeRisk } from "../_shared/skills/analytical/assess-composite-risk.ts";
 import { calculateCreditLimitProposal } from "../_shared/skills/analytical/calculate-credit-limit-proposal.ts";
 import { detectRatingChange } from "../_shared/skills/analytical/detect-rating-change.ts";
-import { loadPolicy } from "../_shared/policy/policy.ts";
+import { loadPolicy, policyFor } from "../_shared/policy/policy.ts";
 import { composeTeamsAlert } from "../_shared/skills/generative/compose-teams-alert.ts";
 import { deliverMessage, EmailProvider, TeamsProvider, SlackProvider, LogProvider } from "../_shared/skills/integration/deliver-message.ts";
 import { createOnboardingAction } from "../_shared/onboarding/decision.ts";
@@ -2255,12 +2255,12 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one plain sentence 
   const customerIds = [...new Set(events.map((e: any) => e.customer_id).filter(Boolean))] as string[];
   const { data: customers, error: customersError } = await supabaseClient
     .from("customers")
-    .select("id, company_name, company_type, credit_limit, current_exposure, credit_rating_score, credit_rating_previous_score, payment_on_time_rate, payment_trend, payment_health")
+    .select("id, company_name, company_type, credit_limit, current_exposure, credit_rating_score, credit_rating_previous_score, payment_on_time_rate, payment_trend, payment_health, policy_group")
     .in("id", customerIds);
   if (customersError) console.error("[cia-agent] customers query failed:", customersError.message);
 
   // The company's Trade Credit Policy sets every threshold below.
-  const { policy, warning: policyWarning } = await loadPolicy(supabaseClient);
+  const { policy, groups, warning: policyWarning } = await loadPolicy(supabaseClient);
   if (policyWarning) console.error("[cia-agent]", policyWarning);
 
   // Detect rating changes and inject as synthetic events
@@ -2268,7 +2268,7 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one plain sentence 
   for (const customer of (customers ?? [])) {
     const c = customer as any;
     if (c.credit_rating_score != null && c.credit_rating_previous_score != null) {
-      const change = detectRatingChange(c.credit_rating_previous_score, c.credit_rating_score, policy.score_change);
+      const change = detectRatingChange(c.credit_rating_previous_score, c.credit_rating_score, policyFor(policy, groups, c.policy_group).score_change);
       if (change.type === "CREDIT_RATING_DOWNGRADE" && change.action_required) {
         syntheticEvents[c.id] = syntheticEvents[c.id] ?? [];
         syntheticEvents[c.id].push("CREDIT_RATING_DOWNGRADE");
@@ -2473,6 +2473,7 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one plain sentence 
       .filter((e: any) => e.event_type === "RISK_CHANGE")
       .reduce((m: number, e: any) => Math.max(m, Number(e.payload?.dimension_count) || 0), 0);
 
+    const rules = policyFor(policy, groups, (customer as any).policy_group);
     const riskAssessment = assessCompositeRisk({
       utilization_pct: utilizationPct,
       credit_score: creditScore,
@@ -2481,7 +2482,7 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one plain sentence 
       agents_flagging: agentsSeen,
       on_time_rate: onTimeRate,
       macro_dimension_count: macroDims || undefined,
-    }, policy.composite, policy.limit_review);
+    }, rules.composite, rules.limit_review);
 
     if (!riskAssessment.recommend_action) continue;
 
@@ -2492,7 +2493,7 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one plain sentence 
       utilization_pct: utilizationPct,
       credit_score: creditScore,
       on_time_rate: onTimeRate,
-    }, policy.limit_review);
+    }, rules.limit_review);
 
     if (proposal.action !== "reduce") continue;
 
