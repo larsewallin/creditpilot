@@ -1,5 +1,6 @@
 /**
- * Company settings the credit team changes without code: which credit score counts
+ * Company settings the credit team changes without code: the Trade Credit Policy (every rule the
+ * agents and onboarding follow, and customer groups), which credit score counts
  * (the credit provider's report: D&B, Creditsafe, Coface, Allianz Trade, Experian, another
  * provider), how old accounts may be at each score, and when each agent runs. Admins and credit managers
  * save; everyone else sees them.
@@ -15,6 +16,7 @@ import { getSettings, saveSetting, previewScheduler, type AgentSchedule, type Sc
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ConnectorsPanel } from "@/components/settings/ConnectorsPanel";
+import { CreditPolicyPanel } from "@/components/settings/CreditPolicyPanel";
 
 const FREQUENCIES: [number, string][] = [[1, "Every hour"], [2, "Every 2 hours"], [3, "Every 3 hours"], [4, "Every 4 hours"], [6, "Every 6 hours"],
   [8, "Every 8 hours"], [12, "Every 12 hours"], [24, "Daily"], [168, "Weekly (Mondays)"]];
@@ -75,11 +77,13 @@ export default function Settings() {
       {q.data?.instance_warning && (
         <p role="alert" className="rounded-md border border-severity-critical/40 bg-severity-critical/10 px-3 py-2 text-xs text-severity-critical">{q.data.instance_warning}</p>
       )}
-      <Tabs defaultValue="rules">
+      <Tabs defaultValue="policy">
         <TabsList className="h-8">
-          <TabsTrigger value="rules" className="text-xs h-7">Credit rules and schedules</TabsTrigger>
+          <TabsTrigger value="policy" className="text-xs h-7">Credit policy</TabsTrigger>
+          <TabsTrigger value="rules" className="text-xs h-7">Score source and schedules</TabsTrigger>
           <TabsTrigger value="connectors" className="text-xs h-7">Connectors</TabsTrigger>
         </TabsList>
+        <TabsContent value="policy" className="mt-4"><CreditPolicyPanel data={q.data} canEdit={canEdit} /></TabsContent>
         <TabsContent value="connectors" className="mt-4"><ConnectorsPanel data={q.data} /></TabsContent>
         <TabsContent value="rules" className="mt-4 space-y-5">
 
