@@ -19,6 +19,8 @@
  * @usedBy cia-agent, ar-aging-agent
  */
 
+import { POLICY_DEFAULTS, type CreditPolicy } from "../../policy/defaults.ts";
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface RatingChangeResult {
@@ -34,7 +36,8 @@ export interface RatingChangeResult {
 
 export function detectRatingChange(
   previousScore: number,
-  currentScore: number
+  currentScore: number,
+  rules: CreditPolicy["score_change"] = POLICY_DEFAULTS.score_change,
 ): RatingChangeResult {
   const delta = currentScore - previousScore;
   const absDelta = Math.abs(delta);
@@ -46,23 +49,23 @@ export function detectRatingChange(
   };
 
   // No significant change
-  if (absDelta < 5) {
+  if (absDelta < rules.ignore_below) {
     return { ...base, type: null, severity: null, action_required: false };
   }
 
   if (delta < 0) {
     // Downgrade
     const severity: RatingChangeResult["severity"] =
-      absDelta >= 30 ? "critical"
-      : absDelta >= 20 ? "high"
-      : absDelta >= 10 ? "medium"
+      absDelta >= rules.critical_from ? "critical"
+      : absDelta >= rules.high_from ? "high"
+      : absDelta >= rules.medium_from ? "medium"
       : "low";
 
     return {
       ...base,
       type: "CREDIT_RATING_DOWNGRADE",
       severity,
-      action_required: absDelta >= 10,
+      action_required: absDelta >= rules.medium_from,
     };
   }
 

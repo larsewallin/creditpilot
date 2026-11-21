@@ -33,6 +33,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.98.0";
 import { analysePaymentBehaviour } from "../_shared/skills/analytical/analyse-payment-behaviour.ts";
 import { publishEvent } from "../_shared/publishEvent.ts";
 import { severityToScore } from "../_shared/event_schemas.ts";
+import { loadPolicy } from "../_shared/policy/policy.ts";
 import { agentCallerProblem } from "../_shared/agent_gate.ts";
 
 const corsHeaders = {
@@ -42,8 +43,6 @@ const corsHeaders = {
 };
 
 const RATE_LIMIT_MINUTES = 60;
-const UTILIZATION_HIGH = 80;      // > 80% = high
-const UTILIZATION_CRITICAL = 95;  // > 95% = critical
 const MAX_CUSTOMERS = 25;
 
 Deno.serve(async (req) => {
@@ -103,6 +102,12 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Thresholds come from the company's Trade Credit Policy (Settings › Credit policy).
+    const { policy, warning: policyWarning } = await loadPolicy(supabase);
+    if (policyWarning) console.error("[ar-aging-agent]", policyWarning);
+    const UTILIZATION_HIGH = policy.utilization.high_pct;
+    const UTILIZATION_CRITICAL = policy.utilization.critical_pct;
+
     // Read breaching customers. Join the aging view to customers for the
     // authoritative current_exposure (the view exposes utilization_pct and
     // credit_limit but not current_exposure; using current_exposure keeps the
@@ -162,7 +167,7 @@ Deno.serve(async (req) => {
         .limit(24);
       if (transactionsError) console.error("[ar-aging-agent] payment_transactions query failed:", transactionsError.message);
 
-      const behaviour = analysePaymentBehaviour(transactions ?? []);
+      const behaviour = analysePaymentBehaviour(transactions ?? [], policy.payments);
 
       const { error: behaviourError } = await supabase.from("customers").update({
         payment_on_time_rate: behaviour.on_time_rate,
@@ -184,7 +189,7 @@ Deno.serve(async (req) => {
       // 'watch' is the mild monitoring tier, not a concern signal — only
       // 'at_risk' (deteriorating AND paying poorly) counts as a weak signal.
       const weakSignal =
-        (creditRatingScore !== null && creditRatingScore < 50) ||
+        (creditRatingScore !== null && creditRatingScore < policy.utilization.weak_score_below) ||
         behaviour.health === "at_risk" ||
         behaviour.trend === "deteriorating";
 
@@ -271,14 +276,18 @@ Deno.serve(async (req) => {
       const overdueIds = [...overdueByCustomer.keys()];
       const { data: overdueCusts, error: overdueCustsError } = await supabase
         .from("customers")
-        .select("id, company_name")
+        .select("id, company_name, credit_limit")
         .in("id", overdueIds);
       if (overdueCustsError) console.error("[ar-aging-agent] customers lookup failed:", overdueCustsError.message);
       const nameById = new Map((overdueCusts ?? []).map((c: any) => [c.id as string, c.company_name as string]));
+      const limitById = new Map((overdueCusts ?? []).map((c: any) => [c.id as string, Number(c.credit_limit) || 0]));
 
       for (const [custId, buckets] of overdueByCustomer) {
         const companyName: string = nameById.get(custId) ?? custId;
         const total = buckets.bucket_1_30 + buckets.bucket_31_60 + buckets.bucket_61_90 + buckets.bucket_over_90;
+        // Policy materiality: overdue below the company's minimum raises no alert.
+        const minimum = Math.max(policy.overdue.materiality_usd, (limitById.get(custId) ?? 0) * policy.overdue.materiality_pct_of_limit / 100);
+        if (total < minimum) continue;
 
         // Severity by worst non-empty bucket
         let severity: "critical" | "high" | "medium" | "low";

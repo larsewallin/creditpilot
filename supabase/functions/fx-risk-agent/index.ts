@@ -12,7 +12,7 @@
  *                         move and a long exposure window escalate severity)
  *   CURRENCY_VOLATILITY — material 30-day move in a currency the portfolio is exposed to
  *                         (favourable moves are info-only)
- * Thresholds come from FX_POLICY_DEFAULTS (later: company_settings).
+ * Thresholds come from the Trade Credit Policy (company_settings policy.fx; defaults FX_POLICY_DEFAULTS).
  *
  * Data boundary: DEMO_MODE ? seed_fx_rates : fetchLiveFxRates() (FMP, unverified).
  * Rate limit 60 min; DEMO_MODE self-resets this agent's demo credit_events;
@@ -25,12 +25,12 @@ import {
   changeOverDaysPct,
   evaluateCurrencyVolatility,
   evaluateFxExposureFlag,
-  FX_POLICY_DEFAULTS,
   realisedVolPct,
   type RatePoint,
 } from "../_shared/skills/analytical/analyse-fx-exposure.ts";
 import { fetchLiveFxRates, fetchSeedFxRates, type FxSeries } from "../_shared/skills/integration/fetch-fx-rates.ts";
 import { agentCallerProblem } from "../_shared/agent_gate.ts";
+import { loadPolicy } from "../_shared/policy/policy.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -39,7 +39,6 @@ const corsHeaders = {
 };
 
 const RATE_LIMIT_MINUTES = 60;
-const policy = FX_POLICY_DEFAULTS;
 
 function usd(n: number): string {
   return `$${Math.round(n).toLocaleString("en-US")}`;
@@ -90,6 +89,10 @@ Deno.serve(async (req) => {
 
   try {
     const now = new Date();
+    // Thresholds from the company's Trade Credit Policy (policy.fx; defaults FX_POLICY_DEFAULTS).
+    const { policy: creditPolicy, warning: policyWarning } = await loadPolicy(supabase);
+    if (policyWarning) console.error("[fx-risk-agent]", policyWarning);
+    const policy = creditPolicy.fx;
 
     // 1. Currencies with outstanding non-USD receivables.
     const { data: invCur, error: invCurError } = await supabase

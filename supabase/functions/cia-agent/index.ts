@@ -49,6 +49,7 @@ import Anthropic from "https://esm.sh/@anthropic-ai/sdk@0.27.0";
 import { assessCompositeRisk } from "../_shared/skills/analytical/assess-composite-risk.ts";
 import { calculateCreditLimitProposal } from "../_shared/skills/analytical/calculate-credit-limit-proposal.ts";
 import { detectRatingChange } from "../_shared/skills/analytical/detect-rating-change.ts";
+import { loadPolicy } from "../_shared/policy/policy.ts";
 import { composeTeamsAlert } from "../_shared/skills/generative/compose-teams-alert.ts";
 import { deliverMessage, EmailProvider, TeamsProvider, SlackProvider, LogProvider } from "../_shared/skills/integration/deliver-message.ts";
 import { createOnboardingAction } from "../_shared/onboarding/decision.ts";
@@ -2258,12 +2259,16 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one plain sentence 
     .in("id", customerIds);
   if (customersError) console.error("[cia-agent] customers query failed:", customersError.message);
 
+  // The company's Trade Credit Policy sets every threshold below.
+  const { policy, warning: policyWarning } = await loadPolicy(supabaseClient);
+  if (policyWarning) console.error("[cia-agent]", policyWarning);
+
   // Detect rating changes and inject as synthetic events
   const syntheticEvents: Record<string, string[]> = {};
   for (const customer of (customers ?? [])) {
     const c = customer as any;
     if (c.credit_rating_score != null && c.credit_rating_previous_score != null) {
-      const change = detectRatingChange(c.credit_rating_previous_score, c.credit_rating_score);
+      const change = detectRatingChange(c.credit_rating_previous_score, c.credit_rating_score, policy.score_change);
       if (change.type === "CREDIT_RATING_DOWNGRADE" && change.action_required) {
         syntheticEvents[c.id] = syntheticEvents[c.id] ?? [];
         syntheticEvents[c.id].push("CREDIT_RATING_DOWNGRADE");
@@ -2476,7 +2481,7 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one plain sentence 
       agents_flagging: agentsSeen,
       on_time_rate: onTimeRate,
       macro_dimension_count: macroDims || undefined,
-    });
+    }, policy.composite, policy.limit_review);
 
     if (!riskAssessment.recommend_action) continue;
 
@@ -2487,7 +2492,7 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one plain sentence 
       utilization_pct: utilizationPct,
       credit_score: creditScore,
       on_time_rate: onTimeRate,
-    });
+    }, policy.limit_review);
 
     if (proposal.action !== "reduce") continue;
 

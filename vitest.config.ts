@@ -11,6 +11,7 @@ export default defineConfig({
     include: [
       "src/**/*.{test,spec}.{ts,tsx}",
       "supabase/functions/_shared/skills/**/*.{test,spec}.{ts,tsx}",
+      "supabase/functions/_shared/policy/**/*.{test,spec}.{ts,tsx}",
     ],
   },
   resolve: {

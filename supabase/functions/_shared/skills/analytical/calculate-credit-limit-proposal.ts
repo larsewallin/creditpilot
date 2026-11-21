@@ -34,7 +34,8 @@
 // Absolute ceiling on a single reduction's dollar impact, regardless of the %-based
 // severity tier. See the @description block above and F4 in the deferred backlog for the
 // full rationale and the portfolio data (median $1.5M, p90 $4M, max $8M) it was sized against.
-export const MAX_REDUCTION_USD = 1_000_000;
+import { POLICY_DEFAULTS, type CreditPolicy } from "../../policy/defaults.ts";
+export const MAX_REDUCTION_USD = POLICY_DEFAULTS.limit_review.max_reduction_usd;
 
 export interface CreditLimitInput {
   current_limit: number;
@@ -54,8 +55,10 @@ export interface CreditLimitProposal {
 }
 
 export function calculateCreditLimitProposal(
-  input: CreditLimitInput
+  input: CreditLimitInput,
+  rules: CreditPolicy["limit_review"] = POLICY_DEFAULTS.limit_review,
 ): CreditLimitProposal {
+  const maxReductionUsd = rules.max_reduction_usd;
   const {
     current_limit,
     days_over_90,
@@ -75,9 +78,9 @@ export function calculateCreditLimitProposal(
   }
 
   // Map normalised credit score to risk category
-  const inDistress = credit_score !== null && credit_score < 20;
-  const inGrey = credit_score !== null && credit_score >= 20 && credit_score <= 40;
-  const highOverdue = days_over_90 > current_limit * 0.10;
+  const inDistress = credit_score !== null && credit_score < rules.distress_score_below;
+  const inGrey = credit_score !== null && credit_score >= rules.distress_score_below && credit_score <= rules.concern_score_up_to;
+  const highOverdue = days_over_90 > current_limit * (rules.high_overdue_pct_of_limit / 100);
 
   // Payment behaviour adjusts utilization thresholds
   // Poor payers trigger action at lower utilization levels
@@ -87,8 +90,9 @@ export function calculateCreditLimitProposal(
   else if (on_time_rate < 0.85) paymentPenalty = 5;   // slightly below ideal
 
   // Strategic accounts get 10pp latitude — thresholds are higher before action triggers
-  const highUtilThreshold = (is_strategic_account ? 80 : 70) - paymentPenalty;
-  const criticalUtilThreshold = (is_strategic_account ? 90 : 85) - paymentPenalty;
+  const latitude = is_strategic_account ? rules.strategic_latitude_pct : 0;
+  const highUtilThreshold = rules.high_utilization_pct + latitude - paymentPenalty;
+  const criticalUtilThreshold = rules.critical_utilization_pct + latitude - paymentPenalty;
   const highUtil = utilization_pct > highUtilThreshold;
   const criticalUtil = utilization_pct > criticalUtilThreshold;
 
@@ -134,14 +138,14 @@ export function calculateCreditLimitProposal(
   // block above. The severity tier above still decides *whether* and *how aggressively*
   // to cut; this only bounds the absolute dollar impact for the portfolio's largest accounts.
   const uncappedReductionUsd = current_limit * reductionFactor;
-  const cappedReductionUsd = Math.min(uncappedReductionUsd, MAX_REDUCTION_USD);
+  const cappedReductionUsd = Math.min(uncappedReductionUsd, maxReductionUsd);
   const wasCapped = cappedReductionUsd < uncappedReductionUsd;
 
   const proposed_limit = Math.round(current_limit - cappedReductionUsd);
   const reduction_pct = Math.round((cappedReductionUsd / current_limit) * 100);
 
   if (wasCapped) {
-    rationale += ` Reduction capped at $${(MAX_REDUCTION_USD / 1_000_000).toFixed(1)}M (would otherwise have been $${Math.round(uncappedReductionUsd).toLocaleString()}).`;
+    rationale += ` Reduction capped at $${(maxReductionUsd / 1_000_000).toFixed(1)}M (would otherwise have been $${Math.round(uncappedReductionUsd).toLocaleString()}).`;
   }
 
   return { proposed_limit, reduction_pct, action: "reduce", rationale };

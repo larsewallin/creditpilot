@@ -19,6 +19,8 @@
  * @usedBy ar-aging-agent (writes to customers table), cia-agent (reads from customers table)
  */
 
+import { POLICY_DEFAULTS, type CreditPolicy } from "../../policy/defaults.ts";
+
 export interface PaymentTransaction {
   payment_date: string;
   days_to_pay: number;
@@ -38,8 +40,11 @@ export interface PaymentBehaviourResult {
 }
 
 export function analysePaymentBehaviour(
-  transactions: PaymentTransaction[]
+  transactions: PaymentTransaction[],
+  rules: CreditPolicy["payments"] = POLICY_DEFAULTS.payments,
 ): PaymentBehaviourResult {
+  // With grace days, a payment within that many days of its due date counts as on time.
+  const onTime = (t: PaymentTransaction) => rules.grace_days > 0 ? (t.days_early_late ?? 0) <= rules.grace_days : t.on_time;
   if (!transactions || transactions.length === 0) {
     return {
       on_time_rate: null,
@@ -62,7 +67,7 @@ export function analysePaymentBehaviour(
   // Amount-weighted metrics — large invoices influence results more than small ones
   const totalAmount = sorted.reduce((sum, t) => sum + (t.amount ?? 1), 0);
 
-  const weightedOnTime = sorted.reduce((sum, t) => sum + (t.on_time ? (t.amount ?? 1) : 0), 0);
+  const weightedOnTime = sorted.reduce((sum, t) => sum + (onTime(t) ? (t.amount ?? 1) : 0), 0);
   const on_time_rate = totalAmount > 0 ? weightedOnTime / totalAmount : 0;
 
   const avg_days_early_late =
@@ -75,7 +80,7 @@ export function analysePaymentBehaviour(
   const recent = sorted.slice(-3);
   const recentAmount = recent.reduce((sum, t) => sum + (t.amount ?? 1), 0);
   const recent_on_time_rate =
-    recent.reduce((sum, t) => sum + (t.on_time ? (t.amount ?? 1) : 0), 0) / recentAmount;
+    recent.reduce((sum, t) => sum + (onTime(t) ? (t.amount ?? 1) : 0), 0) / recentAmount;
 
   // Trend: compare amount-weighted avg days_early_late in the first half vs second half
   // Threshold 3 days: delta > 3 = deteriorating, < -3 = improving
@@ -90,8 +95,8 @@ export function analysePaymentBehaviour(
     const lateHalfAvg = lateHalf.reduce((s, t) => s + t.days_early_late * (t.amount ?? 1), 0) / lateAmount;
 
     const delta = lateHalfAvg - earlyHalfAvg;
-    if (delta > 3) trend = "deteriorating";
-    else if (delta < -3) trend = "improving";
+    if (delta > rules.trend_days) trend = "deteriorating";
+    else if (delta < -rules.trend_days) trend = "improving";
     else trend = "stable";
   }
 
@@ -100,9 +105,9 @@ export function analysePaymentBehaviour(
   //   watch   = consistently late but stable, OR deteriorating but still paying well
   //   healthy = on time and stable/improving
   let health: PaymentBehaviourResult["health"] = "healthy";
-  if (trend === "deteriorating" && on_time_rate < 0.85) {
+  if (trend === "deteriorating" && on_time_rate < rules.at_risk_on_time_below) {
     health = "at_risk";
-  } else if (on_time_rate < 0.70 || avg_days_early_late > 15) {
+  } else if (on_time_rate < rules.watch_on_time_below || avg_days_early_late > rules.watch_avg_late_days) {
     health = "watch";
   } else if (trend === "deteriorating") {
     health = "watch"; // deteriorating but still paying well overall
