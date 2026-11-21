@@ -60,7 +60,7 @@ export function NewCustomerActionCard({ action }: { action: Action }) {
   const why = action.supportable_value == null
     ? (sanctions ? "No credit analysis: onboarding stopped at screening." : "No credit analysis was run.")
     : action.supportable_value === 0
-      ? ((action.reason_codes ?? []).includes("SCORE_BAND_E") ? "Supportable is $0: the score is in band E (below 60)."
+      ? ((action.reason_codes ?? []).some((c: string) => c === "SCORE_HIGH_RISK" || c === "SCORE_BAND_E") ? "Supportable is $0: the score is High risk, which the policy gives no unsecured limit."
         : (action.reason_codes ?? []).includes("NO_CAP_BASIS") ? "Supportable is $0: no financials or bureau recommendation to base a limit on."
         : "Supportable is $0: the evidence supports no unsecured limit.")
       : null;

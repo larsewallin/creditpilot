@@ -14,6 +14,8 @@
  */
 import type { CreditApplication, OnboardingOutcome } from "../../onboarding/types.ts";
 import { SCORE_PROVIDERS } from "../../onboarding/score_providers.ts";
+import { SCORE_BANDS } from "../../score_scale.ts";
+const bandLabel = (k?: string) => SCORE_BANDS.find((b) => b.key === k)?.label ?? "n/a";
 
 export interface MemoSection { title: string; lines: string[]; sources: string[] }
 export interface OnboardingMemo {
@@ -30,12 +32,17 @@ export const REASON_TEXT: Record<string, string> = {
   LIMIT_CAPPED_BUREAU_RECOMMENDATION: "The bureau's maximum credit recommendation caps the limit.",
   MACRO_COUNTRY_RISK: "A high or critical country-risk signal applies to the applicant's country.",
   MACRO_FX_RISK: "A high or critical FX signal applies to the invoicing currency.",
-  STATEMENT_QUALITY_COMPILED: "Statements are compiled (no accountant assurance), so balance-sheet caps are halved.",
+  STATEMENT_QUALITY_REVIEWED: "Statements are reviewed, not audited, so balance-sheet caps carry the policy's haircut for reviewed statements.",
+  STATEMENT_QUALITY_COMPILED: "Statements are compiled (no accountant assurance), so balance-sheet caps carry the policy's haircut for compiled statements.",
+  STATEMENT_QUALITY_TAX_RETURN: "Figures come from a tax return, so balance-sheet caps carry the policy's haircut for tax returns.",
+  STATEMENT_QUALITY_MANAGEMENT: "Statements are management accounts, so balance-sheet caps carry the policy's haircut for management accounts.",
   SCORE_FALLBACK: "The preferred score source was unavailable; a fallback source was used.",
   SANCTIONS_MATCH: "A party matches a sanctions list entry.",
   NO_SCORE_AVAILABLE: "No credit score could be obtained from any configured source.",
   NO_CAP_BASIS: "There are no financial statements or bureau recommendation to base a limit on.",
-  SCORE_BAND_E: "The score is in band E (below 60), which supports no unsecured limit.",
+  SCORE_HIGH_RISK: "The score is High risk on the company's policy, which supports no unsecured limit.",
+  SMALL_REQUEST_FOR_SIZE: "The score is Elevated risk, but the request is small for the company's size, so the full cap applies (policy).",
+  TRADE_REFERENCES_SHORT: "Fewer trade references than the policy asks for this company's size and score.",
   NO_SUPPORTABLE_LIMIT: "The evidence supports no limit.",
   FINANCIALS_STALE: "The accounts are older than this score allows; ask the customer for newer (or interim) accounts.",
 };
@@ -88,7 +95,7 @@ export function composeOnboardingMemo(app: CreditApplication, o: OnboardingOutco
     if (caps.working_capital !== undefined) lines.push(`Working-capital cap: ${usd(caps.working_capital)}.`);
     if (caps.net_worth !== undefined) lines.push(`Net-worth cap: ${usd(caps.net_worth)}.`);
     if (caps.bureau_recommendation !== undefined) lines.push(`Bureau / Keen maximum credit recommendation: ${usd(caps.bureau_recommendation)}.`);
-    lines.push(`After score band ${o.analysis?.band ?? "n/a"}${p.macro_haircut_applied ? " and the macro haircut" : ""}: ${usd(p.risk_adjusted_cap_usd)} (supportable ${usd(p.supportable_usd)}).`);
+    lines.push(`After the score label (${bandLabel(o.analysis?.band)})${p.macro_haircut_applied ? " and the macro haircut" : ""}: ${usd(p.risk_adjusted_cap_usd)} (supportable ${usd(p.supportable_usd)}).`);
     lines.push(`Recommended: ${usd(p.recommended_usd)}, bound by ${(p.binding_method ?? "n/a").replace(/_/g, " ")}.`);
     sections.push({ title: "Limit working", lines, sources: ["Company onboarding limit policy (Settings › Onboarding)"] });
   }
@@ -97,7 +104,7 @@ export function composeOnboardingMemo(app: CreditApplication, o: OnboardingOutco
     const a = o.analysis;
     const lines = [
       `Financials: ${FIN_SOURCE[a.financials_source ?? "none"] ?? a.financials_source}${a.statement_quality ? ` (${a.statement_quality})` : ""}.`,
-      a.score !== undefined ? `Score: ${a.score}${a.keen?.label ? ` ${a.keen.label}` : ""} (band ${a.band}) from ${SCORE_SOURCE[a.score_source ?? ""] ?? a.score_source}.` : "Score: none available.",
+      a.score !== undefined ? `Score: ${a.score}${a.keen?.label ? ` ${a.keen.label}` : ""} (${bandLabel(a.band)}) from ${SCORE_SOURCE[a.score_source ?? ""] ?? a.score_source}.` : "Score: none available.",
       ...(a.financials_age ? [`Accounts: financial year end ${a.financials_age.fye}, ${a.financials_age.months} months old (newer accounts needed after ${a.financials_age.max_months} months at this score${a.financials_age.status === "stale" ? "; out of date" : a.financials_age.status === "due_soon" ? "; due soon" : ""}).`] : []),
       ...a.fallbacks.map((f) => `Fallback: ${f.provider.replace(/_/g, " ")} was ${f.reason.replace(/_/g, " ")}.`),
     ];

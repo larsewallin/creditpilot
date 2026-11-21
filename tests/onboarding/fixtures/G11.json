@@ -1,7 +1,7 @@
 {
   "id": "G11",
   "title": "UK limited company",
-  "why": "Companies House match; people screened = 2 directors + 1 extra PSC owner (one PSC owner is also a director, de-duplicated) = 3; UK VAT checked with HMRC (not VIES). needs = 90,000 x 1 x 1.15 = 103,500 -> 100,000. Caps: WC 180,000 x band B 0.75 = 135,000. Request 100,000 -> approve; 135,000 >= 120,000 -> higher-limit note.",
+  "why": "Companies House match; people screened = 2 directors + 1 extra PSC owner (one PSC owner is also a director, de-duplicated) = 3; UK VAT checked with HMRC (not VIES). needs = 90,000 x 1 x 1.15 = 103,500 -> 100,000. Caps: WC 180,000 x Very strong 1.00 = 180,000. Request 100,000 -> approve; 180,000 >= 120,000 -> higher-limit note.",
   "application": {
     "application_id": "G11",
     "submitted_by": "credit_team",
@@ -127,12 +127,12 @@
       ]
     },
     "analysis": {
-      "band": "B"
+      "band": "very_strong"
     },
     "proposal": {
       "decision": "approve_as_requested",
       "recommended_usd": 100000,
-      "supportable_usd": 135000,
+      "supportable_usd": 180000,
       "proposed_usd": 100000,
       "binding_method": "needs_based",
       "higher_limit_note": true

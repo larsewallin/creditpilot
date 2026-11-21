@@ -37,7 +37,7 @@ describe("proposalToAction", () => {
     const { app, outcome } = await golden("G01");
     const a = proposalToAction({ ...row, decision_due_at: null }, app, outcome, { runId: "r", isDemo: false, now });
     expect(a.expires_at).toBe("2026-11-13T12:00:00.000Z");
-    expect(severityFor(outcome)).toBe("info");
+    expect(severityFor(outcome)).toBe("medium"); // G01 is a counteroffer since the 15% reviewed-statements haircut (policy, 2026-11-20)
   });
 });
 
@@ -45,7 +45,7 @@ describe("underwritingAssumptions", () => {
   it("records what the approval rested on, for monitoring to test later", async () => {
     const { app, outcome } = await golden("G10");
     const b = underwritingAssumptions(app, outcome, 200_000);
-    expect(b).toMatchObject({ approved_limit_usd: 200_000, score: 91, band: "A", invoicing_currency: "EUR", country_code: "DE", binding_method: "working_capital" });
+    expect(b).toMatchObject({ approved_limit_usd: 200_000, score: 91, band: "very_strong", invoicing_currency: "EUR", country_code: "DE", binding_method: "working_capital" });
     expect(b.macro_context_at_approval.map((m) => m.key)).toEqual(["DE", "EUR"]);
     expect(b.screening_at_approval?.status).toBe("pass");
   });

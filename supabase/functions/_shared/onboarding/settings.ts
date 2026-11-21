@@ -8,7 +8,16 @@ import type { OnboardingSettings } from "./types.ts";
 
 export const ONBOARDING_DEFAULTS: OnboardingSettings = {
   template: {
-    min_trade_references: 3,
+    // Trade references asked for, by the applicant's size (latest revenue) and score
+    // (founder, 2026-11-20: a large company needs none). Unknown revenue counts as small.
+    trade_references: {
+      large_revenue_usd: 500_000_000,
+      large: 0,
+      mid_revenue_usd: 25_000_000,
+      mid: 2,
+      small: 3,
+      fewer_if_strong_or_better: 1,
+    },
     statements_required_above_usd: 250_000,
     guarantee_required_if_entity_younger_than_months: 24,
   },
@@ -24,9 +33,14 @@ export const ONBOARDING_DEFAULTS: OnboardingSettings = {
     needs_buffer_pct: 15,
     working_capital_pct: 10,
     net_worth_pct: 10,
-    compiled_statement_haircut_pct: 50,
+    // Balance-sheet caps are reduced by how much the statements can be relied on.
+    statement_haircuts_pct: { audited: 0, reviewed: 15, compiled: 30, tax_return: 30, management: 50 },
     macro_haircut_pct: 20,
-    band_multipliers: { A: 1.0, B: 0.75, C: 0.5, D: 0.35, E: 0 },
+    // Share of the cap by the score's label (founder, 2026-11-20): Adequate and better are good
+    // credits; other warnings (country, FX, screening) have their own rules.
+    score_multipliers: { very_strong: 1, strong: 1, adequate: 1, watch: 0.8, elevated: 0.5, high_risk: 0 },
+    // Elevated still gets the full cap when the request is small for the company: at most this % of its revenue.
+    elevated_full_if_request_pct_of_revenue_up_to: 0.1,
     higher_limit_note_ratio: 1.2,
     rounding_usd: 5_000,
   },

@@ -4,6 +4,7 @@
  * (with the person-only dispositions), credit analysis (source tiles), activity and,
  * once approved, what monitoring will watch.
  */
+import { bandLabel } from "@/lib/scoreLabel";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -178,7 +179,7 @@ export default function Prospect() {
               <Pencil className="h-3 w-3 mr-1" />Edit application
             </Button>
           )}
-          <ApplicationView a={a} />
+          <ApplicationView a={a} refs={app.outcome?.proposal?.trade_references} />
         </TabsContent>
 
         <TabsContent value="screening">
@@ -283,7 +284,7 @@ function Row({ k, v }: { k: string; v: React.ReactNode }) {
   return <div className="grid grid-cols-[180px_1fr] gap-2 py-1 border-b border-border/50 last:border-0"><dt className="text-muted-foreground">{k}</dt><dd className="text-foreground">{v ?? "—"}</dd></div>;
 }
 
-function ApplicationView({ a }: { a: any }) {
+function ApplicationView({ a, refs }: { a: any; refs?: { required: number; provided: number } }) {
   const r = a.credit_request ?? {};
   const addr = a.billing_address;
   return (
@@ -320,6 +321,7 @@ function ApplicationView({ a }: { a: any }) {
       <Panel title="References and signatures">
         <dl>
           <Row k="Trade references" v={(a.trade_references ?? []).map((t: any) => t.company_name).join(", ") || "None"} />
+          {refs ? <Row k="Policy asks for" v={`${refs.required} (by size and score)${refs.provided < refs.required ? ": short" : ""}`} /> : null}
           <Row k="Bank reference" v={a.bank_reference?.bank_name} />
           <Row k="Terms accepted" v={a.signatures?.terms ? "Yes" : "No"} />
           <Row k="Credit check consent" v={a.signatures?.credit_check_consent ? "Yes" : "No"} />
@@ -515,7 +517,7 @@ function KeenScore({ an }: { an: any }) {
   const pos = (k.reasons ?? []).filter((r: any) => r.direction === "positive");
   return (
     <div className="space-y-2">
-      <p><span className="text-base font-semibold">{an.score}</span> of 100{k.label ? <span className="font-medium"> · {k.label}</span> : null}<span className="text-muted-foreground"> (band {an.band}) from Keen</span></p>
+      <p><span className="text-base font-semibold">{an.score}</span> of 100{k.label ? <span className="font-medium"> · {k.label}</span> : null}<span className="text-muted-foreground"> ({bandLabel(an.band)}) from Keen</span></p>
       <p className="text-muted-foreground">
         {k.company_name ? `${k.company_name}${k.ticker ? ` (${k.ticker})` : ""}, ` : ""}
         {k.filing?.form ?? "10-K"}{k.filing?.fiscal_year ? ` for fiscal ${k.filing.fiscal_year}` : ""}{k.as_of ? `, year ended ${k.as_of}` : ""}{k.filing?.filed ? `, filed ${k.filing.filed}` : ""}.
@@ -562,7 +564,7 @@ function AnalysisView({ o, scores, memo, a }: { o: any; scores: any[]; memo?: an
   const tile = (key: string) => {
     if (key === "keen" || key === "bureau_report") {
       const s = scores.find((x) => x.provider === key && x.status === "ok");
-      if (s) return { state: "used", text: `Score ${s.score}${key === "keen" && an.keen?.label ? ` · ${an.keen.label}` : ""}${s.band ? ` (band ${s.band})` : ""}` };
+      if (s) return { state: "used", text: `Score ${s.score}${key === "keen" && an.keen?.label ? ` · ${an.keen.label}` : ""}${s.band ? ` (${bandLabel(s.band)})` : ""}` };
       const f = an.fallbacks?.find((x: any) => x.provider === key);
       if (f) return { state: "gap", text: key === "keen" ? (keenGap(an) ?? "") : f.reason.replace(/_/g, " ") };
       if (key === "bureau_report" && a.bureau_report) return { state: "available", text: `${a.bureau_report.bureau} report on file` };
@@ -581,7 +583,7 @@ function AnalysisView({ o, scores, memo, a }: { o: any; scores: any[]; memo?: an
             <div className="rounded-lg border p-3 space-y-1 border-primary/40 bg-primary/5">
               <p className="font-semibold">Demo score</p>
               <p className="text-muted-foreground">Every demo application is scored {an.score}, so the demo shows the workflow, not the data.</p>
-              <p className="text-primary font-medium">Used: {an.score} on 0–100 (band {an.band})</p>
+              <p className="text-primary font-medium">Used: {an.score} on 0–100 ({bandLabel(an.band)})</p>
             </div>
           )}
           {SOURCE_TILES.filter((t) => t.key !== "keen" || an.keen || scores.some((x) => x.provider === "keen")).map((t) => {
@@ -603,7 +605,7 @@ function AnalysisView({ o, scores, memo, a }: { o: any; scores: any[]; memo?: an
                 <p className="text-muted-foreground">Entered from its report{p.as_of ? ` of ${p.as_of}` : ""}: {p.raw}</p>
                 {p.report?.path && <ReportLink report={p.report} />}
                 <p className={cn(used ? "text-primary font-medium" : gap ? "text-amber-700" : "text-muted-foreground")}>
-                  {used ? `Used: ${an.score} on 0–100 (band ${an.band})` : gap ? (gap.reason === "not_a_score" ? "Not on the provider's scale" : gap.reason.replace(/_/g, " ")) : "Not needed: a source higher in Settings had a score"}
+                  {used ? `Used: ${an.score} on 0–100 (${bandLabel(an.band)})` : gap ? (gap.reason === "not_a_score" ? "Not on the provider's scale" : gap.reason.replace(/_/g, " ")) : "Not needed: a source higher in Settings had a score"}
                 </p>
               </div>
             );
@@ -618,7 +620,7 @@ function AnalysisView({ o, scores, memo, a }: { o: any; scores: any[]; memo?: an
       <Panel title="Score">
         {an.financials_age && <AccountsAge age={an.financials_age} />}
         {an.keen ? <KeenScore an={an} /> : (
-          <p>{an.score != null ? `${an.score} on 0–100 (band ${an.band}) from ${an.score_source === "keen" || an.score_source === "file" ? "Keen" : an.score_source === "bureau_report" ? `the uploaded ${an.score_raw ?? "bureau report"}` : `${an.score_raw ?? PROVIDER_NAME[an.score_source] ?? an.score_source} (${PROVIDER_NAME[an.score_source] ?? "provider"}'s own scale), entered from its report`}` : "No score could be obtained."}</p>
+          <p>{an.score != null ? `${an.score} on 0–100 (${bandLabel(an.band)}) from ${an.score_source === "keen" || an.score_source === "file" ? "Keen" : an.score_source === "bureau_report" ? `the uploaded ${an.score_raw ?? "bureau report"}` : `${an.score_raw ?? PROVIDER_NAME[an.score_source] ?? an.score_source} (${PROVIDER_NAME[an.score_source] ?? "provider"}'s own scale), entered from its report`}` : "No score could be obtained."}</p>
         )}
         {keenGap(an) && <p className="text-muted-foreground pt-1">Keen: {keenGap(an)}.</p>}
       </Panel>
@@ -645,7 +647,7 @@ function MonitoringView({ baseline }: { baseline: any }) {
         <dl className="pt-2">
           <Row k="Approved limit" v={formatCurrency(b.approved_limit_usd)} />
           <Row k="Terms" v={b.payment_terms_days ? `Net ${b.payment_terms_days}` : null} />
-          <Row k="Score at approval" v={b.score != null ? `${b.score} (band ${b.band}, ${b.score_source})` : null} />
+          <Row k="Score at approval" v={b.score != null ? `${b.score} (${bandLabel(b.band)}, ${b.score_source})` : null} />
           <Row k="Financials" v={b.financials_source ? `${String(b.financials_source).replace(/_/g, " ")}${b.statement_quality ? ` (${b.statement_quality})` : ""}` : null} />
           <Row k="Limit bound by" v={b.binding_method ? String(b.binding_method).replace(/_/g, " ") : null} />
           <Row k="Country / currency" v={`${b.country_code ?? "—"} / ${b.invoicing_currency ?? "—"}`} />

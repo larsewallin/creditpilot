@@ -1,7 +1,7 @@
 {
   "id": "G03",
   "title": "Request above what the balance sheet supports",
-  "why": "needs = 150,000 x 2 x 1.15 = 345,000. Caps: WC 150,000; NW 250,000 -> 150,000 x band B 0.75 = 112,500. Recommended = min(345,000, 112,500) -> 110,000. Request 500,000 > 110,000 -> counteroffer 110,000, working capital binds.",
+  "why": "needs = 150,000 x 2 x 1.15 = 345,000. Reviewed statements: 15% haircut. Caps: WC 150,000 -> 127,500; NW 250,000 -> 212,500 -> 127,500 x Strong 1.00. Recommended = min(345,000, 127,500) -> 125,000. Request 500,000 > 125,000 -> counteroffer 125,000, working capital binds.",
   "application": {
     "application_id": "G03",
     "submitted_by": "credit_team",
@@ -99,14 +99,14 @@
       "CREDIT_ANALYSIS_COMPLETE"
     ],
     "analysis": {
-      "band": "B"
+      "band": "strong"
     },
     "proposal": {
       "decision": "counteroffer",
       "requested_usd": 500000,
-      "recommended_usd": 110000,
-      "supportable_usd": 110000,
-      "proposed_usd": 110000,
+      "recommended_usd": 125000,
+      "supportable_usd": 125000,
+      "proposed_usd": 125000,
       "binding_method": "working_capital",
       "higher_limit_note": false,
       "reason_codes_include": [

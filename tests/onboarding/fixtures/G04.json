@@ -1,7 +1,7 @@
 {
   "id": "G04",
   "title": "Large private request with statements and a trade reference missing",
-  "why": "Private company asking 400,000 > 250,000 statement threshold, no statements uploaded; only 2 of 3 trade references. Stops at Completeness, starts the Reg B 30-day clock, and names exactly what is missing.",
+  "why": "Private company asking 400,000 > 250,000 statement threshold, no statements uploaded. Stops at Completeness, starts the Reg B 30-day clock, and names exactly what is missing. Trade references (2 given) are judged after scoring, by size and score, and shown to the approver.",
   "application": {
     "application_id": "G04",
     "submitted_by": "credit_team",
@@ -80,8 +80,7 @@
     "completeness": {
       "status": "incomplete",
       "missing_include": [
-        "credit_score",
-        "trade_references"
+        "credit_score"
       ],
       "reg_b_clock_days": 30
     },

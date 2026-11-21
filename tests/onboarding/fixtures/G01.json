@@ -1,7 +1,7 @@
 {
   "id": "G01",
   "title": "Clean private US distributor, request within needs",
-  "why": "needs = 32,000 x 1 month x 1.15 = 36,800. Caps: 10% WC 38,000; 10% NW 60,000 -> 38,000 x band A 1.00 = 38,000. Recommended = min(36,800, 38,000) -> 35,000 (rounded down to 5k). Supportable 35,000. Request 35,000 <= 35,000 -> approve. 35,000 < 1.2 x 35,000 -> no higher-limit note.",
+  "why": "needs = 32,000 x 1 month x 1.15 = 36,800. Reviewed statements: 15% haircut (policy). Caps: 10% WC 38,000 -> 32,300; 10% NW 60,000 -> 51,000 -> 32,300 x Very strong 1.00 = 32,300. Recommended = min(36,800, 32,300) -> 30,000 (rounded down to 5k). Request 35,000 > 30,000 -> counteroffer 30,000, working capital binds.",
   "application": {
     "application_id": "G01",
     "submitted_by": "credit_team",
@@ -113,16 +113,16 @@
       "financials_source": "uploaded_statements",
       "statement_quality": "reviewed",
       "score_source": "keen",
-      "band": "A",
+      "band": "very_strong",
       "fallbacks": []
     },
     "proposal": {
-      "decision": "approve_as_requested",
+      "decision": "counteroffer",
       "requested_usd": 35000,
-      "recommended_usd": 35000,
-      "supportable_usd": 35000,
-      "proposed_usd": 35000,
-      "binding_method": "needs_based",
+      "recommended_usd": 30000,
+      "supportable_usd": 30000,
+      "proposed_usd": 30000,
+      "binding_method": "working_capital",
       "higher_limit_note": false,
       "macro_haircut_applied": false
     }

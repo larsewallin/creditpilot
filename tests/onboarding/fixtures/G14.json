@@ -1,7 +1,7 @@
 {
   "id": "G14",
   "title": "Only compiled (unreviewed) statements",
-  "why": "Compiled statements carry no accountant assurance -> 50% haircut on balance-sheet caps. WC 100,000 -> 50,000; NW 160,000 -> 80,000 -> 50,000 x A. needs = 50,000 x 1.5 x 1.15 = 86,250. Recommended 50,000. Request 75,000 -> counteroffer 50,000.",
+  "why": "Compiled statements carry no accountant assurance -> 30% haircut on balance-sheet caps (policy). WC 100,000 -> 70,000; NW 160,000 -> 112,000 -> 70,000 x Very strong 1.00. needs = 50,000 x 1.5 x 1.15 = 86,250. Recommended 70,000. Request 75,000 -> counteroffer 70,000.",
   "application": {
     "application_id": "G14",
     "submitted_by": "credit_team",
@@ -95,14 +95,14 @@
     ],
     "analysis": {
       "statement_quality": "compiled",
-      "band": "A"
+      "band": "very_strong"
     },
     "proposal": {
       "decision": "counteroffer",
       "requested_usd": 75000,
-      "recommended_usd": 50000,
-      "supportable_usd": 50000,
-      "proposed_usd": 50000,
+      "recommended_usd": 70000,
+      "supportable_usd": 70000,
+      "proposed_usd": 70000,
       "binding_method": "working_capital",
       "reason_codes_include": [
         "STATEMENT_QUALITY_COMPILED"

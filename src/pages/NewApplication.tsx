@@ -201,7 +201,7 @@ export default function NewApplication() {
           <h2 className="sm:col-span-2 text-sm font-semibold">People and references</h2>
           <label className="block text-xs space-y-1"><span className="text-muted-foreground">Officers, directors, owners (one per line: Name, role, ownership %)</span>
             <Textarea value={f.people} onChange={set("people")} className="text-xs min-h-[90px]" /></label>
-          <label className="block text-xs space-y-1"><span className="text-muted-foreground">Trade references (one company per line; at least 3)</span>
+          <label className="block text-xs space-y-1"><span className="text-muted-foreground">Trade references (one company per line; how many the policy asks depends on the company's size and score: none for a large company)</span>
             <Textarea value={f.trade_references} onChange={set("trade_references")} className="text-xs min-h-[90px]" /></label>
         </section>
 
