@@ -134,3 +134,24 @@ describe("customer groups", () => {
     expect(Object.keys(g)).toEqual(["vip"]);
   });
 });
+
+describe("High risk always gets a proposal (founder, 2026-11-21)", () => {
+  it("cuts a High risk customer's limit to what it owes, even at low limit use", () => {
+    const r = calculateCreditLimitProposal({ current_limit: 600_000, current_exposure: 298_000, days_over_90: 0, utilization_pct: 49.7, credit_score: 5 });
+    expect(r.action).toBe("reduce");
+    expect(r.proposed_limit).toBe(300_000);
+    expect(r.rationale).toMatch(/stops new credit at High risk/);
+  });
+  it("never cuts more than the policy's largest single cut", () => {
+    const r = calculateCreditLimitProposal({ current_limit: 600_000, current_exposure: 100_000, days_over_90: 0, utilization_pct: 17, credit_score: 5 });
+    expect(r.proposed_limit).toBe(300_000);
+    expect(r.rationale).toMatch(/largest single cut, 50%/);
+  });
+  it("leaves an Elevated score at low limit use alone", () => {
+    expect(calculateCreditLimitProposal({ current_limit: 600_000, current_exposure: 100_000, days_over_90: 0, utilization_pct: 17, credit_score: 30 }).action).toBe("no_action");
+  });
+  it("explains the composite threshold in plain words", () => {
+    const a = assessCompositeRisk({ utilization_pct: 90, credit_score: 60, on_time_rate: 0.3, active_event_types: ["PAYMENT_BEHAVIOUR"], agents_flagging: ["payment_behaviour_agent", "ar_aging_agent"] });
+    expect(a.rationale).toBe("90% of the limit is in use. The policy acts from 75% limit use, and from 60% for this customer because of paying on time less than half the time (15 points lower). 2 monitors flag it: payments and AR aging.");
+  });
+});

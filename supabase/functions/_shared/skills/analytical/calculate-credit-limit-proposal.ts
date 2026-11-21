@@ -61,6 +61,7 @@ export function calculateCreditLimitProposal(
   const maxReductionUsd = rules.max_reduction_usd;
   const {
     current_limit,
+    current_exposure = 0,
     days_over_90,
     utilization_pct,
     credit_score = null,
@@ -99,34 +100,43 @@ export function calculateCreditLimitProposal(
   let reductionFactor = 0;
   let rationale = "";
 
+  const k = (usd: number) => `$${Math.round(usd / 1000).toLocaleString("en-US")}k`;
+  const onTime = `${Math.round(on_time_rate * 100)}%`;
   if (inDistress && highOverdue) {
     reductionFactor = is_strategic_account ? 0.40 : 0.50;
-    rationale = `Customer credit score in distress range (${credit_score}) with $${(days_over_90 / 1000).toFixed(0)}K over 90 days past due. Significant limit reduction warranted.`;
+    rationale = `High risk score (${credit_score}) and ${k(days_over_90)} more than 90 days overdue.`;
   } else if (inDistress && highUtil) {
     reductionFactor = is_strategic_account ? 0.30 : 0.40;
-    rationale = `Distress credit score (${credit_score}) with ${utilization_pct}% utilization. Limit reduction to protect exposure.`;
+    rationale = `High risk score (${credit_score}) and ${utilization_pct}% of the limit in use.`;
   } else if (criticalUtil && highOverdue) {
     reductionFactor = is_strategic_account ? 0.25 : 0.35;
-    rationale = `Critical utilization (${utilization_pct}%) combined with $${(days_over_90 / 1000).toFixed(0)}K over 90 days.`;
+    rationale = `${utilization_pct}% of the limit in use and ${k(days_over_90)} more than 90 days overdue.`;
   } else if (highUtil && highOverdue) {
     reductionFactor = is_strategic_account ? 0.20 : 0.30;
-    rationale = `High utilization (${utilization_pct}%) with $${(days_over_90 / 1000).toFixed(0)}K overdue balance.`;
+    rationale = `${utilization_pct}% of the limit in use and ${k(days_over_90)} more than 90 days overdue.`;
   } else if (inGrey && highOverdue && on_time_rate < 0.7) {
     reductionFactor = 0.25;
-    rationale = `Credit score in concern range (${credit_score}) with declining payment behaviour (on-time rate ${Math.round(on_time_rate * 100)}%) and overdue balance.`;
+    rationale = `Elevated risk score (${credit_score}), paid on time ${onTime} of the time, and an overdue balance.`;
   } else if (criticalUtil && (inGrey || inDistress || on_time_rate < 0.5)) {
-    // No aged overdue balance yet (otherwise an earlier branch would have fired) — this is
-    // a warning-tier reduction for a customer running critically high utilization with a
-    // weak score or poor payment history, before it becomes an overdue problem. See F4 in
-    // the deferred backlog: previously no branch covered this case at all (e.g. Atlas
-    // Precision Manufacturing: 109% utilization, score 32, on-time rate 0.24, zero
-    // days_over_90 → fell through every branch and got no_action).
+    // Early warning: critically high limit use with a weak score or poor payment record,
+    // before anything is 90 days overdue (F4: Atlas Precision once fell through every branch).
     reductionFactor = is_strategic_account ? 0.15 : 0.20;
-    rationale = `Critical utilization (${utilization_pct}%) with ${(inGrey || inDistress) ? `a weak credit score (${credit_score})` : "a poor on-time payment rate"} (on-time rate ${Math.round(on_time_rate * 100)}%), no aged overdue balance yet. Early warning-tier reduction.`;
+    rationale = `${utilization_pct}% of the limit in use with ${(inGrey || inDistress) ? `a weak score (${credit_score})` : `a poor payment record (on time ${onTime} of the time)`}; nothing is 90 days overdue yet, so this is an early-warning cut.`;
+  } else if (inDistress) {
+    // Policy (founder, 2026-11-21): a High risk score always gets a proposal, whatever the
+    // limit use: the limit comes down to what is owed plus the policy's headroom.
+    const target = Math.ceil((current_exposure * (1 + rules.high_risk_headroom_pct / 100)) / 5000) * 5000;
+    if (target < current_limit) {
+      reductionFactor = 1 - target / current_limit;
+      rationale = `High risk score (${credit_score}). The policy stops new credit at High risk, so the limit comes down to what the customer owes${rules.high_risk_headroom_pct ? ` plus ${rules.high_risk_headroom_pct}%` : ""}.`;
+    }
   }
 
   // The policy's ceiling on any single cut (a customer group can set a lower one).
-  reductionFactor = Math.min(reductionFactor, rules.max_reduction_pct / 100);
+  if (reductionFactor > rules.max_reduction_pct / 100) {
+    reductionFactor = rules.max_reduction_pct / 100;
+    rationale += ` The cut is held to the policy's largest single cut, ${rules.max_reduction_pct}%.`;
+  }
 
   if (reductionFactor === 0) {
     return {
@@ -148,7 +158,7 @@ export function calculateCreditLimitProposal(
   const reduction_pct = Math.round((cappedReductionUsd / current_limit) * 100);
 
   if (wasCapped) {
-    rationale += ` Reduction capped at $${(maxReductionUsd / 1_000_000).toFixed(1)}M (would otherwise have been $${Math.round(uncappedReductionUsd).toLocaleString()}).`;
+    rationale += ` The cut is capped at the policy's $${(maxReductionUsd / 1_000_000).toFixed(1)}M (it would otherwise have been $${Math.round(uncappedReductionUsd).toLocaleString()}).`;
   }
 
   return { proposed_limit, reduction_pct, action: "reduce", rationale };

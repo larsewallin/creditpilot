@@ -2268,6 +2268,13 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one plain sentence 
     .select("id, company_name, company_type, credit_limit, current_exposure, credit_rating_score, credit_rating_previous_score, payment_on_time_rate, payment_trend, payment_health, policy_group")
     .in("id", customerIds);
   if (customersError) console.error("[cia-agent] customers query failed:", customersError.message);
+  // High risk customers are reviewed even without a new signal (policy, founder 2026-11-21).
+  const { data: lowScored } = await supabaseClient
+    .from("customers")
+    .select("id, company_name, company_type, credit_limit, current_exposure, credit_rating_score, credit_rating_previous_score, payment_on_time_rate, payment_trend, payment_health, policy_group")
+    .eq("lifecycle_status", "active")
+    .lt("credit_rating_score", 50);
+  for (const c of lowScored ?? []) if (!(customers ?? []).some((x: any) => x.id === c.id)) (customers as any[] | null)?.push(c);
 
   // The company's Trade Credit Policy sets every threshold below.
   const { policy, groups, warning: policyWarning } = await loadPolicy(supabaseClient);
@@ -2457,8 +2464,14 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one plain sentence 
 
   const pendingActions = [];
 
-  for (const [custId, custEvents] of Object.entries(groupedEvents)) {
-    if (custId === "__portfolio__") continue;
+  // Every customer with signals, plus every High risk customer even without new signals.
+  const reviewIds = new Set(Object.keys(groupedEvents).filter((id) => id !== "__portfolio__"));
+  for (const c of customers ?? []) {
+    const r = policyFor(policy, groups, (c as any).policy_group);
+    if ((c as any).credit_rating_score != null && (c as any).credit_rating_score < r.limit_review.distress_score_below) reviewIds.add((c as any).id);
+  }
+  for (const custId of reviewIds) {
+    const custEvents = (groupedEvents[custId] ?? []) as any[];
 
     const customer = (customers ?? []).find((c: any) => c.id === custId);
     if (!customer?.credit_limit) continue;
@@ -2472,7 +2485,7 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one plain sentence 
       if (!activeEventTypes.includes(syntheticType)) activeEventTypes.push(syntheticType);
       activeSignalSeverities.push("high");
     }
-    const creditScore: number | null = (custEvents[0] as any)?.credit_rating_score ?? null;
+    const creditScore: number | null = (custEvents[0] as any)?.credit_rating_score ?? (customer as any).credit_rating_score ?? null;
     const arEvent = custEvents.find((e: any) => e.payload?.utilization_percent != null) as any;
     const utilizationPct: number = arEvent?.payload?.utilization_percent ?? 0;
     const daysOver90: number = (custEvents.find((e: any) => e.payload?.bucket_over_90_usd != null) as any)?.payload?.bucket_over_90_usd ?? 0;
@@ -2494,7 +2507,9 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one plain sentence 
       macro_dimension_count: macroDims || undefined,
     }, rules.composite, rules.limit_review);
 
-    if (!riskAssessment.recommend_action) continue;
+    // Policy (founder, 2026-11-21): a High risk score always gets a proposal for a person to review.
+    const highRisk = creditScore !== null && creditScore < rules.limit_review.distress_score_below;
+    if (!riskAssessment.recommend_action && !highRisk) continue;
 
     const proposal = calculateCreditLimitProposal({
       current_limit: customer.credit_limit,
