@@ -53,7 +53,7 @@ Trade Credit Policy and editable per company.
 - Fraud flags: young entity (< 24 months) asking > $100,000; website domain < 12 months old; virtual/residential/PO-box address; registry formation date ≠ stated date; not found in registry. Two or more flags → review.
 
 **Limit**
-- Score labels (CreditPilot's one scale): Very strong 85+, Strong 70–84, Adequate 55–69, Watch 40–54, Elevated risk 25–39, High risk < 25. Multipliers: Very strong, Strong, Adequate 1.00; Watch 0.80; Elevated 0.50, or 1.00 when the request is at most 0.1% of the company's revenue; High risk 0.
+- Score labels (CreditPilot's one scale): Very strong 85+, Strong 70–84, Adequate 55–69, Watch 40–54, Elevated risk 25–39, High risk < 25. Multipliers: Very strong, Strong, Adequate 1.00; Watch 0.80; Elevated 0.50; High risk 0.
 - Trade references, judged after scoring and shown to the approver: revenue $500M+ none; $25M–$500M 2; under $25M or unknown 3; one fewer for Strong or better.
 - Score source order: Keen, then uploaded bureau report. The first source with a score counts (never an average); every fallback is recorded.
 - Financials: SEC EDGAR for public companies, uploaded statements otherwise.

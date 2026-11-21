@@ -241,7 +241,6 @@ export interface OnboardingSettings {
     statement_haircuts_pct: Record<FinancialStatement["statement_quality"], number>;
     macro_haircut_pct: number;                  // once, if country or currency has high+ event
     score_multipliers: Record<import("../score_scale.ts").ScoreKey, number>;
-    elevated_full_if_request_pct_of_revenue_up_to: number;
     higher_limit_note_ratio: number;            // supportable ≥ ratio × requested
     rounding_usd: number;                       // round down to this step
   };

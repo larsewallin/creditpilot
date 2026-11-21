@@ -120,7 +120,6 @@ export const FIELD_INFO: Record<string, FieldInfo> = {
   "onboarding.limits:score_multipliers.watch": { label: "Share of the cap: Watch", unit: "%", kind: "fraction" },
   "onboarding.limits:score_multipliers.elevated": { label: "Share of the cap: Elevated risk", unit: "%", kind: "fraction" },
   "onboarding.limits:score_multipliers.high_risk": { label: "Share of the cap: High risk", unit: "%", kind: "fraction" },
-  "onboarding.limits:elevated_full_if_request_pct_of_revenue_up_to": { label: "Elevated risk gets the full cap when the request is at most", unit: "% of revenue" },
   "onboarding.limits:higher_limit_note_ratio": { label: "Note a higher supportable limit from", unit: "× the request" },
   "onboarding.limits:rounding_usd": { label: "Round limits down to", unit: "USD" },
 

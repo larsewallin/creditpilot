@@ -37,10 +37,9 @@ export const ONBOARDING_DEFAULTS: OnboardingSettings = {
     statement_haircuts_pct: { audited: 0, reviewed: 15, compiled: 30, tax_return: 30, management: 50 },
     macro_haircut_pct: 20,
     // Share of the cap by the score's label (founder, 2026-11-20): Adequate and better are good
-    // credits; other warnings (country, FX, screening) have their own rules.
+    // credits; other warnings (country, FX, screening) have their own rules. No size exception
+    // for Elevated (founder, 2026-11-21).
     score_multipliers: { very_strong: 1, strong: 1, adequate: 1, watch: 0.8, elevated: 0.5, high_risk: 0 },
-    // Elevated still gets the full cap when the request is small for the company: at most this % of its revenue.
-    elevated_full_if_request_pct_of_revenue_up_to: 0.1,
     higher_limit_note_ratio: 1.2,
     rounding_usd: 5_000,
   },
