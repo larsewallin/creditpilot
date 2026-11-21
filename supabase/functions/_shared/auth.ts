@@ -15,6 +15,8 @@ export interface AuthedUser {
   display_name: string;
   role: AppRole;
   is_demo: boolean;
+  /** Own approval amount in USD; null = the role's amount in the policy (policy.approvals). */
+  approval_limit_usd: number | null;
 }
 
 export class AuthError extends Error {
@@ -32,11 +34,12 @@ export async function requireUser(req: Request, roles?: AppRole[]): Promise<Auth
 
   const { data: appUser, error } = await admin
     .from("app_users")
-    .select("user_id, email, display_name, role, is_demo, active")
+    .select("user_id, email, display_name, role, is_demo, active, approval_limit_usd")
     .eq("user_id", userData.user.id)
     .maybeSingle();
   if (error || !appUser || !appUser.active) throw new AuthError(403, "No CreditPilot access for this account");
   if (roles && !roles.includes(appUser.role as AppRole)) throw new AuthError(403, `Role ${appUser.role} is not allowed to do this`);
 
-  return { user_id: appUser.user_id, email: appUser.email, display_name: appUser.display_name, role: appUser.role as AppRole, is_demo: appUser.is_demo };
+  return { user_id: appUser.user_id, email: appUser.email, display_name: appUser.display_name, role: appUser.role as AppRole, is_demo: appUser.is_demo,
+    approval_limit_usd: appUser.approval_limit_usd == null ? null : Number(appUser.approval_limit_usd) };
 }

@@ -100,7 +100,7 @@ function ChangeList({ changes }: { changes: PolicyChange[] }) {
 }
 
 /** Every policy rule a group can override, as "policy.<section>:<field>". */
-const OVERRIDABLE = POLICY_SECTIONS.filter((s) => s.key.startsWith("policy.") && s.key !== "policy.fx");
+const OVERRIDABLE = POLICY_SECTIONS.filter((s) => s.key.startsWith("policy.") && s.key !== "policy.fx" && s.key !== "policy.approvals");
 
 function Groups({ data, canEdit }: { data: SettingsAnswer; canEdit: boolean }) {
   const qc = useQueryClient();

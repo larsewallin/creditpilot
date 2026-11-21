@@ -9,21 +9,26 @@
  *
  * Request body: { action: "approve" | "reject" | "reset", ... }
  *
- *   approve: { action: "approve", pending_action_id, note }   (values read from the stored proposal)
+ *   approve: { action: "approve", pending_action_id, note, approved_value? }
+ *            Demo: the stored proposal's value, always. Production: the approver may set another
+ *            amount (with a note); a limit above the current one needs approval authority for it
+ *            (policy.approvals); above it, the approver's amount is recorded as a recommendation.
  *   reject:  { action: "reject", pending_action_id, note }
  *   reset:   { action: "reset" }
  *
  * Response: { ok: true } | { error: string }
  *
- * Production (DEMO_MODE not "true"): approve / reject need a signed-in admin or credit
- * manager; reset answers 404.
+ * Production (DEMO_MODE not "true"): approve / reject need a signed-in admin, credit manager or
+ * credit analyst; reset answers 404.
  *
  * Tables written: pending_actions, customers, credit_actions, credit_events,
  *                 negative_news, agent_messages, invoices (via RPC)
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.98.0";
-import { AuthError, requireUser } from "../_shared/auth.ts";
+import { AuthError, requireUser, type AuthedUser } from "../_shared/auth.ts";
+import { loadPolicy } from "../_shared/policy/policy.ts";
+import { authorityOf, authorityText, mayApprove } from "../_shared/policy/authority.ts";
 import { inBackground, replayDemoAgents } from "../_shared/demo_replay.ts";
 
 const corsHeaders = {
@@ -62,6 +67,7 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const action = body?.action;
     let reviewer = "demo_user";
+    let approver: AuthedUser | null = null;
     if (!DEMO && action === "reset") return json({ error: "Not found" }, 404);
     if (!DEMO && (action === "approve" || action === "reject")) {
       // Production: a signed-in admin or credit manager, recorded under their name.
@@ -69,8 +75,9 @@ Deno.serve(async (req) => {
       // values always come from the stored proposal, and Reset Demo / the daily refresh
       // put everything back.
       try {
-        const u = await requireUser(req, ["admin", "credit_manager"]);
+        const u = await requireUser(req, ["admin", "credit_manager", "credit_analyst"]);
         reviewer = u.email;
+        approver = u;
       } catch (e) {
         return json({ error: e instanceof AuthError ? e.message : "Sign in required" }, e instanceof AuthError ? e.status : 401);
       }
@@ -94,6 +101,27 @@ Deno.serve(async (req) => {
       }
       if (pa.status !== "pending") return json({ error: `This action is already ${pa.status}` }, 409);
 
+      // The amount: the stored proposal, or in production an approver's own amount with a note.
+      let newLimit: number | null = pa.proposed_value;
+      if (approver && body.approved_value != null && pa.action_type === "CREDIT_LIMIT_REDUCTION") {
+        const v = Math.round(Number(body.approved_value));
+        if (!Number.isFinite(v) || v < 0) return json({ error: "approved_value must be an amount of 0 or more" }, 400);
+        if (v !== Number(pa.proposed_value) && String(note ?? "").trim().length < 10) {
+          return json({ error: "A note is required when the amount differs from the proposal" }, 400);
+        }
+        newLimit = v;
+      }
+      // Approval authority: a cut needs none; a limit above the current one needs authority for it.
+      if (approver && newLimit != null) {
+        const { policy } = await loadPolicy(supabase);
+        if (!mayApprove(approver, policy, newLimit, Number(pa.current_value) || 0)) {
+          await supabase.from("pending_actions").update({ recommended_by_user: approver.user_id, recommended_by: approver.display_name,
+            recommended_value: newLimit, recommended_note: note || null, recommended_at: new Date().toISOString() }).eq("id", pending_action_id);
+          return json({ ok: true, decision: "recommended",
+            message: `Recommended at ${newLimit.toLocaleString("en-US")} USD. That is above your approval authority (${authorityText(authorityOf(approver, policy))}), so it waits for someone whose authority covers it.` });
+        }
+      }
+
       const { error: e1 } = await supabase
         .from("pending_actions")
         .update({
@@ -101,15 +129,17 @@ Deno.serve(async (req) => {
           reviewed_by: reviewer,
           reviewed_at: new Date().toISOString(),
           review_note: note || null,
+          decided_value: newLimit,
+          ...(approver ? { reviewed_by_user: approver.user_id } : {}),
         })
         .eq("id", pending_action_id)
         .eq("status", "pending");
       if (e1) return json({ error: e1.message }, 500);
 
-      if (pa.action_type === "CREDIT_LIMIT_REDUCTION" && pa.proposed_value != null && pa.customer_id) {
+      if (pa.action_type === "CREDIT_LIMIT_REDUCTION" && newLimit != null && pa.customer_id) {
         const { error: e2 } = await supabase
           .from("customers")
-          .update({ credit_limit: pa.proposed_value })
+          .update({ credit_limit: newLimit })
           .eq("id", pa.customer_id);
         if (e2) return json({ error: e2.message }, 500);
       }
@@ -121,7 +151,7 @@ Deno.serve(async (req) => {
         description: `Approved. ${note ? note + ". " : ""}${pa.rationale ?? ""}`,
         agent_name: pa.agent_name,
         old_limit: pa.current_value,
-        new_limit: pa.proposed_value,
+        new_limit: newLimit,
         performed_by: reviewer,
       });
       if (e3) return json({ error: e3.message }, 500);

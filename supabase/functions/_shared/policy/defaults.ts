@@ -87,6 +87,16 @@ export const POLICY_DEFAULTS = {
     high_from: 20,
     critical_from: 30,
   },
+  /**
+   * Approval authority (founder, 2026-11-21): the largest credit limit a person may approve, by role.
+   * 0 = no ceiling. A person can have their own amount (app_users.approval_limit_usd). Sales and
+   * viewers never approve. Above someone's authority they recommend; someone with enough approves.
+   */
+  approvals: {
+    credit_analyst_usd: 250_000,
+    credit_manager_usd: 1_000_000,
+    admin_usd: 0,
+  },
   /** Currency exposure (fx-risk-agent). */
   fx: { ...FX_POLICY_DEFAULTS },
 };

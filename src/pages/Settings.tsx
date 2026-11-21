@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ConnectorsPanel } from "@/components/settings/ConnectorsPanel";
 import { CreditPolicyPanel } from "@/components/settings/CreditPolicyPanel";
+import { UsersPanel } from "@/components/settings/UsersPanel";
 
 const FREQUENCIES: [number, string][] = [[1, "Every hour"], [2, "Every 2 hours"], [3, "Every 3 hours"], [4, "Every 4 hours"], [6, "Every 6 hours"],
   [8, "Every 8 hours"], [12, "Every 12 hours"], [24, "Daily"], [168, "Weekly (Mondays)"]];
@@ -80,10 +81,12 @@ export default function Settings() {
       <Tabs defaultValue="policy">
         <TabsList className="h-8">
           <TabsTrigger value="policy" className="text-xs h-7">Credit policy</TabsTrigger>
+          <TabsTrigger value="users" className="text-xs h-7">Users and authorities</TabsTrigger>
           <TabsTrigger value="rules" className="text-xs h-7">Score source and schedules</TabsTrigger>
           <TabsTrigger value="connectors" className="text-xs h-7">Connectors</TabsTrigger>
         </TabsList>
         <TabsContent value="policy" className="mt-4"><CreditPolicyPanel data={q.data} canEdit={canEdit} /></TabsContent>
+        <TabsContent value="users" className="mt-4"><UsersPanel data={q.data} /></TabsContent>
         <TabsContent value="connectors" className="mt-4"><ConnectorsPanel data={q.data} /></TabsContent>
         <TabsContent value="rules" className="mt-4 space-y-5">
 

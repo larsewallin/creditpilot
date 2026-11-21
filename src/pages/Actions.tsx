@@ -2,6 +2,7 @@ import { DemoDataNotice } from "@/components/DemoDataNotice";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
+import { isApprover } from "@/lib/authority";
 import { X } from "lucide-react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -32,6 +33,8 @@ export default function Actions() {
   const queryClient = useQueryClient();
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [approveNote, setApproveNote] = useState("");
+  // Production: an approver may set another amount (with a note). The demo always uses the proposal.
+  const [approveAmount, setApproveAmount] = useState("");
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectNote, setRejectNote] = useState("");
   const [resetting, setResetting] = useState(false);
@@ -40,7 +43,7 @@ export default function Actions() {
   const { appUser } = useAuth();
   // Demo: anyone can try approving or rejecting (Reset Demo puts it back). Production: a
   // signed-in credit manager or admin.
-  const canDecide = DEMO_MODE || (!!appUser && ["admin", "credit_manager"].includes(appUser.role));
+  const canDecide = DEMO_MODE || (!!appUser && isApprover(appUser.role));
 
   // ── Pending Actions ─────────────────────────────────────────────────────────
   const { data: pendingActions, isLoading: pendingLoading, refetch: refetchPending } = useQuery({
@@ -78,8 +81,8 @@ export default function Actions() {
   // directly via the anon key — pending_actions/customers/credit_actions are
   // anon-read-only. See 20260920000000_tighten_anon_write_rls.sql.
   const approveMutation = useMutation({
-    mutationFn: async ({ action, note }: { action: any; note: string }) => {
-      const { error } = await supabase.functions.invoke("demo-actions", {
+    mutationFn: async ({ action, note, amount }: { action: any; note: string; amount?: number }) => {
+      const { data, error } = await supabase.functions.invoke("demo-actions", {
         body: {
           action: "approve",
           pending_action_id: action.id,
@@ -90,18 +93,26 @@ export default function Actions() {
           agent_name: action.agent_name,
           rationale: action.rationale,
           note,
+          ...(amount !== undefined ? { approved_value: amount } : {}),
         },
       });
-      if (error) throw error;
+      if (error) {
+        const ctx = (error as { context?: Response }).context;
+        const j = ctx && typeof ctx.json === "function" ? await ctx.json().catch(() => null) : null;
+        throw new Error(j?.error ?? error.message);
+      }
+      return data as { decision?: string; message?: string };
     },
-    onSuccess: () => {
+    onError: (e) => toast.error((e as Error).message),
+    onSuccess: (data) => {
       refetchPending();
       queryClient.invalidateQueries({ queryKey: ["pending-actions-count"] });
       queryClient.invalidateQueries({ queryKey: ["actions-completed"] });
       queryClient.invalidateQueries({ queryKey: ["activity-feed"] });
       setApprovingId(null);
       setApproveNote("");
-      toast.success("Action approved");
+      setApproveAmount("");
+      toast.success(data?.decision === "recommended" ? (data.message ?? "Recommended; it waits for someone whose authority covers it.") : "Action approved");
     },
   });
 
@@ -255,14 +266,27 @@ export default function Actions() {
                   {action.rationale && (
                     <p className="text-muted-foreground italic">"{action.rationale}"</p>
                   )}
+                  {action.recommended_value != null && (
+                    <p className="rounded-md bg-amber-500/10 px-3 py-2 text-foreground">
+                      <span className="font-medium">Recommended at {formatCurrency(action.recommended_value)}</span> by {action.recommended_by ?? "a colleague"}: above their approval authority, so it needs someone whose authority covers it.
+                      {action.recommended_note ? <> Note: “{action.recommended_note}”</> : null}
+                    </p>
+                  )}
                   <p className="text-muted-foreground text-[10px]">
                     Created {format(new Date(action.created_at), "MMM d, HH:mm")}
                   </p>
 
                   {isApprovingThis ? (
                     <div className="space-y-2">
+                      {!DEMO_MODE && action.action_type === "CREDIT_LIMIT_REDUCTION" && (
+                        <label className="block space-y-1">
+                          <span className="text-[10px] text-muted-foreground">New limit (USD); change it to approve a different amount</span>
+                          <Input value={approveAmount} inputMode="numeric" placeholder={String(action.proposed_value ?? "")}
+                            onChange={(e) => setApproveAmount(e.target.value.replace(/[^0-9]/g, ""))} className="text-xs h-8 font-mono max-w-[200px]" />
+                        </label>
+                      )}
                       <Input
-                        placeholder="Add a note (optional)"
+                        placeholder={approveAmount && Number(approveAmount) !== Number(action.proposed_value) ? "Why a different amount (required)" : "Add a note (optional)"}
                         value={approveNote}
                         onChange={(e) => setApproveNote(e.target.value)}
                         className="text-xs h-8"
@@ -271,7 +295,7 @@ export default function Actions() {
                         <Button
                           size="sm"
                           className="h-7 text-xs bg-risk-current hover:bg-risk-current/90 text-primary-foreground"
-                          onClick={() => approveMutation.mutate({ action, note: approveNote })}
+                          onClick={() => approveMutation.mutate({ action, note: approveNote, amount: !DEMO_MODE && approveAmount ? Number(approveAmount) : undefined })}
                           disabled={approveMutation.isPending}
                         >
                           {approveMutation.isPending && <Loader2 className="h-3 w-3 animate-spin mr-1" />}
@@ -281,7 +305,7 @@ export default function Actions() {
                           size="sm"
                           variant="ghost"
                           className="h-7 text-xs"
-                          onClick={() => { setApprovingId(null); setApproveNote(""); }}
+                          onClick={() => { setApprovingId(null); setApproveNote(""); setApproveAmount(""); }}
                         >
                           Cancel
                         </Button>

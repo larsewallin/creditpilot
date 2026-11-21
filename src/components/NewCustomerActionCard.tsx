@@ -6,12 +6,14 @@
  */
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { Loader2, CheckCircle2, XCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { getSettings } from "@/lib/onboarding";
+import { authorityOf, authorityText, isApprover } from "@/lib/authority";
 import { formatCurrency } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,6 +33,12 @@ interface Action {
   application_id?: string | null;
   memo: { headline: string; sections: MemoSection[] } | null;
   customers?: { company_name?: string } | null;
+  /** Set when someone without enough approval authority recommended an amount. */
+  recommended_value?: number | null;
+  recommended_by?: string | null;
+  recommended_by_user?: string | null;
+  recommended_note?: string | null;
+  recommended_at?: string | null;
 }
 
 const SEVERITY: Record<string, string> = {
@@ -54,7 +62,13 @@ export function NewCustomerActionCard({ action }: { action: Action }) {
   const [mode, setMode] = useState<"idle" | "approve" | "decline">("idle");
   const [amount, setAmount] = useState(String(action.proposed_value ?? ""));
   const [note, setNote] = useState("");
-  const canDecide = !!appUser && (appUser.role === "credit_manager" || appUser.role === "admin");
+  const canDecide = !!appUser && isApprover(appUser.role);
+  // Approval authority from the company's policy (Settings › Credit policy › Approval authority).
+  const settings = useQuery({ queryKey: ["settings"], queryFn: getSettings, enabled: canDecide, staleTime: 60_000 });
+  const approvals = ((settings.data?.settings as { policy?: { approvals?: Record<string, number> } } | undefined)?.policy?.approvals);
+  const authority = authorityOf(appUser, approvals);
+  const typedAmount = Number(amount.replace(/[^0-9.]/g, ""));
+  const overAuthority = canDecide && !!approvals && typedAmount > authority;
   const isDecline = (action.proposed_value ?? 0) === 0;
   const sanctions = (action.reason_codes ?? []).includes("SANCTIONS_MATCH");
   const why = action.supportable_value == null
@@ -74,13 +88,14 @@ export function NewCustomerActionCard({ action }: { action: Action }) {
         },
       });
       if (error) throw new Error(await errorMessage(error));
-      return data as { decision: string; approved_limit_usd?: number; next?: string };
+      return data as { decision: string; approved_limit_usd?: number; recommended_limit_usd?: number; next?: string };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries();
       setMode("idle");
       setNote("");
       if (data.decision === "approved") toast.success(`Approved at ${formatCurrency(data.approved_limit_usd ?? 0)}. The customer is now monitored.`);
+      else if (data.decision === "recommended") toast.success(data.next ?? "Recommended; it waits for someone whose authority covers it.");
       else toast.success(data.next ?? "Declined");
     },
     onError: (e) => toast.error((e as Error).message),
@@ -103,6 +118,13 @@ export function NewCustomerActionCard({ action }: { action: Action }) {
         <div><div className="text-muted-foreground font-sans text-[10px]">Supportable</div>{action.supportable_value != null ? formatCurrency(action.supportable_value) : "—"}</div>
       </div>
       {why && <p className="text-muted-foreground">{why}</p>}
+      {action.recommended_value != null && (
+        <p className="rounded-md bg-amber-500/10 px-3 py-2 text-foreground">
+          <span className="font-medium">Recommended at {formatCurrency(action.recommended_value)}</span> by {action.recommended_by ?? "a colleague"}
+          {action.recommended_at ? ` on ${format(new Date(action.recommended_at), "MMM d")}` : ""}: above their approval authority, so it needs someone whose authority covers it.
+          {action.recommended_note ? <> Note: “{action.recommended_note}”</> : null}
+        </p>
+      )}
 
       {action.memo && (
         <details className="rounded-lg bg-secondary/40 p-3">
@@ -149,17 +171,18 @@ export function NewCustomerActionCard({ action }: { action: Action }) {
         </div>
       ) : !canDecide ? (
         <p className="text-muted-foreground">
-          {appUser ? "Only a credit manager can decide new-customer limits." : <><Link to="/login" className="underline">Sign in</Link> as a credit manager to decide.</>}
+          {appUser ? "Only a credit analyst, credit manager or admin can decide new-customer limits." : <><Link to="/login" className="underline">Sign in</Link> as a credit manager to decide.</>}
         </p>
       ) : mode === "approve" ? (
         <div className="space-y-2">
           <label className="block text-[10px] text-muted-foreground">Approved limit (USD)</label>
           <Input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="numeric" className="h-8 text-xs font-mono max-w-[200px]" />
+          {approvals && <p className="text-[10px] text-muted-foreground">Your approval authority: {authorityText(authority)}.{overAuthority ? " This amount is above it, so it becomes a recommendation for someone whose authority covers it." : ""}</p>}
           <Textarea placeholder={isDecline ? "Why approve against the recommendation (required)" : "Note (required if you change the amount)"} value={note}
             onChange={(e) => setNote(e.target.value)} className="text-xs min-h-[60px]" />
           <div className="flex gap-2">
             <Button size="sm" className="h-7 text-xs" onClick={() => decide.mutate("approve")} disabled={decide.isPending}>
-              {decide.isPending && <Loader2 className="h-3 w-3 animate-spin mr-1" />}Confirm approval
+              {decide.isPending && <Loader2 className="h-3 w-3 animate-spin mr-1" />}{overAuthority ? "Recommend" : "Confirm approval"}
             </Button>
             <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setMode("idle")}>Cancel</Button>
           </div>
