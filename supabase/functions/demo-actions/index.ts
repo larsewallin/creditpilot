@@ -69,6 +69,15 @@ Deno.serve(async (req) => {
     let reviewer = "demo_user";
     let approver: AuthedUser | null = null;
     if (!DEMO && action === "reset") return json({ error: "Not found" }, 404);
+    // Demo: a signed-in persona decides by its role (a sales rep looks around); a visitor who
+    // is not signed in may still try it (founder 2026-11-17 / 2026-11-21).
+    if (DEMO && (action === "approve" || action === "reject")) {
+      const signedIn = await requireUser(req).catch(() => null);
+      if (signedIn && !["admin", "credit_manager", "credit_analyst"].includes(signedIn.role)) {
+        return json({ error: "Sales and viewers don't approve or reject: a credit analyst or manager decides." }, 403);
+      }
+      if (signedIn) reviewer = signedIn.display_name ?? signedIn.email;
+    }
     if (!DEMO && (action === "approve" || action === "reject")) {
       // Production: a signed-in admin or credit manager, recorded under their name.
       // Demo (by design, founder 2026-11-17): anyone may try approving or rejecting; the
