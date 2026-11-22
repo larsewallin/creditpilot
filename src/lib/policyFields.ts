@@ -73,6 +73,8 @@ export const FIELD_INFO: Record<string, FieldInfo> = {
   "policy.limit_review:max_reduction_usd": { label: "Largest single cut", unit: "USD" },
   "policy.limit_review:max_reduction_pct": { label: "Largest single cut", unit: "% of limit" },
   "policy.limit_review:high_risk_headroom_pct": { label: "High risk: limit cut to what is owed plus", unit: "% headroom" },
+  "policy.limit_review:rejection_quiet_days": { label: "After a cut is rejected, no new proposal for", unit: "days" },
+  "policy.limit_review:reopen_extra_cut_pct": { label: "…unless the new cut is deeper by at least", unit: "% of limit" },
 
   "policy.composite:base_threshold_pct": { label: "Act at limit use of", unit: "% (no signals)" },
   "policy.composite:floor_pct": { label: "Never lower than", unit: "%" },
