@@ -159,4 +159,4 @@ score colours kept old copies of rules the agents had just changed.
   a schema it was moved out of.
 - Before merging a PR that changes what users see, open the affected pages on the PR's Vercel
   preview (read-only; never ask the CIA, it costs money) and look for codes, `undefined`, `NaN`,
-  wrong labels and numbers that disagree with another page. Note in the PR what was checked.
+  wrong labels and numbers that disagree with another page. Note in the PR what was checked. CI's Page check (`scripts/page-check.mjs`) opens every page of the PR's build on the live demo and fails on console errors, `undefined`, `NaN`, raw codes and empty pages; it blocks the assistant and the demo reset, so it costs nothing. It does not replace looking at what changed.
