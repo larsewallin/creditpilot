@@ -51,6 +51,7 @@ import { calculateCreditLimitProposal } from "../_shared/skills/analytical/calcu
 import { detectRatingChange } from "../_shared/skills/analytical/detect-rating-change.ts";
 import { loadPolicy, policyFor } from "../_shared/policy/policy.ts";
 import { describePolicy } from "../_shared/policy/describe.ts";
+import { quietAfterRejection } from "../_shared/policy/quiet.ts";
 import { composeTeamsAlert } from "../_shared/skills/generative/compose-teams-alert.ts";
 import { deliverMessage, EmailProvider, TeamsProvider, SlackProvider, LogProvider } from "../_shared/skills/integration/deliver-message.ts";
 import { createOnboardingAction } from "../_shared/onboarding/decision.ts";
@@ -2575,6 +2576,27 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one plain sentence 
         is_demo: DEMO_MODE,
         run_id: runId,
       });
+    }
+  }
+
+  // A cut a person rejected stays rejected for the policy's quiet period, unless it gets
+  // worse (policy.limit_review.rejection_quiet_days / reopen_extra_cut_pct; founder 2026-11-21).
+  if (pendingActions.length > 0) {
+    const ids = [...new Set(pendingActions.map((a: any) => a.customer_id))];
+    const { data: rejectedRows } = await supabaseClient
+      .from("pending_actions")
+      .select("customer_id, action_type, current_value, proposed_value, reviewed_at")
+      .in("customer_id", ids)
+      .eq("status", "rejected")
+      .eq("is_demo", DEMO_MODE)
+      .gte("reviewed_at", new Date(Date.now() - 366 * 86_400_000).toISOString());
+    for (let i = pendingActions.length - 1; i >= 0; i--) {
+      const a: any = pendingActions[i];
+      const cust = (customers ?? []).find((c: any) => c.id === a.customer_id);
+      const rules = policyFor(policy, groups, (cust as any)?.policy_group).limit_review;
+      const rejected = (rejectedRows ?? []).filter((r: any) => r.customer_id === a.customer_id && r.action_type === a.action_type);
+      const why = quietAfterRejection(rejected, { current_value: Number(a.current_value), proposed_value: Number(a.proposed_value) }, rules);
+      if (why) { console.log(`[cia-agent] ${a.customer_id}: no new proposal, ${why}`); pendingActions.splice(i, 1); }
     }
   }
 

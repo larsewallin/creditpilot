@@ -81,9 +81,11 @@ export function evaluate(response, expected) {
   }
 
   if (expected.must_say) {
+    // A term may be a list: any one of them is enough (the same fact, worded differently).
     for (const term of expected.must_say) {
-      if (!answer.includes(term.toLowerCase())) {
-        failures.push(`must_say: "${term}" not found in answer`);
+      const options = Array.isArray(term) ? term : [term];
+      if (!options.some((t) => answer.includes(t.toLowerCase()))) {
+        failures.push(`must_say: "${options.join('" or "')}" not found in answer`);
       }
     }
   }

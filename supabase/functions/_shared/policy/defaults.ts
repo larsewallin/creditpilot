@@ -70,6 +70,13 @@ export const POLICY_DEFAULTS = {
      * the limit comes down to what the customer owes plus this % headroom (0 = no new credit).
      */
     high_risk_headroom_pct: 0,
+    /**
+     * After a person rejects a proposed cut, no new proposal for that customer for this many
+     * days (founder, 2026-11-21), unless the new one cuts deeper by reopen_extra_cut_pct
+     * points of the limit or more.
+     */
+    rejection_quiet_days: 30,
+    reopen_extra_cut_pct: 10,
   },
   /** Composite risk across agents (assess-composite-risk). */
   composite: {
