@@ -41,9 +41,9 @@ export default function Actions() {
   const [params, setParams] = useSearchParams();
   const filterCustomerId = params.get("customer_id");
   const { appUser } = useAuth();
-  // Demo: anyone can try approving or rejecting (Reset Demo puts it back). Production: a
-  // signed-in credit manager or admin.
-  const canDecide = DEMO_MODE || (!!appUser && isApprover(appUser.role));
+  // A signed-in person decides by their role, in the demo too (its personas show the roles:
+  // a sales rep looks around). A visitor not signed in may try it in the demo only.
+  const canDecide = appUser ? isApprover(appUser.role) : DEMO_MODE;
 
   // ── Pending Actions ─────────────────────────────────────────────────────────
   const { data: pendingActions, isLoading: pendingLoading, refetch: refetchPending } = useQuery({
@@ -345,7 +345,7 @@ export default function Actions() {
                   ) : !canDecide ? (
                     <p className="text-xs text-muted-foreground">
                       {appUser
-                        ? "Only a credit manager can approve or reject."
+                        ? "Sales and viewers don't approve or reject: a credit analyst or manager decides."
                         : <>To approve or reject, <Link to="/login" className="text-primary hover:underline">sign in{DEMO_MODE ? " (try it as credit manager)" : ""}</Link>.</>}
                     </p>
                   ) : (
