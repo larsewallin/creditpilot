@@ -31,7 +31,7 @@
         "min_sources": 1,
         "must_mention": [
           "Triumph",
-          "CCC+"
+          ["CCC+", "Elevated"]
         ],
         "must_not_say": [
           "I don't have"
@@ -141,7 +141,7 @@
       "expected": {
         "max_sources": 2,
         "must_say": [
-          "I don't have"
+          ["I don't have", "does not appear", "doesn't appear", "not in our", "not in the", "no record", "not a customer", "isn't in", "is not in"]
         ],
         "must_not_mention_inline": [
           "ZyloCorp credit score",
