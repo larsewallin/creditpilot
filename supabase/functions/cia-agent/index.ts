@@ -2465,8 +2465,18 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one plain sentence 
 
   const pendingActions = [];
 
-  // Every customer with signals, plus every High risk customer even without new signals.
+  // Customers in bankruptcy: open pre-petition invoices (the frozen balance). Their limit is held at $0.
+  const prePetition = new Map<string, number>();
+  {
+    const { data: pp } = await supabaseClient.from("invoices").select("customer_id, outstanding_amount")
+      .eq("status", "pre_petition").gt("outstanding_amount", 0).limit(2000);
+    for (const r of (pp ?? []) as any[]) prePetition.set(r.customer_id, (prePetition.get(r.customer_id) ?? 0) + (Number(r.outstanding_amount) || 0));
+  }
+
+  // Every customer with signals, every High risk customer even without new signals, and every
+  // customer in bankruptcy.
   const reviewIds = new Set(Object.keys(groupedEvents).filter((id) => id !== "__portfolio__"));
+  for (const id of prePetition.keys()) reviewIds.add(id);
   for (const c of customers ?? []) {
     const r = policyFor(policy, groups, (c as any).policy_group);
     if ((c as any).credit_rating_score != null && (c as any).credit_rating_score < r.limit_review.distress_score_below) reviewIds.add((c as any).id);
@@ -2510,7 +2520,8 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one plain sentence 
 
     // Policy (founder, 2026-11-21): a High risk score always gets a proposal for a person to review.
     const highRisk = creditScore !== null && creditScore < rules.limit_review.distress_score_below;
-    if (!riskAssessment.recommend_action && !highRisk) continue;
+    const bankrupt = prePetition.has(custId);
+    if (!riskAssessment.recommend_action && !highRisk && !bankrupt) continue;
 
     const proposal = calculateCreditLimitProposal({
       current_limit: customer.credit_limit,
@@ -2519,6 +2530,7 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one plain sentence 
       utilization_pct: utilizationPct,
       credit_score: creditScore,
       on_time_rate: onTimeRate,
+      pre_petition_usd: bankrupt ? prePetition.get(custId) : null,
     }, rules.limit_review);
 
     if (proposal.action !== "reduce") continue;
@@ -2531,8 +2543,8 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one plain sentence 
       current_value: customer.credit_limit,
       proposed_value: proposal.proposed_limit,
       reduction_pct: proposal.reduction_pct,
-      rationale: `${riskAssessment.rationale} ${proposal.rationale}`.trim(),
-      severity: riskAssessment.severity,
+      rationale: bankrupt ? proposal.rationale : `${riskAssessment.rationale} ${proposal.rationale}`.trim(),
+      severity: bankrupt ? "critical" : riskAssessment.severity,
       source_event_ids: custEvents.map((e: any) => e.id),
       run_id: runId,
       is_demo: DEMO_MODE,
