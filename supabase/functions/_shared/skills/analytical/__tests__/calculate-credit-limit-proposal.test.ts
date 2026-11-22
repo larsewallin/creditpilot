@@ -303,3 +303,18 @@ describe("calculateCreditLimitProposal", () => {
     expect(result.rationale).not.toContain("capped");
   });
 });
+
+describe("customer in bankruptcy (founder, 2026-11-21)", () => {
+  it("holds the limit at $0 whatever the score, limit use or caps", () => {
+    const p = calculateCreditLimitProposal({ current_limit: 1_200_000, current_exposure: 1_080_000, days_over_90: 0, utilization_pct: 90, credit_score: 28, pre_petition_usd: 580_000 });
+    expect(p.action).toBe("reduce");
+    expect(p.proposed_limit).toBe(0);
+    expect(p.reduction_pct).toBe(100);
+    expect(p.rationale).toContain("$580,000");
+    expect(p.rationale).toMatch(/no new credit/);
+  });
+  it("is not applied without a pre-petition balance", () => {
+    const p = calculateCreditLimitProposal({ current_limit: 1_200_000, current_exposure: 100_000, days_over_90: 0, utilization_pct: 8, credit_score: 80 });
+    expect(p.action).toBe("no_action");
+  });
+});

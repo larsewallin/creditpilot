@@ -45,6 +45,8 @@ export interface CreditLimitInput {
   credit_score?: number | null;     // 0–100 normalised score; null = unavailable
   is_strategic_account?: boolean;
   on_time_rate?: number;            // 0–1, from payment history
+  /** Pre-petition (frozen) balance, USD, when the customer is in bankruptcy; absent otherwise. */
+  pre_petition_usd?: number | null;
 }
 
 export interface CreditLimitProposal {
@@ -75,6 +77,18 @@ export function calculateCreditLimitProposal(
       reduction_pct: 0,
       action: "no_action",
       rationale: "No credit limit set.",
+    };
+  }
+
+  // In bankruptcy (founder, 2026-11-21): hold the limit at $0, no new credit, whatever the
+  // score or limit use. Not held to the policy's largest-cut limits: a hold is not a trim.
+  if (input.pre_petition_usd != null) {
+    const owed = Math.round(input.pre_petition_usd);
+    return {
+      proposed_limit: 0,
+      reduction_pct: 100,
+      action: "reduce",
+      rationale: `In bankruptcy: hold the limit at $0, no new credit. File a claim for the $${owed.toLocaleString("en-US")} owed from before the filing; sell only on cash in advance.`,
     };
   }
 
