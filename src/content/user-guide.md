@@ -60,7 +60,7 @@ Each agent sets severity by fixed rules, so the same facts always give the same 
 - **Exchange rates:** critical when an invoice currency moved 10% or more against you in 30 days; high at 6%.
 - **News:** each story is rated on how directly it threatens the customer's ability to pay.
 
-When several agents flag the same customer, the CIA writes one **Several warning signs** card, rated at the severity of its most serious signal. It proposes an Action when the signs add up: three or more agents, two agents with a critical signal, or very high use of the credit limit.
+When several agents flag the same customer, the CIA writes one **Several warning signs** card, rated at the severity of its most serious signal. It weighs an Action, such as a lower limit, when limit use reaches the policy's action level (75% by default, lower for each warning sign), when three or more agents flag the customer, or when its score is High risk; the policy then sets how large the cut is. A customer in bankruptcy gets a hold at $0.
 
 ---
 
