@@ -48,7 +48,7 @@ export interface DemoCustomer {
   };
 }
 
-const STEADY = { events: [], proposal: "none" } as const;
+const STEADY: DemoCustomer["expect"] = { events: [], proposal: "none" };
 
 /** The 40 customers. 27 quiet, 13 with a story (plan, story table). */
 export const DEMO_CUSTOMERS: DemoCustomer[] = [
@@ -72,8 +72,7 @@ export const DEMO_CUSTOMERS: DemoCustomer[] = [
   { n: 17, name: "Harrowgate Power Systems Inc", story: "steady", country: "US", city: "Schenectady", industry: "Energy equipment", terms: 60, invoice: 260_000, cadence: 20, limitUse: 60, score: 79, sinceYear: 2013, expect: STEADY },
   { n: 18, name: "Fenmoor Instruments Inc", story: "steady", country: "US", city: "Boulder", industry: "Industrial electronics", terms: 30, invoice: 40_000, cadence: 10, limitUse: 33, score: 75, sinceYear: 2020, expect: STEADY },
   { n: 19, name: "Glenrock Mining Supply Co", story: "steady", country: "US", city: "Elko", industry: "Mining equipment", terms: 45, invoice: 80_000, cadence: 14, limitUse: 47, score: 64, sinceYear: 2018, expect: STEADY },
-  { n: 20, name: "Brennecke Antriebstechnik GmbH", story: "steady", country: "DE", city: "Stuttgart", industry: "Industrial equipment", terms: 45, invoice: 180_000, cadence: 15, limitUse: 54, score: 82, policyGroup: "export", sinceYear: 2016,
-    expect: { events: ["RISK_CHANGE"], proposal: "none" } }, // the German exposure the risk agent maps (country, currency, industry)
+  { n: 20, name: "Brennecke Antriebstechnik GmbH", story: "steady", country: "DE", city: "Stuttgart", industry: "Industrial equipment", terms: 45, invoice: 180_000, cadence: 15, limitUse: 54, score: 82, policyGroup: "export", sinceYear: 2016, expect: STEADY },
   { n: 21, name: "Elbwerk Logistik GmbH", story: "steady", country: "DE", city: "Hamburg", industry: "Logistics", terms: 30, invoice: 75_000, cadence: 10, limitUse: 41, score: 72, policyGroup: "export", sinceYear: 2019, expect: STEADY },
   { n: 22, name: "Wexford Marine Engineering Ltd", story: "steady", country: "GB", city: "Southampton", industry: "Marine engineering", terms: 45, invoice: 130_000, cadence: 15, limitUse: 49, score: 70, policyGroup: "export", sinceYear: 2017, expect: STEADY },
   { n: 23, name: "Ashcombe Aero Parts Ltd", story: "steady", country: "GB", city: "Bristol", industry: "Aerospace components", terms: 45, invoice: 150_000, cadence: 15, limitUse: 57, score: 76, policyGroup: "export", sinceYear: 2015, expect: STEADY },
