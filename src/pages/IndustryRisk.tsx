@@ -182,8 +182,12 @@ export default function IndustryRisk() {
                             <TrendingDown className="h-3.5 w-3.5 text-agent-industry mt-0.5 shrink-0" />
                             <div className="min-w-0 flex-1">
                               <p className="text-xs font-medium text-foreground flex items-center gap-1.5 flex-wrap">
-                                {String(p.indicator ?? "").replace(/_/g, " ")}{" "}
-                                <span className="font-mono text-severity-critical">{formatChange(p.change_percent)}</span>
+                                {String(p.indicator ?? "").replace(/_/g, " ").replace(/^./, (c: string) => c.toUpperCase())}{" "}
+                                {/* The market's own move (a price that rose shows +), not the sign-normalized value. */}
+                                <span className="font-mono text-severity-critical">{formatChange(p.raw_change_percent ?? (p.exposure_role === "consumer" ? -Number(p.change_percent) : p.change_percent))}</span>
+                                {p.exposure_role === "consumer" || (p.raw_change_percent == null && String(e.summary ?? "").includes("input cost")) ? (
+                                  <span className="text-[10px] text-muted-foreground">higher input cost</span>
+                                ) : null}
                                 <SeverityBadge severity={e.severity} />
                               </p>
                               <p className="text-[11px] text-muted-foreground mt-0.5">{e.summary}</p>

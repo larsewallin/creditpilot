@@ -207,8 +207,15 @@ Deno.serve(async (req) => {
         const fingerprint = `${sector}:INDUSTRY_DOWNTURN:${signal.indicator}`;
         if (emittedToday.has(fingerprint)) continue;
 
-        const directionWord = config.role === "consumer" ? "input cost increase" : "decline";
-        const summary = `${sector}: ${signal.indicator.replace(/_/g, " ")} shows a ${Math.abs(normalized).toFixed(1)}% ${directionWord} over the trailing ${signal.period_days} days (${signal.source_series}), sector-exposure-adjusted.`;
+        // Plain words with the market's own direction (a price that rose is "up"), and why it
+        // hurts this sector: it buys the input, sells the product, or it is its own output.
+        const raw = Number(signal.change_percent);
+        const moved = `${raw >= 0 ? "up" : "down"} ${Math.abs(raw).toFixed(1)}%`;
+        const what = signal.indicator.replace(/_/g, " ");
+        const why = config.role === "consumer" ? "higher costs for companies in this sector, which buy it"
+          : config.role === "producer" ? "lower prices for what companies in this sector sell"
+          : "the sector's own activity is falling";
+        const summary = `${sector}: ${what} ${moved} over ${signal.period_days} days (${signal.source_series}): ${why}.`;
 
         try {
           await publishEvent({
@@ -224,7 +231,9 @@ Deno.serve(async (req) => {
               severity_score:   severityToScore(severity),
               sector,
               indicator:        signal.indicator,
-              change_percent:   normalized,
+              change_percent:   normalized,   // negative = bad for this sector (sign-normalized)
+              raw_change_percent: raw,        // the series' own move, as the market reports it
+              exposure_role:    config.role,
               period_days:      signal.period_days,
               source_series:    signal.source_series,
               summary,

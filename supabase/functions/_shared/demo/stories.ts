@@ -132,7 +132,9 @@ const SECTOR: Record<string, string> = {
   "Aerospace components": "Aerospace & Defense", "Aerospace electronics": "Aerospace & Defense", "Defense electronics": "Aerospace & Defense",
   "Energy equipment": "Energy", "Oilfield services": "Energy", "Energy storage": "Energy",
   "Logistics": "Transportation", "Mining equipment": "Mining",
-  "Specialty chemicals": "Materials", "Metal fabrication": "Materials",
+  // Fabricators and foundries buy steel: they are manufacturers, hurt by a steel price rise,
+  // not Materials (which sells it). Review 2026-11-23: the steel story missed them.
+  "Specialty chemicals": "Materials", "Metal fabrication": "Industrial Manufacturing",
 };
 export const sectorOf = (industry: string) => SECTOR[industry] ?? "Industrial Manufacturing";
 
@@ -217,7 +219,7 @@ export function buildDemo(today: Date): DemoRows {
       { sector: "Industrial Manufacturing", indicator: "commodity_price", source_series: "Demo series: steel input prices", observation_date: day(20), change_percent: 18, period_days: 365 },
     ],
     industryNews: [
-      { sector: "Transportation", headline: "Port labor talks stall, raising the risk of a strike at two East Coast ports", summary: "Contract talks between dockworkers and port operators have stalled; shippers are rerouting some cargo ahead of a possible strike next month.", url: null, source: "Demo Newswire", published_date: day(5), disruption_type: "labor" },
+      { sector: "Transportation", headline: "Port labor talks stall, raising the risk of a strike at two East Coast ports", summary: "Contract talks between dockworkers and port operators have stalled; shippers are rerouting some cargo ahead of a possible strike next month.", source: "Demo Newswire", published_date: day(5), disruption_type: "labor", url: "https://news.example.com/demo/port-labor-talks" },
     ],
     countryUpdates: [
       { country_code: "JP", values: { previous_policy_rate: 0.5, policy_rate: 0.75, rate_effective_date: day(12) } },
