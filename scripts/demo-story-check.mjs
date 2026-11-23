@@ -21,9 +21,10 @@ const [{ data: events, error: e1 }, { data: actions, error: e2 }, { data: custom
 ]);
 if (e1 || e2 || e3) { console.error(e1?.message ?? e2?.message ?? e3?.message); process.exit(1); }
 
-// Events the CIA adds on top of the agents' (its own multi-signal view) are allowed wherever a
-// proposal is expected.
+// The CIA's own multi-signal view is allowed wherever the story expects a proposal or two or more
+// warnings (a customer to watch: several warning signs, no cut yet).
 const NO_ASSISTANT = process.argv.includes("--no-assistant");
+const GOOD_NEWS = new Set(["PAYMENT_IMPROVEMENT", "CREDIT_RATING_UPGRADE"]);
 const CIA_TYPES = new Set(["COMPOSITE_RISK_CRITICAL", "COMPOSITE_RISK_ELEVATED"]);
 const exposure = new Map(customers.map((c) => [c.id, Number(c.current_exposure)]));
 const problems = [];
@@ -35,7 +36,7 @@ for (const c of DEMO_CUSTOMERS) {
   const types = [...new Set(mine.map((e) => e.event_type))];
   const notChecked = NO_ASSISTANT ? c.expect.events.filter((t) => t === "NEWS_EVENT" && !types.includes(t)) : [];
   const missing = c.expect.events.filter((t) => !types.includes(t) && !notChecked.includes(t));
-  const extra = types.filter((t) => !c.expect.events.includes(t) && !(CIA_TYPES.has(t) && c.expect.proposal !== "none"));
+  const extra = types.filter((t) => !c.expect.events.includes(t) && !(CIA_TYPES.has(t) && (c.expect.proposal !== "none" || c.expect.events.filter((x) => !GOOD_NEWS.has(x)).length >= 2)));
   const props = actions.filter((a) => a.customer_id === id);
   const p = props[0];
   const cut = p ? 1 - Number(p.proposed_value) / Number(p.current_value) : 0;
