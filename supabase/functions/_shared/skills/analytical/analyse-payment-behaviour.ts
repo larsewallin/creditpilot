@@ -3,8 +3,8 @@
  * @type analytical
  * @description Analyses a customer's payment transaction history to derive behavioural
  *   metrics: on-time rate, average days early/late, trend, and an overall health signal.
- *   All numeric metrics are amount-weighted so large invoices influence results more
- *   than small ones. Trend compares amount-weighted halves of the transaction history.
+ *   The on-time rate is the share of payments made on time (as on the Payments page); the
+ *   averages and the trend are amount-weighted so large invoices influence them more. Trend compares amount-weighted halves of the transaction history.
  *   Every threshold comes from the company's policy (policy.payments) and lateness is measured
  *   against the customer's own terms: on time = paid within the grace days of the due date;
  *   trend = average lateness up (down) by more than trend_pct_of_terms % of the terms.
@@ -32,7 +32,7 @@ export interface PaymentTransaction {
 }
 
 export interface PaymentBehaviourResult {
-  on_time_rate: number | null;        // 0–1, amount-weighted; null if no history
+  on_time_rate: number | null;        // 0–1, share of payments on time; null if no history
   avg_days_early_late: number | null; // negative = pays early on average; null if no history
   avg_days_to_pay: number | null;     // null if no history
   trend: "improving" | "stable" | "deteriorating" | "insufficient_data";
@@ -74,8 +74,10 @@ export function analysePaymentBehaviour(
   // Amount-weighted metrics — large invoices influence results more than small ones
   const totalAmount = sorted.reduce((sum, t) => sum + (t.amount ?? 1), 0);
 
-  const weightedOnTime = sorted.reduce((sum, t) => sum + (onTime(t) ? (t.amount ?? 1) : 0), 0);
-  const on_time_rate = totalAmount > 0 ? weightedOnTime / totalAmount : 0;
+  // On-time rate: the share of payments made on time, over all the history given. The same
+  // number as the Payments page's "On-time (all)" (v_payment_behaviour_current), so the limit
+  // proposal, the page and the assistant quote one figure (2026-11-23).
+  const on_time_rate = Math.round((sorted.filter(onTime).length / total) * 1000) / 1000;
 
   const avg_days_early_late =
     sorted.reduce((sum, t) => sum + (t.days_early_late ?? 0) * (t.amount ?? 1), 0) / totalAmount;
