@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AgentPill } from "@/components/AgentPill";
+import { eventLabel, titleWithoutSubject } from "@/lib/eventLabels";
+import { getAgentConfig } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -38,14 +40,47 @@ function formatRatingSource(source: string): string {
   return DEMO_MODE ? `${label} (sample)` : label;
 }
 
+// Plain words for codes stored on customers, invoices and payments.
+const RISK_TAG_LABEL: Record<string, string | null> = {
+  MULTI_SIGNAL_RISK: "Flagged by several monitors",
+  ALL_AGENTS_FLAGGED: null, // shown as "several monitors" already; it only means three or more
+  GOING_CONCERN: "Going-concern doubt",
+  SEC_ALERT: "SEC filing warning",
+  NEGATIVE_NEWS: "Negative news",
+  CRITICAL_UTILIZATION: "Over or near the limit",
+  HIGH_UTILIZATION: "High limit use",
+  OVERDUE_90_PLUS: "Over 90 days overdue",
+  CONCENTRATION_RISK: "Concentration",
+  RATING_DOWNGRADE: "Lower credit score",
+};
+const riskTagLabel = (t: string) => (t in RISK_TAG_LABEL ? RISK_TAG_LABEL[t] : eventLabel(t));
+
+const INVOICE_STATUS_LABEL: Record<string, string> = {
+  paid: "Paid",
+  current: "Not due",
+  overdue: "Overdue",
+  pre_petition: "Before bankruptcy filing",
+  written_off: "Written off",
+  disputed: "Disputed",
+  partially_paid: "Part paid",
+};
+const invoiceStatusLabel = (s: string) => INVOICE_STATUS_LABEL[s] ?? s.replace(/_/g, " ");
+const paymentMethodLabel = (m: string | null) => (m ? m.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase()) : "Payment");
+// Event texts written by older agents name agents by code ("news_monitor_agent"): show their labels.
+const plainAgents = (text: string | null | undefined) =>
+  (text ?? "").replace(/\b[a-z]+(?:_[a-z]+)*_agent\b/g, (code) => getAgentConfig(code).label);
+
 // ── Customer Detail Drawer ────────────────────────────────────────────────────
 
 export function CustomerDetail({ customer }: { customer: any }) {
   const { data: invoices } = useQuery({
     queryKey: ["customer-invoices", customer.id],
     queryFn: async () => {
-      const { data } = await supabase.from("invoices").select("*").eq("customer_id", customer.id).order("due_date");
-      return data ?? [];
+      const { data } = await supabase.from("invoices").select("*").eq("customer_id", customer.id).order("due_date", { ascending: false });
+      // Open invoices first (oldest due first), then paid ones, newest first.
+      const rows = data ?? [];
+      const open = rows.filter((i: any) => Number(i.outstanding_amount) > 0).reverse();
+      return [...open, ...rows.filter((i: any) => !(Number(i.outstanding_amount) > 0))];
     },
   });
 
@@ -80,8 +115,10 @@ export function CustomerDetail({ customer }: { customer: any }) {
         supabase.from("credit_events").select("*").eq("customer_id", customer.id).eq("is_demo", DEMO_MODE).is("archived_at", null).order("created_at", { ascending: false }),
         supabase.from("credit_actions").select("*").eq("customer_id", customer.id).order("created_at", { ascending: false }),
       ]);
+      // A story that raised an event shows once (as the event), not twice.
+      const eventTitles = (events.data ?? []).map((e: any) => String(e.title ?? ""));
       const items = [
-        ...(news.data ?? []).map((n) => ({ ...n, _type: "news" as const })),
+        ...(news.data ?? []).filter((n: any) => !eventTitles.some((t) => t.includes(n.headline))).map((n) => ({ ...n, _type: "news" as const })),
         ...(events.data ?? []).map((e) => ({ ...e, _type: "event" as const })),
         ...(actions.data ?? []).map((a) => ({ ...a, _type: "action" as const })),
       ].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 10);
@@ -91,7 +128,9 @@ export function CustomerDetail({ customer }: { customer: any }) {
 
   const util = customer.credit_limit > 0 ? (customer.current_exposure / customer.credit_limit) * 100 : 0;
   const score = customer.credit_rating_score as number | null;
-  const riskTags: string[] = customer.risk_tags ?? [];
+  const riskTags = [...new Set(((customer.risk_tags ?? []) as string[]).map(riskTagLabel).filter(Boolean) as string[])];
+  const prePetition = (invoices ?? []).filter((i: any) => i.status === "pre_petition" && Number(i.outstanding_amount) > 0);
+  const prePetitionOwed = prePetition.reduce((sum: number, i: any) => sum + Number(i.outstanding_amount), 0);
 
   return (
     <div>
@@ -130,6 +169,16 @@ export function CustomerDetail({ customer }: { customer: any }) {
             })()}
           </div>
 
+          {prePetition.length > 0 && (
+            <div className="rounded-lg border border-severity-critical/40 bg-severity-critical/5 p-3 text-xs">
+              <p className="font-medium text-foreground">In bankruptcy</p>
+              <p className="text-muted-foreground mt-0.5">
+                {formatCurrency(prePetitionOwed)} is owed from before the filing ({prePetition.length} {prePetition.length === 1 ? "invoice" : "invoices"}).
+                It is frozen in the case and not in AR Aging's buckets; file a claim for it.
+              </p>
+            </div>
+          )}
+
           {/* Utilization Bar */}
           <div>
             <div className="flex justify-between text-xs mb-1">
@@ -156,7 +205,7 @@ export function CustomerDetail({ customer }: { customer: any }) {
               <div className="flex gap-1.5 flex-wrap">
                 {riskTags.map((tag: string) => (
                   <span key={tag} className="inline-flex px-2 py-0.5 rounded text-[10px] font-medium bg-agent-aging text-white">
-                    {tag.replace(/_/g, " ")}
+                    {tag}
                   </span>
                 ))}
               </div>
@@ -185,7 +234,7 @@ export function CustomerDetail({ customer }: { customer: any }) {
                     className="flex items-center gap-2 text-xs hover:bg-secondary/50 rounded px-1 py-0.5 transition-colors"
                   >
                     <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", signalDotColor(s.severity))} />
-                    <span className="font-medium">{s.event_type.replace(/_/g, " ")}</span>
+                    <span className="font-medium">{eventLabel(s.event_type)}</span>
                     <span className="text-muted-foreground">·</span>
                     <AgentPill agentName={s.source_agent} />
                     <span className="text-muted-foreground ml-auto">{s.created_at.slice(0, 10)}</span>
@@ -197,7 +246,7 @@ export function CustomerDetail({ customer }: { customer: any }) {
 
           {customer.notes && <p className="text-xs text-muted-foreground">{customer.notes}</p>}
           <div className="text-xs text-muted-foreground space-y-1">
-            <p>Account Manager: <span className="text-foreground">{customer.account_manager}</span></p>
+            {customer.account_manager && <p>Account Manager: <span className="text-foreground">{customer.account_manager}</span></p>}
             <p>Payment Terms: <span className="text-foreground">{customer.payment_terms_days} days</span></p>
             {customer.naics_sic_code && (
               <p>NAICS/SIC Code: <span className="text-foreground">{customer.naics_sic_code}</span></p>
@@ -225,14 +274,14 @@ export function CustomerDetail({ customer }: { customer: any }) {
                 <div key={inv.id} className="bg-secondary/30 rounded-lg p-3 text-xs">
                   <div className="flex justify-between items-center">
                     <span className="font-medium">{inv.invoice_number}</span>
-                    <Badge variant={liveStatus === "paid" ? "secondary" : liveStatus === "overdue" ? "destructive" : "outline"} className="text-[10px]">{liveStatus}</Badge>
+                    <Badge variant={liveStatus === "paid" ? "secondary" : liveStatus === "overdue" ? "destructive" : "outline"} className="text-[10px]">{invoiceStatusLabel(liveStatus)}</Badge>
                   </div>
                   <div className="flex justify-between mt-1.5 text-muted-foreground">
                     <span>Amount: {formatCurrency(inv.invoice_amount)} · Paid: {formatCurrency(inv.amount_paid)} · Out: {formatCurrency(inv.outstanding_amount)}</span>
                   </div>
                   <div className="flex justify-between mt-1">
                     <span className="text-muted-foreground">Due: {inv.due_date}</span>
-                    <span className={cn("font-medium", daysColor)}>{liveDaysOverdue > 0 ? `${liveDaysOverdue}d overdue` : "Current"}</span>
+                    <span className={cn("font-medium", daysColor)}>{liveStatus === "paid" ? "" : liveDaysOverdue > 0 ? `${liveDaysOverdue}d overdue` : "Not due yet"}</span>
                   </div>
                 </div>
               );
@@ -246,7 +295,7 @@ export function CustomerDetail({ customer }: { customer: any }) {
               <div key={p.id} className="bg-secondary/30 rounded-lg p-3 text-xs flex justify-between">
                 <div>
                   <p className="font-medium">{p.payment_date} · {formatCurrency(p.amount_paid)}</p>
-                  <p className="text-muted-foreground">{p.payment_method} · Net {p.days_to_pay}</p>
+                  <p className="text-muted-foreground">{paymentMethodLabel(p.payment_method)}{p.days_to_pay != null ? ` · paid ${p.days_to_pay} days after the invoice date` : ""}</p>
                 </div>
                 <span className={cn("font-medium", (p.days_early_late ?? 0) <= 0 ? "text-risk-current" : "text-severity-critical")}>
                   {(p.days_early_late ?? 0) <= 0 ? `${Math.abs(p.days_early_late ?? 0)}d early` : `${p.days_early_late}d late`}
@@ -261,11 +310,11 @@ export function CustomerDetail({ customer }: { customer: any }) {
             {(activity ?? []).map((item: any) => (
               <div key={item.id} className="bg-secondary/30 rounded-lg p-3 text-xs border-l-2 border-l-agent-news">
                 <div className="flex items-center gap-2 mb-1">
-                  <AgentPill agentName={item.agent_name} />
+                  <AgentPill agentName={item._type === "event" ? item.source_agent : item._type === "news" ? "news_monitor_agent" : item.agent_name} />
                   <span className="text-muted-foreground">{relativeTime(item.created_at)}</span>
                 </div>
-                <p className="font-medium capitalize">{item._type === "news" ? item.headline : item._type === "event" ? item.event_type?.replace(/_/g, " ") : item.action_type?.replace(/_/g, " ")}</p>
-                <p className="text-muted-foreground mt-0.5 line-clamp-2">{item.description ?? item.summary}</p>
+                <p className="font-medium">{item._type === "news" ? item.headline : item._type === "event" ? (item.title ? titleWithoutSubject(item.title, customer.company_name) : eventLabel(item.event_type)) : item.action_type?.replace(/_/g, " ")}</p>
+                <p className="text-muted-foreground mt-0.5 line-clamp-2">{plainAgents(item.description ?? item.summary)}</p>
               </div>
             ))}
           </div>

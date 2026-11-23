@@ -71,6 +71,14 @@ const RATE_LIMIT_MINUTES = 60;
 const MAX_CUSTOMERS = 200;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
+/** "13.3 days late", "2.7 days early", "on the due date" — never "-2.7 days late". */
+function lateness(days: number | string | null | undefined): string {
+  const d = Math.round(Number(days ?? 0) * 10) / 10;
+  if (d > 0) return `${d} days late`;
+  if (d < 0) return `${Math.abs(d)} days early`;
+  return "on the due date";
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   const notAllowed = await agentCallerProblem(req);
@@ -195,7 +203,7 @@ Deno.serve(async (req) => {
       // --- PAYMENT_DETERIORATION ---
       if (trend.deterioration && !emittedToday.has(`${customerId}:PAYMENT_DETERIORATION`)) {
         const { severity, trend_direction } = trend.deterioration;
-        const summary = `${companyName}: average days late rose from ${trend.prior_avg_days_late} to ${trend.current_avg_days_late} days over the past ${OBSERVATION_WINDOW_DAYS} days (+${swing.toFixed(1)} day swing).`;
+        const summary = `${companyName}: payments went from ${lateness(trend.prior_avg_days_late)} to ${lateness(trend.current_avg_days_late)} on average over the past ${OBSERVATION_WINDOW_DAYS} days (${swing.toFixed(1)} days slower).`;
         try {
           await publishEvent({
             event_type:   "PAYMENT_DETERIORATION",
@@ -226,7 +234,7 @@ Deno.serve(async (req) => {
       // --- PAYMENT_IMPROVEMENT ---
       if (trend.improvement && !emittedToday.has(`${customerId}:PAYMENT_IMPROVEMENT`)) {
         const { severity, trend_direction } = trend.improvement;
-        const summary = `${companyName}: average days late fell from ${trend.prior_avg_days_late} to ${trend.current_avg_days_late} days over the past ${OBSERVATION_WINDOW_DAYS} days (${swing.toFixed(1)} day swing).`;
+        const summary = `${companyName}: payments went from ${lateness(trend.prior_avg_days_late)} to ${lateness(trend.current_avg_days_late)} on average over the past ${OBSERVATION_WINDOW_DAYS} days (${Math.abs(swing).toFixed(1)} days faster).`;
         try {
           await publishEvent({
             event_type:   "PAYMENT_IMPROVEMENT",
