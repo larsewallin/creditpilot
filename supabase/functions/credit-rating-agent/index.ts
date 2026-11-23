@@ -47,6 +47,7 @@ import { effectiveSettings } from "../_shared/onboarding/settings_validate.ts";
 import { liveProviders } from "../_shared/onboarding/live_providers.ts";
 import type { CreditApplication, OnboardingSettings } from "../_shared/onboarding/types.ts";
 import { agentCallerProblem } from "../_shared/agent_gate.ts";
+import { isDemoReplay } from "../_shared/demo/replay_auth.ts";
 
 const REFRESH_MAX = 40;        // Keen calls per run; daily runs cover a portfolio within the month
 const REFRESH_PARALLEL = 4;
@@ -197,7 +198,8 @@ Deno.serve(async (req) => {
     .limit(1);
   if (recentRunsError) console.error("[credit-rating-agent] agent_runs query failed:", recentRunsError.message);
 
-  if (recentRuns && recentRuns.length > 0) {
+  // The demo's own rebuild is not rate limited (it has just deleted the demo's events).
+  if (recentRuns && recentRuns.length > 0 && !isDemoReplay(req)) {
     return new Response(JSON.stringify({
       error: "rate_limited",
       message: "This agent was run recently. Please wait before running again.",
