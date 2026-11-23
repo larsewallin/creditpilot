@@ -122,6 +122,15 @@ const SCENARIO: Record<Story, string> = {
   bankruptcy: "bankruptcy", score_drop: "credit_deterioration",
 };
 
+/** customers.sector is the database's fixed list; the industry agent works by sector. */
+const SECTOR: Record<string, string> = {
+  "Aerospace components": "Aerospace & Defense", "Aerospace electronics": "Aerospace & Defense", "Defense electronics": "Aerospace & Defense",
+  "Energy equipment": "Energy", "Oilfield services": "Energy", "Energy storage": "Energy",
+  "Logistics": "Transportation", "Mining equipment": "Mining",
+  "Specialty chemicals": "Materials", "Metal fabrication": "Materials",
+};
+export const sectorOf = (industry: string) => SECTOR[industry] ?? "Industrial Manufacturing";
+
 const CURRENCY: Record<DemoCustomer["country"], string> = { US: "USD", DE: "EUR", GB: "GBP", JP: "JPY" };
 
 /** Days late an invoice is paid (positive = late), by how many days ago it fell due. Timed from
@@ -234,7 +243,7 @@ export function buildDemo(today: Date): DemoRows {
     const limit = round(open / (c.limitUse / 100), 25_000) || 25_000;
     rows.customers.push({
       id, company_name: c.name, scenario: SCENARIO[c.story], lifecycle_status: "active",
-      country_code: c.country, city: c.city, headquarters: `${c.city}, ${c.country}`, industry: c.industry, sector: c.industry,
+      country_code: c.country, city: c.city, headquarters: `${c.city}, ${c.country}`, industry: c.industry, sector: sectorOf(c.industry),
       invoicing_currency: CURRENCY[c.country], payment_terms_days: c.terms,
       credit_limit: limit, current_exposure: open,
       credit_rating_score: c.score, credit_rating_previous_score: c.previousScore ?? null,
@@ -249,7 +258,7 @@ export function buildDemo(today: Date): DemoRows {
     const news = (daysAgo: number, headline: string, summary: string, relevance = 0.92) =>
       rows.seedNews.push({ customer_id: id, company_name: c.name, headline, summary, source: "Demo Newswire", published_date: iso(addDays(t0, -daysAgo)), relevance_score: relevance, provider: "manual" });
     const filing = (daysAgo: number, type: string, flags: string[], summary: string) => {
-      rows.seedSecFilings.push({ cik, company_name: c.name, filing_type: type, filing_date: iso(addDays(t0, -daysAgo)), accession_number: `${cik}-DEMO-${c.n}${type.replace(/\W/g, "")}`, document_url: null, risk_signals: flags, key_findings: summary, provider: "sample" });
+      rows.seedSecFilings.push({ cik, company_name: c.name, filing_type: type, filing_date: iso(addDays(t0, -daysAgo)), accession_number: `${cik}-DEMO-${c.n}${type.replace(/\W/g, "")}`, document_url: `https://filings.example.com/${cik}/${c.n}-${type.replace(/\W/g, "")}`, risk_signals: flags, key_findings: summary, provider: "sample" });
     };
     if (c.story === "news_shock" && c.limitUse > 80) news(3, `${c.name} loses its largest customer as distributor contract ends`, `${c.name} said its largest customer, about a third of revenue, will not renew a supply contract ending next quarter. The company is reviewing costs and its credit facilities.`);
     if (c.story === "news_shock" && c.limitUse <= 80) news(4, `${c.name} in dispute with key resin supplier`, `${c.name} confirmed a pricing dispute with its main resin supplier that has slowed deliveries to customers this month.`, 0.85);

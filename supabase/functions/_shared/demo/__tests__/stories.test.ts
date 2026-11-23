@@ -126,3 +126,17 @@ describe("demo portfolio: the stories", () => {
     expect(withPrev).toEqual(["bankruptcy", "going_concern", "improving", "score_drop"]);
   });
 });
+
+describe("demo portfolio: fits the database", () => {
+  const SECTORS = ["Aerospace & Defense", "Energy", "Industrial Manufacturing", "Materials", "Transportation", "Mining", "Other"];
+  const SCENARIOS = ["normal_operations", "payment_issues", "credit_deterioration", "negative_news", "growth_opportunity", "bankruptcy", "sec_filing_monitoring"];
+  it("uses only the database's sectors, scenarios and invoice statuses", () => {
+    for (const c of demo.customers) { expect(SECTORS).toContain(c.sector); expect(SCENARIOS).toContain(c.scenario); }
+    for (const i of demo.invoices) expect(["current", "overdue", "pre_petition", "paid"]).toContain(i.status);
+  });
+  it("never writes the computed column amount_outstanding, and fills every required column", () => {
+    for (const i of demo.invoices) expect(i).not.toHaveProperty("amount_outstanding");
+    for (const f of demo.seedSecFilings) expect(f.document_url).toBeTruthy();
+    for (const c of demo.customers) for (const k of ["company_name", "scenario", "credit_limit", "current_exposure", "payment_terms_days", "sector", "country_code"]) expect(c[k]).not.toBeNull();
+  });
+});
