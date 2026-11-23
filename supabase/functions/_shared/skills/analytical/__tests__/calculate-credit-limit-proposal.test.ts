@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { calculateCreditLimitProposal, MAX_REDUCTION_USD } from "../calculate-credit-limit-proposal";
+import { POLICY_DEFAULTS } from "../../../policy/defaults";
 
 const BASE: Parameters<typeof calculateCreditLimitProposal>[0] = {
   current_limit: 500_000,
@@ -328,5 +329,16 @@ describe("a new limit below the balance says what it means (founder 2026-11-23)"
     });
     expect(r.action).toBe("reduce");
     expect(r.rationale).not.toContain("no new orders");
+  });
+});
+
+describe("new limits are round numbers (review 2026-11-23)", () => {
+  it("rounds a 15% strategic cut of $3,975,000 to $3,375,000", () => {
+    const r = calculateCreditLimitProposal({
+      current_limit: 3_975_000, current_exposure: 3_263_000, days_over_90: 0, utilization_pct: 82.1,
+      credit_score: 64, on_time_rate: 0.42, is_strategic_account: true, action_threshold_pct: 70,
+    }, { ...POLICY_DEFAULTS.limit_review, max_reduction_pct: 20 });
+    expect(r.proposed_limit).toBe(3_375_000);
+    expect(r.reduction_pct).toBe(15);
   });
 });
