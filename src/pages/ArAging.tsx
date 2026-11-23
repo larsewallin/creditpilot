@@ -91,6 +91,24 @@ export default function ArAging() {
     },
   });
 
+  // Invoices from before a customer's bankruptcy filing are frozen in the case: they are owed
+  // (Customers counts them as exposure) but not collectable, so they are not in the buckets.
+  const { data: prePetition } = useQuery({
+    queryKey: ["ar-aging-pre-petition"],
+    queryFn: async () => {
+      const { data } = await supabase.from("invoices")
+        .select("customer_id, outstanding_amount, customers(company_name)")
+        .eq("status", "pre_petition").gt("outstanding_amount", 0);
+      const by = new Map<string, { name: string; owed: number }>();
+      for (const r of (data ?? []) as any[]) {
+        const cur = by.get(r.customer_id) ?? { name: r.customers?.company_name ?? "A customer", owed: 0 };
+        cur.owed += Number(r.outstanding_amount) || 0;
+        by.set(r.customer_id, cur);
+      }
+      return [...by.values()];
+    },
+  });
+
   const selectedCustomer = fullCustomers?.find((c) => c.id === selectedCustomerId);
 
   // ── Handlers ───────────────────────────────────────────────────────────────
@@ -207,6 +225,13 @@ export default function ArAging() {
       </div>
 
       <DemoDataNotice message="Invoices and balances shown here are fictional, generated for illustration only." />
+
+      {(prePetition ?? []).length > 0 && (
+        <div className="rounded-lg border bg-card px-4 py-2.5 text-xs text-muted-foreground">
+          Not in the buckets below: {(prePetition ?? []).map((p) => `${formatCurrency(p.owed)} owed by ${p.name}`).join("; ")} from
+          before {(prePetition ?? []).length === 1 ? "its" : "their"} bankruptcy filing. It is frozen in the case: file a claim for it rather than chase it.
+        </div>
+      )}
 
       {/* Portfolio Bar */}
       <div className="bg-card rounded-xl border p-5">

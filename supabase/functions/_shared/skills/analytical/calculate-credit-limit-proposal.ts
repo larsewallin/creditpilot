@@ -149,7 +149,7 @@ export function calculateCreditLimitProposal(
     if (target < current_limit) {
       reductionFactor = 1 - target / current_limit;
       const owedUsd = `$${Math.round(current_exposure).toLocaleString("en-US")}`;
-      rationale = `High risk score (${credit_score}). The policy stops new credit at High risk, so the limit comes down to what the customer owes${rules.high_risk_headroom_pct ? ` plus ${rules.high_risk_headroom_pct}%` : ""} (${owedUsd}, rounded up to the next $5,000).`;
+      rationale = `The policy stops new credit at High risk (score ${credit_score}), so the limit comes down to what the customer owes${rules.high_risk_headroom_pct ? ` plus ${rules.high_risk_headroom_pct}%` : ""} (${owedUsd}, rounded up to the next $5,000).`;
     }
   }
 
@@ -175,8 +175,14 @@ export function calculateCreditLimitProposal(
   const cappedReductionUsd = Math.min(uncappedReductionUsd, maxReductionUsd);
   const wasCapped = cappedReductionUsd < uncappedReductionUsd;
 
-  const proposed_limit = Math.round(current_limit - cappedReductionUsd);
-  const reduction_pct = Math.round((cappedReductionUsd / current_limit) * 100);
+  // Limits are round numbers: the new limit is rounded to $5,000 (Larkspur showed $3,378,750,
+  // review 2026-11-23). Down, so the cut is at least the tier's, unless that would go past the
+  // policy's largest single cut or dollar cap; then up.
+  const exact = current_limit - cappedReductionUsd;
+  const down = Math.floor(exact / 5_000) * 5_000;
+  const maxCut = Math.min(current_limit * rules.max_reduction_pct / 100, maxReductionUsd);
+  const proposed_limit = Math.max(0, current_limit - down > maxCut + 0.5 ? Math.ceil(exact / 5_000) * 5_000 : down);
+  const reduction_pct = Math.round(((current_limit - proposed_limit) / current_limit) * 100);
 
   if (wasCapped) {
     rationale += ` The cut is capped at the policy's $${(maxReductionUsd / 1_000_000).toFixed(1)}M (it would otherwise have been $${Math.round(uncappedReductionUsd).toLocaleString()}).`;

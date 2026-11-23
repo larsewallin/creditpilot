@@ -224,7 +224,8 @@ Deno.serve(async (req) => {
             scope:        "industry",
             source_agent: agent_name,
             run_id,
-            title:        `${sector}: industry downturn signal (${signal.indicator.replace(/_/g, " ")})`,
+            // "steel input prices up 18.0%" for a named series, else "commodity price up 18.0%".
+            title:        `${sector}: ${/^Demo series:/i.test(String(signal.source_series ?? "")) ? String(signal.source_series).replace(/^Demo series:\s*/i, "") : what} ${moved}`,
             description:  summary,
             summary,
             payload: {
@@ -261,7 +262,9 @@ Deno.serve(async (req) => {
         if (emittedToday.has(fingerprint)) continue;
 
         const severity = disruptionSeverity(signal.disruption_type);
-        const summary = `${sector}: ${signal.headline} (${signal.disruption_type.replace(/_/g, " ")}, via ${signal.source}, ${signal.published_date}).`;
+        // The story's own summary when it has one (the title already carries the headline).
+        const story = signal.summary && signal.summary !== signal.headline ? `${signal.summary} ` : "";
+        const summary = `${story}(${signal.source}, ${signal.published_date})`.trim();
 
         try {
           await publishEvent({

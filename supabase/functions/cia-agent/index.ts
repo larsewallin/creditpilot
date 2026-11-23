@@ -1059,12 +1059,21 @@ function estimateCost(model: string, u: { input_tokens: number; output_tokens: n
 
 const SAVED_ANSWER_MAX_AGE_MS = 6 * 3600 * 1000;
 /** Bump when the way CIA answers changes, so saved demo answers written before are not replayed. */
-const ANSWER_VERSION = 2;
+const ANSWER_VERSION = 3; // 3: one limit-use rule (2026-11-23)
 
 // deno-lint-ignore no-explicit-any
 async function savedAnswer(db: any, question: string): Promise<{ id: string; created_at: string; answer: Record<string, unknown> } | null> {
   try {
-    const since = new Date(Math.max(lastDemoRefresh().getTime(), Date.now() - SAVED_ANSWER_MAX_AGE_MS)).toISOString();
+    // Only answers written after the demo's data was last rebuilt: the 04:00 refresh, or a Reset
+    // Demo pressed since (its events are newer). An answer from before a reset can quote numbers
+    // and rules that changed (review 2026-11-23: an 8:30 answer replayed after an 11:24 reset).
+    let rebuilt = lastDemoRefresh().getTime();
+    try {
+      const { data: latest } = await db.from("credit_events").select("created_at").eq("is_demo", true)
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (latest?.created_at) rebuilt = Math.max(rebuilt, new Date(latest.created_at).getTime() - 10 * 60_000);
+    } catch { /* fall back to the daily refresh */ }
+    const since = new Date(Math.max(rebuilt, Date.now() - SAVED_ANSWER_MAX_AGE_MS)).toISOString();
     const { data, error } = await db.from("cia_answers").select("id, created_at, answer")
       .eq("is_demo", true).eq("question", question.trim().slice(0, 1000)).gte("created_at", since)
       .order("created_at", { ascending: false }).limit(1).maybeSingle();

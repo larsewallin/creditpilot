@@ -194,7 +194,7 @@ export function assessCompositeRisk(
     parts.push(`Warning signs: ${listJoin(adjustments.map((c) => plainReason(c, false)).filter(Boolean))}.`);
   }
   if (inDistress && hasActiveSignals) {
-    parts.push(`The score (${credit_score}) is High risk on the policy's scale, so it needs a review whatever the limit use.`);
+    parts.push(`A High risk score gets a limit review whatever the limit use.`);
   }
   if (agents_flagging.length >= 2) {
     parts.push(`${agents_flagging.length} monitors flag it: ${listJoin(agents_flagging.map(plainAgent))}.`);

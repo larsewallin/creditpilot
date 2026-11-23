@@ -212,6 +212,11 @@ export const IndustryDownturnPayload = z.object({
   period_days: z.number().int(),
   source_series: z.string().optional(),
   summary: z.string(),
+  // The series' own move as the market reports it (change_percent is sign-normalized: negative =
+  // bad for this sector) and whether the sector buys or sells it. Zod drops undeclared keys, so
+  // without these the Industry tile kept showing -18% for a price that rose (review 2026-11-23).
+  raw_change_percent: z.number().optional(),
+  exposure_role: z.enum(["self", "producer", "consumer"]).optional(),
 });
 
 export const IndustryDisruptionPayload = z.object({

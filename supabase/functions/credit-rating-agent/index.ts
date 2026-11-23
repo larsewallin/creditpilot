@@ -286,7 +286,9 @@ Deno.serve(async (req) => {
         // What the drop does under the policy, rather than a vague "review recommended" with no
         // proposal behind it (review 2026-11-23: Ormsby).
         (change.action_required && change.type === "CREDIT_RATING_DOWNGRADE"
-          ? " Under the policy this lowers the limit use at which a cut is proposed; a cut appears in Actions only if limit use reaches that level."
+          ? (change.current_score < policyFor(policy, groups, c.policy_group).limit_review.distress_score_below
+            ? " A High risk score: the policy proposes a limit review whatever the limit use (see Actions)."
+            : " Under the policy this lowers the limit use at which a cut is proposed; a cut appears in Actions only if limit use reaches that level.")
           : "");
 
       try {
