@@ -68,7 +68,7 @@ export default function SecFilings() {
           <h1 className="text-xl font-semibold text-foreground">SEC Filings</h1>
           <p className="text-xs text-muted-foreground mt-1">Per-company filing history and monitoring status — open one from a Credit Events source card for context, or browse below.</p>
         </div>
-        <DemoDataNotice message="CIK numbers and filing links are real and point to actual SEC EDGAR pages. The risk signals and findings shown here are fabricated for this demo and were not found in those filings." />
+        <DemoDataNotice message="Demo data. The companies, filings and findings shown here are fictional, so there are no SEC links." />
         <div className="flex items-center justify-center h-64 border border-dashed rounded-xl text-muted-foreground text-sm">
           No monitored customers found. Agents will populate this automatically.
         </div>
@@ -83,7 +83,7 @@ export default function SecFilings() {
         <p className="text-xs text-muted-foreground mt-1">Per-company filing history and monitoring status — open one from a Credit Events source card for context, or browse below.</p>
       </div>
 
-      <DemoDataNotice message="CIK numbers and filing links are real and point to actual SEC EDGAR pages. The risk signals and findings shown here are fabricated for this demo and were not found in those filings." />
+      <DemoDataNotice message="Demo data. The companies, filings and findings shown here are fictional, so there are no SEC links." />
 
       <div className="space-y-4">
         {(monitoring ?? []).map((d: any) => {
@@ -113,6 +113,8 @@ export default function SecFilings() {
                     {d.alert_triggered && (
                       <Badge variant="destructive" className="text-[10px] h-5">Alert Active</Badge>
                     )}
+                    {/* Demo CIKs are fictional: an EDGAR link would open an unrelated or empty page. */}
+                    {!DEMO_MODE && (
                     <a
                       href={secUrl}
                       target="_blank"
@@ -121,6 +123,7 @@ export default function SecFilings() {
                     >
                       View SEC Filings <ExternalLink className="h-3 w-3" />
                     </a>
+                    )}
                   </div>
                 </div>
 

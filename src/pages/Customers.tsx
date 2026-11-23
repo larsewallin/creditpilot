@@ -67,7 +67,7 @@ export default function Customers() {
           </SelectContent>
         </Select>
       </div>
-      <DemoDataNotice message="Demo portfolio. Real company names are used for illustration only: limits, balances, scores and payment figures are fictional, not real ratings or bureau scores." />
+      <DemoDataNotice message="Demo portfolio. Every company, limit, balance, score and payment here is fictional." />
 
       {isLoading ? <SkeletonTable rows={15} /> : (
         <div className="bg-card rounded-xl border overflow-hidden">

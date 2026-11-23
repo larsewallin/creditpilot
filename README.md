@@ -16,7 +16,7 @@ Open source (MIT). **Live demo: [creditpilot.vercel.app](https://creditpilot.ver
 | **Reads the web too** | For a question about a customer, a sector or "what's happening", it searches the web and puts the news next to your exposure. Web facts are cited to their pages. Figures about your own customers only ever come from your data. |
 | **Shows its work** | You see each step as it happens ("Reading 1 customer, 8 payments, 5 credit events…", "Searching the web: …"), then the answer as it is written. |
 | **Never does the arithmetic itself** | Totals, aging buckets, payment trends, limit use and every chart are computed in code and handed to the model as facts. The model explains numbers; it does not produce them. |
-| **Ends advice with next steps** | "Should I reduce Arconic's limit?" gets the facts, then 2–3 steps you can take, in CreditPilot first. Missing or out-of-date accounts become "ask for the latest annual accounts". |
+| **Ends advice with next steps** | "Should I reduce Marlow Industrial Castings' limit?" gets the facts, then 2–3 steps you can take, in CreditPilot first. Missing or out-of-date accounts become "ask for the latest annual accounts". |
 | **Lets you act from the answer** | Open the customer, or approve or reject the action an agent proposed, right under the answer. |
 | **Keeps the conversation** | Follow-ups stack on the page and keep the context, so "is that more than their limit?" knows who "their" is. |
 | **Shares an answer** | One link opens the question, the answer, its sources and charts. |
@@ -33,12 +33,13 @@ Open source (MIT). **Live demo: [creditpilot.vercel.app](https://creditpilot.ver
 
 ### Try these in the demo
 
-- Should I reduce Arconic's credit limit?
-- What's the latest news on American Airlines, and how exposed are we?
+- Should I reduce Marlow Industrial Castings' credit limit?
+- Where are steel prices heading, and which of our customers are exposed?
+- Why is Carrick Process Equipment flagged across multiple agents?
 - Which customers have the highest credit risk right now?
 - Whose payments are getting worse?
 
-The demo runs on a sample portfolio: real company names used for illustration, with every score, invoice, payment, event and news item invented. It replays the same story each day with today's dates. Answers are written live by Claude (10 questions per visitor per day).
+The demo runs on a fictional portfolio of 40 customers in the US, Germany, the UK and Japan: every company, score, invoice, payment, event and news item is invented. It replays the same story each day with today's dates. Answers are written live by Claude (10 questions per visitor per day).
 
 ---
 

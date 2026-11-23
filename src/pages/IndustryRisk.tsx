@@ -125,7 +125,7 @@ export default function IndustryRisk() {
         </p>
       </div>
 
-      <DemoDataNotice message="Economic series IDs (FRED/BLS) are real, but the percentage changes and news headlines shown here are fabricated for this demo and were not published or reported." />
+      <DemoDataNotice message="Demo data. The price series, percentage changes and news headlines shown here are fictional." />
 
       <div className="space-y-4">
         {(sectors ?? []).map((s) => {

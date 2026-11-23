@@ -23,7 +23,7 @@ Each analyst works on its own and writes into one shared log, **Credit Events**:
 
 When the warning signs about a customer add up, the app proposes an **Action**, for example a lower credit limit, with its reasoning and the events behind it. Nothing changes until a person approves it.
 
-The **Credit Intelligence Agent (CIA)** watches nothing itself. It reads what the others wrote and answers questions in plain English from the chat bar at the bottom of every page, such as "Should we be worried about American Airlines?" Every claim points to the record behind it; totals and counts are calculated by the app, not by the AI. It gets more useful with every analyst added, without changes to the CIA.
+The **Credit Intelligence Agent (CIA)** watches nothing itself. It reads what the others wrote and answers questions in plain English from the chat bar at the bottom of every page, such as "Should I reduce Marlow Industrial Castings' credit limit?" Every claim points to the record behind it; totals and counts are calculated by the app, not by the AI. It gets more useful with every analyst added, without changes to the CIA.
 
 ---
 
@@ -66,7 +66,7 @@ When several agents flag the same customer, the CIA writes one **Several warning
 
 ## The demo, and running it on your own data
 
-**The demo** runs on a sample portfolio, so anyone can try it without setup. On the sign-in page, try it as a credit manager, a credit analyst or a sales rep. The customer names are real companies used for illustration only: every score, limit, invoice, payment, event and news item about them is invented. The demo is shared by every visitor and replays the same story each day with today's dates. New customers (onboarding) is not available in the demo; it works on your own CreditPilot. Real in the demo: the CIA's answers, written live by an AI model (10 questions a day per visitor).
+**The demo** runs on a sample portfolio, so anyone can try it without setup. On the sign-in page, try it as a credit manager, a credit analyst or a sales rep. Every company in it is fictional, and so is every score, limit, invoice, payment, event and news item. The demo is shared by every visitor and replays the same story each day with today's dates. New customers (onboarding) is not available in the demo; it works on your own CreditPilot. Real in the demo: the CIA's answers, written live by an AI model (10 questions a day per visitor).
 
 **Your own data** stays yours: a company runs CreditPilot in its own Supabase project, or entirely locally, and nothing touches this project's infrastructure. The repo's RUN_IT_YOURSELF guide covers both.
 
