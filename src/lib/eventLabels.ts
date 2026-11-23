@@ -90,3 +90,27 @@ export function summarize(company: string, signals: SignalLite[], severity: stri
     : "";
   return { headline, why };
 }
+
+/**
+ * An event title without the "<Company>: " prefix the agents put on it, for places that
+ * already show the company ("Brightwater…: Brightwater… files for Chapter 11" read twice).
+ */
+export function titleWithoutSubject(title: string | null | undefined, company: string | null | undefined): string {
+  const t = title ?? "";
+  if (!company) return t;
+  const prefix = `${company}: `;
+  if (!t.startsWith(prefix)) return t;
+  const rest = t.slice(prefix.length);
+  return rest.charAt(0).toUpperCase() + rest.slice(1);
+}
+
+/** "JP" → "Japan", "EUR" → "Euro (EUR)", for events about a country or a currency. */
+export function countryName(code: string): string {
+  try { return new Intl.DisplayNames(["en"], { type: "region" }).of(code.toUpperCase()) ?? code; } catch { return code; }
+}
+export function currencyName(code: string): string {
+  try {
+    const n = new Intl.DisplayNames(["en"], { type: "currency" }).of(code.toUpperCase());
+    return n && n !== code ? `${n} (${code.toUpperCase()})` : code;
+  } catch { return code; }
+}

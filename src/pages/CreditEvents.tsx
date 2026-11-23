@@ -14,7 +14,7 @@ import { AlertTriangle, Info, X } from "lucide-react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { DemoDataNotice } from "@/components/DemoDataNotice";
-import { eventLabel, summarize, type SignalLite } from "@/lib/eventLabels";
+import { eventLabel, summarize, titleWithoutSubject, countryName, currencyName, SEVERITY_RANK, type SignalLite } from "@/lib/eventLabels";
 
 const SOURCES: [string, string][] = [
   ["all", "All sources"],
@@ -123,7 +123,12 @@ export default function CreditEvents() {
       let query = base(supabase.from("credit_events").select(`*, ${customersSelect}`));
       if (sev.length) query = query.in("severity", sev);
       const { data } = await query.order("created_at", { ascending: false }).limit(100);
-      return (data ?? []) as Evt[];
+      // Newest day first; within a day the most serious first (an agent run writes many at once).
+      return ((data ?? []) as Evt[]).sort((a, b) =>
+        b.created_at.slice(0, 10).localeCompare(a.created_at.slice(0, 10))
+        || (SEVERITY_RANK[b.severity] ?? 0) - (SEVERITY_RANK[a.severity] ?? 0)
+        || Number(COMPOSITES.includes(b.event_type)) - Number(COMPOSITES.includes(a.event_type))
+        || b.created_at.localeCompare(a.created_at));
     },
     refetchInterval: 30000,
   });
@@ -175,7 +180,7 @@ export default function CreditEvents() {
       <div>
         <h1 className="text-xl font-semibold text-foreground">Credit Events</h1>
         <p className="text-xs text-muted-foreground mt-1">
-          Everything the monitoring agents found, newest first. Cards marked <span className="font-medium">Several warning signs</span> are
+          Everything the monitoring agents found, newest first, the most serious first within a day. Cards marked <span className="font-medium">Several warning signs</span> are
           the assistant's summary of a customer that more than one agent flags.{" "}
           <Link to="/about#severity" className="text-primary hover:underline inline-flex items-center gap-0.5"><Info className="h-3 w-3" />How severity works</Link>
         </p>
@@ -257,8 +262,8 @@ export default function CreditEvents() {
 function Subject({ evt }: { evt: Evt }) {
   if (evt.customers?.company_name) return <span className="font-semibold text-foreground">{evt.customers.company_name}</span>;
   const p = evt.payload ?? {};
-  const label = p.sector ? `${p.sector} sector` : (p.country_code ?? p.origin_country) ? `${p.country_code ?? p.origin_country} country`
-    : p.theme ? p.theme : p.currency_code ? `${p.currency_code} currency` : null;
+  const label = p.sector ? `${p.sector} sector` : (p.country_code ?? p.origin_country) ? countryName(p.country_code ?? p.origin_country)
+    : p.theme ? p.theme : p.currency_code ? currencyName(p.currency_code) : null;
   return label ? <span className="italic text-muted-foreground">{label}</span> : <span className="font-semibold text-foreground">Portfolio</span>;
 }
 
@@ -275,7 +280,7 @@ function EventCard({ evt, highlighted, onOpen }: { evt: Evt; highlighted: boolea
             <AgentPill agentName={evt.source_agent} />
           </div>
           <p className="text-sm"><Subject evt={evt} /></p>
-          {evt.title && <p className="text-sm text-foreground mt-0.5">{evt.title}</p>}
+          {evt.title && <p className="text-sm text-foreground mt-0.5">{titleWithoutSubject(evt.title, evt.customers?.company_name)}</p>}
           {evt.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{plainSecText(evt.description)}</p>}
         </div>
         <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0 mt-1">{relativeTime(evt.created_at)}</span>
