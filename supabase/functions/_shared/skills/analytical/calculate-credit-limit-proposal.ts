@@ -7,9 +7,11 @@
  *   separate generic "minimum reduction" floor layered on top (removed 2026-10-01: it was
  *   redundant with the tiers' own values and, combined with a flat %, produced wildly
  *   different dollar impacts across account sizes).
- *   Strategic accounts receive 10pp latitude on utilization thresholds.
- *   Payment behaviour (on_time_rate) adjusts utilization thresholds broadly:
- *   poor payers trigger action at lower utilization levels.
+ *   Whether limit use is high is decided once, by assess-composite-risk (founder 2026-11-23:
+ *   one limit-use rule): the caller passes its adjusted_threshold as action_threshold_pct.
+ *   "Critical" limit use is the policy's critical alert level (utilization.critical_pct).
+ *   Strategic accounts (a group) get more room through that group's own base threshold and
+ *   smaller reduction tiers.
  *
  *   Credit score thresholds:
  *     < 20  → treat as distress
@@ -45,6 +47,10 @@ export interface CreditLimitInput {
   credit_score?: number | null;     // 0–100 normalised score; null = unavailable
   is_strategic_account?: boolean;
   on_time_rate?: number;            // 0–1, from payment history
+  /** Limit use (%) at which this customer's limit is acted on: assess-composite-risk's adjusted_threshold. */
+  action_threshold_pct?: number;
+  /** Limit use (%) that is critical: policy utilization.critical_pct. */
+  critical_utilization_pct?: number;
   /** Pre-petition (frozen) balance, USD, when the customer is in bankruptcy; absent otherwise. */
   pre_petition_usd?: number | null;
 }
@@ -59,6 +65,7 @@ export interface CreditLimitProposal {
 export function calculateCreditLimitProposal(
   input: CreditLimitInput,
   rules: CreditPolicy["limit_review"] = POLICY_DEFAULTS.limit_review,
+  pay: Pick<CreditPolicy["payments"], "watch_on_time_below"> = POLICY_DEFAULTS.payments,
 ): CreditLimitProposal {
   const maxReductionUsd = rules.max_reduction_usd;
   const {
@@ -69,6 +76,8 @@ export function calculateCreditLimitProposal(
     credit_score = null,
     is_strategic_account = false,
     on_time_rate = 1,
+    action_threshold_pct = POLICY_DEFAULTS.composite.base_threshold_pct,
+    critical_utilization_pct = POLICY_DEFAULTS.utilization.critical_pct,
   } = input;
 
   if (!current_limit || current_limit <= 0) {
@@ -97,52 +106,50 @@ export function calculateCreditLimitProposal(
   const inGrey = credit_score !== null && credit_score >= rules.distress_score_below && credit_score <= rules.concern_score_up_to;
   const highOverdue = days_over_90 > current_limit * (rules.high_overdue_pct_of_limit / 100);
 
-  // Payment behaviour adjusts utilization thresholds
-  // Poor payers trigger action at lower utilization levels
-  let paymentPenalty = 0;
-  if (on_time_rate < 0.50) paymentPenalty = 15;       // seriously struggling
-  else if (on_time_rate < 0.70) paymentPenalty = 10;  // below acceptable
-  else if (on_time_rate < 0.85) paymentPenalty = 5;   // slightly below ideal
-
-  // Strategic accounts get 10pp latitude — thresholds are higher before action triggers
-  const latitude = is_strategic_account ? rules.strategic_latitude_pct : 0;
-  const highUtilThreshold = rules.high_utilization_pct + latitude - paymentPenalty;
-  const criticalUtilThreshold = rules.critical_utilization_pct + latitude - paymentPenalty;
-  const highUtil = utilization_pct > highUtilThreshold;
-  const criticalUtil = utilization_pct > criticalUtilThreshold;
+  // One limit-use rule: the threshold comes from assess-composite-risk (signals and payment
+  // record already lower it there). Critical: at the policy's critical alert level or above it.
+  const highUtil = utilization_pct >= action_threshold_pct;
+  const criticalUtil = utilization_pct >= Math.max(action_threshold_pct, critical_utilization_pct);
+  const watchOnTime = pay.watch_on_time_below;
 
   let reductionFactor = 0;
   let rationale = "";
 
   const k = (usd: number) => `$${Math.round(usd / 1000).toLocaleString("en-US")}k`;
   const onTime = `${Math.round(on_time_rate * 100)}%`;
+  const use = `${Math.round(utilization_pct)}%`;
+  const overLimit = current_exposure > current_limit;
   if (inDistress && highOverdue) {
     reductionFactor = is_strategic_account ? 0.40 : 0.50;
     rationale = `High risk score (${credit_score}) and ${k(days_over_90)} more than 90 days overdue.`;
   } else if (inDistress && highUtil) {
     reductionFactor = is_strategic_account ? 0.30 : 0.40;
-    rationale = `High risk score (${credit_score}) and ${utilization_pct}% of the limit in use.`;
+    rationale = `High risk score (${credit_score}) and ${use} of the limit in use.`;
   } else if (criticalUtil && highOverdue) {
     reductionFactor = is_strategic_account ? 0.25 : 0.35;
-    rationale = `${utilization_pct}% of the limit in use and ${k(days_over_90)} more than 90 days overdue.`;
+    rationale = `${use} of the limit in use and ${k(days_over_90)} more than 90 days overdue.`;
   } else if (highUtil && highOverdue) {
     reductionFactor = is_strategic_account ? 0.20 : 0.30;
-    rationale = `${utilization_pct}% of the limit in use and ${k(days_over_90)} more than 90 days overdue.`;
-  } else if (inGrey && highOverdue && on_time_rate < 0.7) {
+    rationale = `${use} of the limit in use and ${k(days_over_90)} more than 90 days overdue.`;
+  } else if (inGrey && highOverdue && on_time_rate < watchOnTime) {
     reductionFactor = 0.25;
     rationale = `Elevated risk score (${credit_score}), paid on time ${onTime} of the time, and an overdue balance.`;
-  } else if (criticalUtil && (inGrey || inDistress || on_time_rate < 0.5)) {
-    // Early warning: critically high limit use with a weak score or poor payment record,
+  } else if (highUtil && (inGrey || inDistress || on_time_rate < 0.5)) {
+    // Early warning: limit use at the customer's action level with a weak score or poor payment record,
     // before anything is 90 days overdue (F4: Atlas Precision once fell through every branch).
     reductionFactor = is_strategic_account ? 0.15 : 0.20;
-    rationale = `${utilization_pct}% of the limit in use with ${(inGrey || inDistress) ? `a weak score (${credit_score})` : `a poor payment record (on time ${onTime} of the time)`}; nothing is 90 days overdue yet, so this is an early-warning cut.`;
+    const why = (inGrey || inDistress) ? `a weak score (${credit_score})` : `a poor payment record (on time ${onTime} of the time)`;
+    rationale = overLimit
+      ? `Over the limit (${use} in use) with ${why}.`
+      : `${use} of the limit in use with ${why}; nothing is 90 days overdue yet, so this is an early-warning cut.`;
   } else if (inDistress) {
     // Policy (founder, 2026-11-21): a High risk score always gets a proposal, whatever the
     // limit use: the limit comes down to what is owed plus the policy's headroom.
     const target = Math.ceil((current_exposure * (1 + rules.high_risk_headroom_pct / 100)) / 5000) * 5000;
     if (target < current_limit) {
       reductionFactor = 1 - target / current_limit;
-      rationale = `High risk score (${credit_score}). The policy stops new credit at High risk, so the limit comes down to what the customer owes${rules.high_risk_headroom_pct ? ` plus ${rules.high_risk_headroom_pct}%` : ""}.`;
+      const owedUsd = `$${Math.round(current_exposure).toLocaleString("en-US")}`;
+      rationale = `High risk score (${credit_score}). The policy stops new credit at High risk, so the limit comes down to what the customer owes${rules.high_risk_headroom_pct ? ` plus ${rules.high_risk_headroom_pct}%` : ""} (${owedUsd}, rounded up to the next $5,000).`;
     }
   }
 
@@ -173,6 +180,13 @@ export function calculateCreditLimitProposal(
 
   if (wasCapped) {
     rationale += ` The cut is capped at the policy's $${(maxReductionUsd / 1_000_000).toFixed(1)}M (it would otherwise have been $${Math.round(uncappedReductionUsd).toLocaleString()}).`;
+  }
+
+  // A new limit below what is owed blocks new orders until the customer pays down: say so
+  // (founder 2026-11-23: keep the cut, state the consequence).
+  if (proposed_limit < current_exposure) {
+    const usd = (x: number) => `$${Math.round(x).toLocaleString("en-US")}`;
+    rationale += ` The new limit is below the ${usd(current_exposure)} owed: no new orders until the balance is under ${usd(proposed_limit)} (${usd(current_exposure - proposed_limit)} to collect first).`;
   }
 
   return { proposed_limit, reduction_pct, action: "reduce", rationale };

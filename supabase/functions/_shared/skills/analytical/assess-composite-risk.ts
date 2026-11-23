@@ -17,10 +17,13 @@
  *     RISK_CHANGE (macro convergence, Risk Agent)    −5pp (2 dimensions) / −10pp (3+)
  *     credit_score < 20 (distress)                   −15pp
  *     credit_score 20–40 (concern)                   −5pp
- *   Payment behaviour adjustments (applied after signal delta):
- *     on_time_rate < 0.50                            −15pp
- *     on_time_rate < 0.70                            −10pp
- *     on_time_rate < 0.85                            −5pp
+ *   Payment behaviour adjustments (applied after signal delta; thresholds from policy.payments):
+ *     on_time_rate < 50%                             −15pp (composite.on_time_below_half_pts)
+ *     on_time_rate < payments.watch_on_time_below    −10pp (composite.on_time_watch_pts)
+ *     on_time_rate < payments.at_risk_on_time_below  −5pp  (composite.on_time_at_risk_pts)
+ *
+ *   This is the one limit-use rule for proposals (founder 2026-11-23): calculateCreditLimitProposal
+ *   receives adjusted_threshold and does not keep thresholds of its own.
  *
  *   recommend_action is true when:
  *     utilization_pct >= adjusted_threshold, OR
@@ -69,6 +72,7 @@ export function assessCompositeRisk(
   input: CompositeRiskInput,
   rules: CreditPolicy["composite"] = POLICY_DEFAULTS.composite,
   scale: Pick<CreditPolicy["limit_review"], "distress_score_below" | "concern_score_up_to"> = POLICY_DEFAULTS.limit_review,
+  pay: Pick<CreditPolicy["payments"], "watch_on_time_below" | "at_risk_on_time_below"> = POLICY_DEFAULTS.payments,
 ): CompositeRiskResult {
   const BASE_THRESHOLD = rules.base_threshold_pct;
   const THRESHOLD_FLOOR = rules.floor_pct;
@@ -131,12 +135,21 @@ export function assessCompositeRisk(
     adjustments.push(`credit_score concern ${DISTRESS}–${CONCERN} (−${rules.concern_score_pts}pp)`);
   }
 
-  // Payment behaviour adjusts threshold (same logic as calculate-credit-limit-proposal)
+  // Payment behaviour lowers the threshold; the on-time rates are the policy's own (payments.*).
   let paymentPenalty = 0;
   if (on_time_rate !== undefined && on_time_rate !== null) {
-    if (on_time_rate < 0.50) { paymentPenalty = 15; adjustments.push("on_time_rate <50% (−15pp)"); }
-    else if (on_time_rate < 0.70) { paymentPenalty = 10; adjustments.push("on_time_rate <70% (−10pp)"); }
-    else if (on_time_rate < 0.85) { paymentPenalty = 5; adjustments.push("on_time_rate <85% (−5pp)"); }
+    const tiers: [number, number][] = [
+      [0.5, rules.on_time_below_half_pts],
+      [pay.watch_on_time_below, rules.on_time_watch_pts],
+      [pay.at_risk_on_time_below, rules.on_time_at_risk_pts],
+    ];
+    for (const [below, pts] of tiers) {
+      if (on_time_rate < below && pts > 0) {
+        paymentPenalty = pts;
+        adjustments.push(`on_time_rate <${Math.round(below * 100)}% (−${pts}pp)`);
+        break;
+      }
+    }
   }
 
   const adjusted_threshold = Math.max(THRESHOLD_FLOOR, BASE_THRESHOLD - delta - paymentPenalty);
@@ -169,14 +182,16 @@ export function assessCompositeRisk(
 
   // Build the rationale in plain words: what the policy acts at, why it is lower for this
   // customer, and which monitors flag it (the codes stay in `adjustments`).
-  const reasons = adjustments.map(plainReason).filter(Boolean);
+  const reasons = adjustments.map((c) => plainReason(c)).filter(Boolean);
+  const usePct = Math.round(utilization_pct);
   const parts: string[] = [];
   if (utilization_pct >= adjusted_threshold) {
     parts.push(adjusted_threshold < BASE_THRESHOLD
-      ? `${utilization_pct}% of the limit is in use. The policy acts from ${BASE_THRESHOLD}% limit use, and from ${adjusted_threshold}% for this customer because of ${listJoin(reasons)}.`
-      : `${utilization_pct}% of the limit is in use; the policy acts from ${BASE_THRESHOLD}%.`);
+      ? `${usePct}% of the limit is in use. The policy acts from ${BASE_THRESHOLD}% limit use, and from ${adjusted_threshold}% for this customer because of ${listJoin(reasons)}.`
+      : `${usePct}% of the limit is in use; the policy acts from ${BASE_THRESHOLD}%.`);
   } else if (reasons.length) {
-    parts.push(`Warning signs: ${listJoin(reasons)}.`);
+    // Below the action level the points do not decide anything, so they are left out.
+    parts.push(`Warning signs: ${listJoin(adjustments.map((c) => plainReason(c, false)).filter(Boolean))}.`);
   }
   if (inDistress && hasActiveSignals) {
     parts.push(`The score (${credit_score}) is High risk on the policy's scale, so it needs a review whatever the limit use.`);
@@ -205,9 +220,9 @@ function plainAgent(a: string): string {
 }
 
 /** An adjustment code ("on_time_rate <50% (−15pp)") as the reason a person reads. */
-function plainReason(code: string): string {
+function plainReason(code: string, withPoints = true): string {
   const pts = code.match(/\(−(\d+)pp\)/)?.[1];
-  const by = pts ? ` (${pts} points lower)` : "";
+  const by = pts && withPoints ? ` (${pts} points lower)` : "";
   if (code.startsWith("NEGATIVE_NEWS")) return `serious negative news${by}`;
   if (code.startsWith("GOING_CONCERN")) return `doubt about its future in its filings${by}`;
   if (code.startsWith("COVENANT_WAIVER")) return `a covenant waiver${by}`;
@@ -216,9 +231,8 @@ function plainReason(code: string): string {
   if (code.startsWith("MACRO_CONVERGENCE")) return `country, industry or currency risk${by}`;
   if (code.startsWith("credit_score distress")) return `a High risk score${by}`;
   if (code.startsWith("credit_score concern")) return `an Elevated risk score${by}`;
-  if (code.startsWith("on_time_rate <50%")) return `paying on time less than half the time${by}`;
-  if (code.startsWith("on_time_rate <70%")) return `paying on time less than 70% of the time${by}`;
-  if (code.startsWith("on_time_rate <85%")) return `paying on time less than 85% of the time${by}`;
+  const onTime = code.match(/^on_time_rate <(\d+)%/)?.[1];
+  if (onTime) return onTime === "50" ? `paying on time less than half the time${by}` : `paying on time less than ${onTime}% of the time${by}`;
   return code;
 }
 
