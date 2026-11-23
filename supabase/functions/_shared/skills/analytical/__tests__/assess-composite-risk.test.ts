@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { assessCompositeRisk } from "../assess-composite-risk";
+import { POLICY_DEFAULTS } from "../../../policy/defaults";
 
 describe("assessCompositeRisk", () => {
   // ── No signals ──────────────────────────────────────────────────────────────
@@ -218,5 +219,20 @@ describe("assessCompositeRisk", () => {
       macro_dimension_count: 2,
     });
     expect(result.severity).toBe("high");
+  });
+});
+
+describe("on-time penalties follow the policy (founder 2026-11-23: one limit-use rule)", () => {
+  it("uses payments.watch_on_time_below and the composite points, not fixed numbers", () => {
+    const base = { utilization_pct: 50, active_event_types: [], agents_flagging: [], on_time_rate: 0.6 };
+    expect(assessCompositeRisk(base).adjusted_threshold).toBe(65); // 75 − 10 (below 70%)
+    const stricter = assessCompositeRisk(
+      base,
+      { ...POLICY_DEFAULTS.composite, on_time_watch_pts: 20 },
+      POLICY_DEFAULTS.limit_review,
+      { ...POLICY_DEFAULTS.payments, watch_on_time_below: 0.65 },
+    );
+    expect(stricter.adjusted_threshold).toBe(55);
+    expect(stricter.rationale).toBe("Warning signs: paying on time less than 65% of the time. No action needed now.");
   });
 });

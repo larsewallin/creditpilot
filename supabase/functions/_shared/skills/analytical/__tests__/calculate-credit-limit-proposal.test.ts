@@ -53,22 +53,11 @@ describe("calculateCreditLimitProposal", () => {
     expect(result.proposed_limit).toBe(300_000);
   });
 
-  it("strategic account high util threshold is 80pp not 70pp", () => {
-    // 75% util: triggers for non-strategic but NOT for strategic account (threshold is 80)
-    const nonStrategic = calculateCreditLimitProposal({
-      ...BASE,
-      utilization_pct: 75,
-      days_over_90: 60_000,
-      credit_score: null,
-    });
-    const strategic = calculateCreditLimitProposal({
-      ...BASE,
-      utilization_pct: 75,
-      days_over_90: 60_000,
-      credit_score: null,
-      is_strategic_account: true,
-    });
-    expect(nonStrategic.action).toBe("reduce");
+  it("one limit-use rule: acts at the threshold assess-composite-risk passes in (strategic gets its group's higher one)", () => {
+    // Founder 2026-11-23: the proposal keeps no thresholds of its own.
+    const atDefault = calculateCreditLimitProposal({ ...BASE, utilization_pct: 76, days_over_90: 60_000, credit_score: null, action_threshold_pct: 75 });
+    const strategic = calculateCreditLimitProposal({ ...BASE, utilization_pct: 76, days_over_90: 60_000, credit_score: null, is_strategic_account: true, action_threshold_pct: 85 });
+    expect(atDefault.action).toBe("reduce");
     expect(strategic.action).toBe("no_action");
   });
 
@@ -130,10 +119,10 @@ describe("calculateCreditLimitProposal", () => {
     expect(safe.reduction_pct).toBeLessThan(distress.reduction_pct);
   });
 
-  it("poor payer (on_time_rate 0.40) lowers util threshold — 60% util triggers action", () => {
-    // paymentPenalty=15 → highUtilThreshold=55; without penalty 60% would not trigger
+  it("poor payer: the lower threshold from assess-composite-risk (75 − 15 = 60) triggers action at 60%", () => {
     const result = calculateCreditLimitProposal({
       ...BASE,
+      action_threshold_pct: 60,
       utilization_pct: 60,
       days_over_90: 60_000, // 60k > 500k*10%=50k → highOverdue true
       on_time_rate: 0.40,
@@ -142,11 +131,10 @@ describe("calculateCreditLimitProposal", () => {
     expect(result.action).toBe("reduce");
   });
 
-  it("good payer (on_time_rate 0.90) at 72% util → no action (threshold stays at 70%)", () => {
-    // paymentPenalty=0 → highUtilThreshold=70; highUtil=true but no highOverdue → no branch fires
+  it("good payer at 80% util, nothing overdue, no weak score → no action (no tier fits)", () => {
     const result = calculateCreditLimitProposal({
       ...BASE,
-      utilization_pct: 72,
+      utilization_pct: 80,
       days_over_90: 0, // no overdue → highOverdue false
       on_time_rate: 0.90,
       credit_score: null,
@@ -211,12 +199,13 @@ describe("calculateCreditLimitProposal", () => {
     expect(result.action).toBe("reduce");
   });
 
-  it("F4: high (not critical) utilization + grey score + no overdue still returns no_action — the new branch requires criticalUtil", () => {
+  it("F4: limit use below the customer's action level + grey score + no overdue returns no_action", () => {
     const result = calculateCreditLimitProposal({
       ...BASE,
       current_limit: 2_000_000,
-      current_exposure: 1_500_000,
-      utilization_pct: 75, // high but not critical (threshold 85 for non-strategic, no penalty)
+      current_exposure: 1_400_000,
+      action_threshold_pct: 75,
+      utilization_pct: 70, // below the action level
       days_over_90: 0,
       credit_score: 32, // grey
       on_time_rate: 0.95, // good payer, no penalty
@@ -316,5 +305,28 @@ describe("customer in bankruptcy (founder, 2026-11-21)", () => {
   it("is not applied without a pre-petition balance", () => {
     const p = calculateCreditLimitProposal({ current_limit: 1_200_000, current_exposure: 100_000, days_over_90: 0, utilization_pct: 8, credit_score: 80 });
     expect(p.action).toBe("no_action");
+  });
+});
+
+describe("a new limit below the balance says what it means (founder 2026-11-23)", () => {
+  it("states the amount owed, the hold on new orders and what to collect first", () => {
+    const r = calculateCreditLimitProposal({
+      current_limit: 750_000, current_exposure: 929_500, days_over_90: 0, utilization_pct: 123.93,
+      credit_score: 41, on_time_rate: 0.07, action_threshold_pct: 60,
+    });
+    expect(r.action).toBe("reduce");
+    expect(r.proposed_limit).toBe(600_000);
+    expect(r.rationale).toContain("Over the limit (124% in use)");
+    expect(r.rationale).not.toContain("early-warning");
+    expect(r.rationale).toContain("The new limit is below the $929,500 owed: no new orders until the balance is under $600,000 ($329,500 to collect first).");
+  });
+
+  it("says nothing extra when the new limit is above the balance", () => {
+    const r = calculateCreditLimitProposal({
+      current_limit: 500_000, current_exposure: 300_000, days_over_90: 60_000, utilization_pct: 80,
+      credit_score: null, on_time_rate: 1, action_threshold_pct: 75,
+    });
+    expect(r.action).toBe("reduce");
+    expect(r.rationale).not.toContain("no new orders");
   });
 });

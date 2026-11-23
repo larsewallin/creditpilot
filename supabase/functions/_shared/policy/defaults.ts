@@ -53,15 +53,16 @@ export const POLICY_DEFAULTS = {
     /** Below the limit, high use is an alert only with a weak signal: a score below this (Watch or lower), or payments at risk / deteriorating. */
     weak_score_below: 55,
   },
-  /** Limit reduction proposals for existing customers (calculate-credit-limit-proposal). */
+  /**
+   * Limit reduction proposals for existing customers (calculate-credit-limit-proposal).
+   * WHETHER to act on limit use is decided once, by composite.base_threshold_pct lowered by the
+   * customer's signals (founder 2026-11-23: one limit-use rule); these rules decide how much.
+   */
   limit_review: {
     // On CreditPilot's one scale (score_scale.ts): High risk below 25, Elevated risk 25–39.
     distress_score_below: 25,
     concern_score_up_to: 39,
     high_overdue_pct_of_limit: 10,
-    high_utilization_pct: 70,
-    critical_utilization_pct: 85,
-    strategic_latitude_pct: 10,
     max_reduction_usd: 1_000_000,
     /** No single proposal cuts a limit by more than this %. */
     max_reduction_pct: 50,
@@ -78,7 +79,11 @@ export const POLICY_DEFAULTS = {
     rejection_quiet_days: 30,
     reopen_extra_cut_pct: 10,
   },
-  /** Composite risk across agents (assess-composite-risk). */
+  /**
+   * When to act on limit use (assess-composite-risk), the one limit-use rule for proposals:
+   * act at base_threshold_pct, lowered by the points of each open signal (never below floor_pct).
+   * Alerts on limit use are a separate, earlier warning (utilization.*).
+   */
   composite: {
     base_threshold_pct: 75,
     floor_pct: 40,
@@ -91,6 +96,12 @@ export const POLICY_DEFAULTS = {
     macro_three_dimensions_pts: 10,
     distress_score_pts: 15,
     concern_score_pts: 5,
+    /** Paid on time less than half the time. */
+    on_time_below_half_pts: 15,
+    /** Paid on time less than payments.watch_on_time_below. */
+    on_time_watch_pts: 10,
+    /** Paid on time less than payments.at_risk_on_time_below. */
+    on_time_at_risk_pts: 5,
   },
   /** A change in a customer's own score (detect-rating-change). */
   score_change: {
@@ -131,7 +142,7 @@ export const POLICY_GROUP_DEFAULTS: Record<string, PolicyGroup> = {
   strategic: {
     name: "Strategic",
     note: "Key accounts: more room on limit use before a cut, and smaller cuts.",
-    overrides: { limit_review: { high_utilization_pct: 80, critical_utilization_pct: 95, max_reduction_pct: 20 } },
+    overrides: { composite: { base_threshold_pct: 85 }, limit_review: { max_reduction_pct: 20 } },
   },
   high_risk: {
     name: "High risk",

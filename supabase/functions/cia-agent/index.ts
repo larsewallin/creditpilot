@@ -2498,7 +2498,7 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one plain sentence 
       agents_flagging: agentsSeen,
       on_time_rate: onTimeRate,
       macro_dimension_count: macroDims || undefined,
-    }, rules.composite, rules.limit_review);
+    }, rules.composite, rules.limit_review, rules.payments);
 
     // Policy (founder, 2026-11-21): a High risk score always gets a proposal for a person to review.
     const highRisk = creditScore !== null && creditScore < rules.limit_review.distress_score_below;
@@ -2512,8 +2512,12 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one plain sentence 
       utilization_pct: utilizationPct,
       credit_score: creditScore,
       on_time_rate: onTimeRate,
+      is_strategic_account: (customer as any).policy_group === "strategic",
+      // One limit-use rule (founder 2026-11-23): the composite's threshold decides, here too.
+      action_threshold_pct: riskAssessment.adjusted_threshold,
+      critical_utilization_pct: rules.utilization.critical_pct,
       pre_petition_usd: bankrupt ? prePetition.get(custId) : null,
-    }, rules.limit_review);
+    }, rules.limit_review, rules.payments);
 
     if (proposal.action !== "reduce") continue;
 
