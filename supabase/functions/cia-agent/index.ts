@@ -298,7 +298,8 @@ function buildHighRiskListBlock(
   const totalCreditLimit = lines.reduce((sum, { customer: c }) => sum + (c.credit_limit ?? 0), 0);
   const totalExposure = lines.reduce((sum, { customer: c }) => sum + (c.current_exposure ?? 0), 0);
   const bullets = lines.map(({ tag, customer: c }) =>
-    `- **${sanitize(c.company_name)}** — credit_score=${c.credit_rating_score ?? "NR"}/100, scenario=${sanitize(c.scenario) || "N/A"}, exposure $${c.current_exposure?.toLocaleString()} [${tag}]`
+    // Shown to the user as it stands: plain words, never field names or the demo's scenario label.
+    `- **${sanitize(c.company_name)}**: ${c.credit_rating_score != null ? `score ${c.credit_rating_score}/100 (${scoreBand(c.credit_rating_score)?.label ?? "no label"})` : "no score"}, exposure $${c.current_exposure?.toLocaleString()} [${tag}]`
   ).join("\n");
   return `**${lines.length} customer${lines.length === 1 ? "" : "s"}** currently meet the high-risk criteria (combined credit limit $${totalCreditLimit.toLocaleString()}, combined exposure $${totalExposure.toLocaleString()}):\n${bullets}`;
 }

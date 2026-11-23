@@ -58,7 +58,7 @@ const overdueInvoices = (name) => col(`select i.invoice_number from invoices i j
 // days_overdue column is not kept current).
 const oldestOverdue = (name) => Number(one(`select coalesce(max(greatest(current_date - i.due_date, 0)),0) from invoices i join customers c on c.id = i.customer_id where c.company_name ilike '${name}%' and i.outstanding_amount > 0 and i.status::text is distinct from 'pre_petition'`));
 const C = {
-  marlow: cust("Marlow Industrial Castings"), carrick: cust("Carrick"), calloway: cust("Calloway"), solenne: cust("Solenne"), dunmore: cust("Dunmore"), brennecke: cust("Brennecke"),
+  marlow: cust("Marlow Industrial Castings"), marlowFye: one(`select financials_fye from customers where company_name ilike 'Marlow Industrial Castings%'`), carrick: cust("Carrick"), calloway: cust("Calloway"), solenne: cust("Solenne"), dunmore: cust("Dunmore"), brennecke: cust("Brennecke"),
   carrickPay: pay("Carrick"), brightwaterPay: pay("Brightwater"), carrickAging: aging("Carrick"), marlowAging: aging("Marlow Industrial Castings"),
   carrickLast: lastPay("Carrick"), marlowOverdue: overdueInvoices("Marlow Industrial Castings"),
   marlowOverdueAmt: Number(one(`select coalesce(sum(i.outstanding_amount),0) from invoices i join customers c on c.id = i.customer_id where c.company_name ilike 'Marlow Industrial Castings%' and i.due_date < current_date and i.outstanding_amount > 0 and i.status::text is distinct from 'pre_petition'`)), marlowOldest: oldestOverdue("Marlow Industrial Castings"),
@@ -162,7 +162,7 @@ const CASES = [
   { q: "List Marlow Industrial Castings' overdue invoices.", check: (a) => C.marlowOverdue.map((n) => a.includes(n) || `invoice ${n} missing`) },
   { q: "What is Marlow Industrial Castings' credit utilization?", check: (a) => [hasNumber(a, Math.round(Number(C.marlow[7]) / Number(C.marlow[6]) * 1000) / 10) || hasNumber(a, Math.round(Number(C.marlow[7]) / Number(C.marlow[6]) * 100)) || "utilization missing"] },
   { q: "What is our total exposure to customers in Germany?", check: (a) => [hasNumber(a, C.germany) || `Germany exposure ${C.germany} missing`] },
-  { q: "On average, how many days late do customers pay?", check: (a) => [hasNumber(a, C.portfolioDaysLate) || `portfolio avg ${C.portfolioDaysLate} missing`] },
+  { q: "On average, how many days late do customers pay?", check: (a) => [hasNumber(a, C.portfolioDaysLate) || (C.portfolioDaysLate < 0 && hasNumber(a, -C.portfolioDaysLate) && /early/i.test(a)) || `portfolio avg ${C.portfolioDaysLate} missing`] },
   { q: "Which customers' payments are getting worse?", check: (a) => C.deteriorating.map((n) => mentions(a, n) || `${n} (deteriorating) missing`) },
   { q: "Which customers are flagged by three or more agents?", check: () => [] },
   { q: "Should we be worried about Calloway Defense Systems?", check: () => [] },
@@ -174,7 +174,8 @@ const CASES = [
   { q: "What should I do about Brightwater Retail Fixtures?", check: (a) => advice(a) },
   { q: "Should we extend Marlow Industrial Castings' payment terms to 60 days? Do we need collateral?", check: (a) => [
       ...advice(a, { asksTier3: true }),
-      /financial|accounts/i.test(a) || "should suggest asking for Marlow Industrial Castings' latest accounts (none on file)"] },
+      // Ask for the latest accounts only where none are on file (Marlow's are recent).
+      C.marlowFye || /financial|accounts/i.test(a) || "should suggest asking for Marlow Industrial Castings' latest accounts (none on file)"] },
   { q: "Can we raise Calloway Defense Systems' credit limit?", check: (a) => advice(a) },
   { q: "Is Carrick Process Equipment safe to extend more credit to?", check: (a) => advice(a) },
   { q: "Should we approve the proposed actions for Solenne?", check: (a) => advice(a) },
@@ -216,7 +217,10 @@ let failed = 0;
 const summary = [];
 for (const [i, c] of CASES.entries()) {
   const answer = await ask(c.q, c.previous, c.history);
-  const problems = c.check(answer).filter((x) => x !== true);
+  // Every answer: no database field names or demo labels shown to the user (2026-11-23: a
+  // spliced list printed "credit_score=64/100, scenario=payment_issues").
+  const raw = answer.match(/\b[a-z]+(?:_[a-z]+)+=|\bscenario\b/);
+  const problems = [...c.check(answer), raw ? `shows a raw field: ${raw[0]}` : true].filter((x) => x !== true);
   if (/\[(OFFICIAL|[CIPNFEUM]\d+)/.test(answer)) problems.push("internal tag shown in the answer");
   else if (/\[(?!\d{1,3}\])[^\]]+\](?!\()/.test(answer)) problems.push("bracketed text in the answer (looks like a citation label)");
   failed += problems.length ? 1 : 0;
