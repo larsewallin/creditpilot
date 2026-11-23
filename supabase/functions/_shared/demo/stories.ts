@@ -93,7 +93,7 @@ export const DEMO_CUSTOMERS: DemoCustomer[] = [
   { n: 32, name: "Pellham Freight Group Inc", story: "over_limit", country: "US", city: "Columbus, OH", industry: "Logistics", terms: 30, invoice: 55_000, cadence: 7, limitUse: 112, score: 61, sinceYear: 2021,
     expect: { events: ["UTILIZATION_THRESHOLD_BREACH"], proposal: "none" } },
   { n: 33, name: "Thornbury Electrical Supply Inc", story: "news_shock", country: "US", city: "Indianapolis", industry: "Electrical distribution", terms: 45, invoice: 110_000, cadence: 10, limitUse: 84, score: 62, sinceYear: 2015,
-    expect: { events: ["NEWS_EVENT"], proposal: "cut", proposalNeedsNews: true } },
+    expect: { events: ["NEWS_EVENT"], proposal: "none" } }, // one warning sign on a good payer: watched, not cut (the policy; seen live 2026-11-23)
   { n: 34, name: "Ellsworth Plastics Molding Inc", story: "news_shock", country: "US", city: "Grand Rapids", industry: "Plastics", terms: 45, invoice: 50_000, cadence: 14, limitUse: 47, score: 59, sinceYear: 2019,
     expect: { events: ["NEWS_EVENT"], proposal: "none" } },
   { n: 35, name: "Solenne Battery Technologies Inc", story: "going_concern", country: "US", city: "Reno", industry: "Energy storage", terms: 30, invoice: 70_000, cadence: 14, limitUse: 72, score: 21, previousScore: 44, sinceYear: 2021,

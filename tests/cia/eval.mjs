@@ -41,8 +41,8 @@ const truth = {
   customerCount: Number(one(`select count(*) from customers where ${ACTIVE}`)),
   lowest3: col(`select company_name from customers where ${ACTIVE} and credit_rating_score is not null order by credit_rating_score asc, company_name limit 3`),
   over60: col(`select distinct c.company_name from invoices i join customers c on c.id = i.customer_id where c.${ACTIVE} and i.outstanding_amount > 0 and current_date - i.due_date > 60 and i.status::text is distinct from 'pre_petition' order by 1`),
-  heliogenOverdue: Number(one(`select coalesce(sum(i.outstanding_amount),0) from invoices i join customers c on c.id = i.customer_id where c.company_name ilike 'Heliogen%' and i.due_date < current_date and i.outstanding_amount > 0 and i.status::text is distinct from 'pre_petition'`)),
-  arconic: sql(`select credit_limit, current_exposure from customers where company_name ilike 'Arconic%'`)[0]?.map(Number),
+  solenneOverdue: Number(one(`select coalesce(sum(i.outstanding_amount),0) from invoices i join customers c on c.id = i.customer_id where c.company_name ilike 'Solenne%' and i.due_date < current_date and i.outstanding_amount > 0 and i.status::text is distinct from 'pre_petition'`)),
+  marlow: sql(`select credit_limit, current_exposure from customers where company_name ilike 'Marlow Industrial Castings%'`)[0]?.map(Number),
   pendingCount: Number(one("select count(*) from pending_actions where status = 'pending' and is_demo")),
   prePetition: col(`select distinct c.company_name from invoices i join customers c on c.id = i.customer_id where i.status = 'pre_petition' and i.outstanding_amount > 0 order by 1`),
   aerospace: Number(one(`select coalesce(sum(current_exposure),0) from customers where ${ACTIVE} and sector = 'Aerospace & Defense'`)),
@@ -58,10 +58,10 @@ const overdueInvoices = (name) => col(`select i.invoice_number from invoices i j
 // days_overdue column is not kept current).
 const oldestOverdue = (name) => Number(one(`select coalesce(max(greatest(current_date - i.due_date, 0)),0) from invoices i join customers c on c.id = i.customer_id where c.company_name ilike '${name}%' and i.outstanding_amount > 0 and i.status::text is distinct from 'pre_petition'`));
 const C = {
-  arconic: cust("Arconic"), triumph: cust("Triumph"), lockheed: cust("Lockheed"), heliogen: cust("Heliogen"), kaman: cust("Kaman"), nordsee: cust("Nordsee"),
-  triumphPay: pay("Triumph"), brixtonPay: pay("Brixton"), triumphAging: aging("Triumph"), arconicAging: aging("Arconic"),
-  triumphLast: lastPay("Triumph"), arconicOverdue: overdueInvoices("Arconic"),
-  arconicOverdueAmt: Number(one(`select coalesce(sum(i.outstanding_amount),0) from invoices i join customers c on c.id = i.customer_id where c.company_name ilike 'Arconic%' and i.due_date < current_date and i.outstanding_amount > 0 and i.status::text is distinct from 'pre_petition'`)), arconicOldest: oldestOverdue("Arconic"),
+  marlow: cust("Marlow Industrial Castings"), marlowFye: one(`select financials_fye from customers where company_name ilike 'Marlow Industrial Castings%'`), carrick: cust("Carrick"), calloway: cust("Calloway"), solenne: cust("Solenne"), dunmore: cust("Dunmore"), brennecke: cust("Brennecke"),
+  carrickPay: pay("Carrick"), brightwaterPay: pay("Brightwater"), carrickAging: aging("Carrick"), marlowAging: aging("Marlow Industrial Castings"),
+  carrickLast: lastPay("Carrick"), marlowOverdue: overdueInvoices("Marlow Industrial Castings"),
+  marlowOverdueAmt: Number(one(`select coalesce(sum(i.outstanding_amount),0) from invoices i join customers c on c.id = i.customer_id where c.company_name ilike 'Marlow Industrial Castings%' and i.due_date < current_date and i.outstanding_amount > 0 and i.status::text is distinct from 'pre_petition'`)), marlowOldest: oldestOverdue("Marlow Industrial Castings"),
   eur: Number(one("select coalesce(sum(outstanding_amount),0) from invoices where outstanding_amount > 0 and currency = 'EUR'")),
   germany: Number(one(`select coalesce(sum(current_exposure),0) from customers where ${ACTIVE} and country_code = 'DE'`)),
   portfolioDaysLate: Number(one("select avg_days_early_late from v_payment_behaviour_portfolio")),
@@ -134,74 +134,76 @@ const CASES = [
   { q: "How many customers do we have?", check: (a) => [hasNumber(a, truth.customerCount) || `customer count ${truth.customerCount} not in answer`] },
   { q: "Which three customers have the lowest credit scores?", check: (a) => truth.lowest3.map((n) => mentions(a, n) || `${n} (lowest score) missing`) },
   { q: "Which customers have invoices more than 60 days overdue?", check: (a) => truth.over60.map((n) => mentions(a, n) || `${n} (61+ days) missing`) },
-  { q: "How much does Heliogen owe us that is overdue?", check: (a) => [hasNumber(a, truth.heliogenOverdue) || `Heliogen overdue ${truth.heliogenOverdue} not in answer`] },
-  { q: "What is Arconic's credit limit and current balance?", check: (a) => truth.arconic ? [
-      hasNumber(a, truth.arconic[0]) || `limit ${truth.arconic[0]} missing`, hasNumber(a, truth.arconic[1]) || `balance ${truth.arconic[1]} missing`] : [] },
+  { q: "How much does Solenne owe us that is overdue?", check: (a) => [hasNumber(a, truth.solenneOverdue) || `Solenne overdue ${truth.solenneOverdue} not in answer`] },
+  { q: "What is Marlow Industrial Castings' credit limit and current balance?", check: (a) => truth.marlow ? [
+      hasNumber(a, truth.marlow[0]) || `limit ${truth.marlow[0]} missing`, hasNumber(a, truth.marlow[1]) || `balance ${truth.marlow[1]} missing`] : [] },
   { q: "How many proposed actions are waiting for approval?", check: (a) => [hasNumber(a, truth.pendingCount) || `pending count ${truth.pendingCount} not in answer`] },
   { q: "Which customers are in bankruptcy?", check: (a) => truth.prePetition.map((n) => mentions(a, n) || `${n} (pre-petition) missing`) },
   { q: "What is our total exposure to the aerospace sector?", check: (a) => [hasNumber(a, truth.aerospace) || `aerospace exposure ${truth.aerospace} not in answer`] },
   // ── Customer level: what a user sees on Customers, AR Aging and Payment Behaviour ──
-  { q: "What are Arconic's payment terms?", check: (a) => [hasNumber(a, Number(C.arconic[0])) || `terms ${C.arconic[0]} days missing`] },
-  { q: "What is Lockheed Martin's credit score and rating?", check: (a) => [
-      hasNumber(a, Number(C.lockheed[1])) || `score ${C.lockheed[1]} missing`, !C.lockheed[2] || a.replace(/\u2212/g, "-").includes(C.lockheed[2]) || `rating ${C.lockheed[2]} missing`] },
-  { q: "What was Heliogen's previous credit score, and what is it now?", check: (a) => [
-      hasNumber(a, Number(C.heliogen[3])) || `previous score ${C.heliogen[3]} missing`, hasNumber(a, Number(C.heliogen[1])) || `score ${C.heliogen[1]} missing`] },
-  { q: "Who is the account manager for Kaman?", check: (a) => [!C.kaman[4] || a.includes(C.kaman[4].split(" ")[0]) || `account manager ${C.kaman[4]} missing`] },
-  { q: "What currency does Nordsee Erdgas invoice in?", check: (a) => [!C.nordsee[5] || a.includes(C.nordsee[5]) || /euro/i.test(a) || `currency ${C.nordsee[5]} missing`] },
-  { q: "How late does Triumph Group pay now compared with before?", check: (a) => [
-      hasNumber(a, C.triumphPay[0]) || `current avg days late ${C.triumphPay[0]} missing`, hasNumber(a, C.triumphPay[1]) || `prior ${C.triumphPay[1]} missing`] },
-  { q: "What is Brixton Fasteners' on-time payment rate?", check: (a) => [
-      hasNumber(a, C.brixtonPay[2]) || hasNumber(a, C.brixtonPay[3]) || `on-time rate ${C.brixtonPay[2]}% (recent) or ${C.brixtonPay[3]}% (all time) missing`] },
-  { q: "When did Triumph Group last pay us, and how late was it?", check: (a) => [
-      (C.triumphLast[0] && (a.includes(C.triumphLast[0]) || a.includes(new Date(C.triumphLast[0]).toLocaleDateString("en-US", { month: "long", day: "numeric", timeZone: "UTC" })))) || `last payment ${C.triumphLast[0]} missing`,
-      hasNumber(a, Math.abs(Number(C.triumphLast[1]))) || `days late ${C.triumphLast[1]} missing`] },
-  { q: "Show Triumph Group's AR aging by bucket.", check: (a) => C.triumphAging.slice(0, 4).filter((v) => v > 0).map((v) => hasNumber(a, v) || `bucket ${v} missing`) },
-  { q: "How many open invoices does Arconic have, and how overdue is the oldest?", check: (a) => [
-      hasNumber(a, C.arconicAging[5]) || `invoice count ${C.arconicAging[5]} missing`, hasNumber(a, C.arconicOldest) || `oldest ${C.arconicOldest} days missing`] },
-  { q: "How much does Arconic owe us that is past due?", check: (a) => [hasNumber(a, C.arconicOverdueAmt) || `Arconic overdue ${C.arconicOverdueAmt} missing`] },
-  { q: "List Arconic's overdue invoices.", check: (a) => C.arconicOverdue.map((n) => a.includes(n) || `invoice ${n} missing`) },
-  { q: "What is Arconic's credit utilization?", check: (a) => [hasNumber(a, Math.round(Number(C.arconic[7]) / Number(C.arconic[6]) * 1000) / 10) || hasNumber(a, Math.round(Number(C.arconic[7]) / Number(C.arconic[6]) * 100)) || "utilization missing"] },
+  { q: "What are Marlow Industrial Castings' payment terms?", check: (a) => [hasNumber(a, Number(C.marlow[0])) || `terms ${C.marlow[0]} days missing`] },
+  { q: "What is Calloway Defense Systems' credit score and rating?", check: (a) => [
+      hasNumber(a, Number(C.calloway[1])) || `score ${C.calloway[1]} missing`, !C.calloway[2] || a.replace(/\u2212/g, "-").includes(C.calloway[2]) || `rating ${C.calloway[2]} missing`] },
+  { q: "What was Solenne's previous credit score, and what is it now?", check: (a) => [
+      hasNumber(a, Number(C.solenne[3])) || `previous score ${C.solenne[3]} missing`, hasNumber(a, Number(C.solenne[1])) || `score ${C.solenne[1]} missing`] },
+  { q: "Who is the account manager for Dunmore?", check: (a) => [!C.dunmore[4] || a.includes(C.dunmore[4].split(" ")[0]) || `account manager ${C.dunmore[4]} missing`] },
+  { q: "What currency does Brennecke Antriebstechnik invoice in?", check: (a) => [!C.brennecke[5] || a.includes(C.brennecke[5]) || /euro/i.test(a) || `currency ${C.brennecke[5]} missing`] },
+  { q: "How late does Carrick Process Equipment pay now compared with before?", check: (a) => [
+      hasNumber(a, C.carrickPay[0]) || `current avg days late ${C.carrickPay[0]} missing`, hasNumber(a, C.carrickPay[1]) || `prior ${C.carrickPay[1]} missing`] },
+  { q: "What is Brightwater Retail Fixtures' on-time payment rate?", check: (a) => [
+      hasNumber(a, C.brightwaterPay[2]) || hasNumber(a, C.brightwaterPay[3]) || `on-time rate ${C.brightwaterPay[2]}% (recent) or ${C.brightwaterPay[3]}% (all time) missing`] },
+  { q: "When did Carrick Process Equipment last pay us, and how late was it?", check: (a) => [
+      (C.carrickLast[0] && (a.includes(C.carrickLast[0]) || a.includes(new Date(C.carrickLast[0]).toLocaleDateString("en-US", { month: "long", day: "numeric", timeZone: "UTC" })))) || `last payment ${C.carrickLast[0]} missing`,
+      hasNumber(a, Math.abs(Number(C.carrickLast[1]))) || `days late ${C.carrickLast[1]} missing`] },
+  { q: "Show Carrick Process Equipment's AR aging by bucket.", check: (a) => C.carrickAging.slice(0, 4).filter((v) => v > 0).map((v) => hasNumber(a, v) || `bucket ${v} missing`) },
+  { q: "How many open invoices does Marlow Industrial Castings have, and how overdue is the oldest?", check: (a) => [
+      hasNumber(a, C.marlowAging[5]) || `invoice count ${C.marlowAging[5]} missing`, hasNumber(a, C.marlowOldest) || `oldest ${C.marlowOldest} days missing`] },
+  { q: "How much does Marlow Industrial Castings owe us that is past due?", check: (a) => [hasNumber(a, C.marlowOverdueAmt) || `Marlow Industrial Castings overdue ${C.marlowOverdueAmt} missing`] },
+  { q: "List Marlow Industrial Castings' overdue invoices.", check: (a) => C.marlowOverdue.map((n) => a.includes(n) || `invoice ${n} missing`) },
+  { q: "What is Marlow Industrial Castings' credit utilization?", check: (a) => [hasNumber(a, Math.round(Number(C.marlow[7]) / Number(C.marlow[6]) * 1000) / 10) || hasNumber(a, Math.round(Number(C.marlow[7]) / Number(C.marlow[6]) * 100)) || "utilization missing"] },
   { q: "What is our total exposure to customers in Germany?", check: (a) => [hasNumber(a, C.germany) || `Germany exposure ${C.germany} missing`] },
-  { q: "On average, how many days late do customers pay?", check: (a) => [hasNumber(a, C.portfolioDaysLate) || `portfolio avg ${C.portfolioDaysLate} missing`] },
+  { q: "On average, how many days late do customers pay?", check: (a) => [hasNumber(a, C.portfolioDaysLate) || (C.portfolioDaysLate < 0 && hasNumber(a, -C.portfolioDaysLate) && /early/i.test(a)) || `portfolio avg ${C.portfolioDaysLate} missing`] },
   { q: "Which customers' payments are getting worse?", check: (a) => C.deteriorating.map((n) => mentions(a, n) || `${n} (deteriorating) missing`) },
   { q: "Which customers are flagged by three or more agents?", check: () => [] },
-  { q: "Should we be worried about Lockheed Martin?", check: () => [] },
+  { q: "Should we be worried about Calloway Defense Systems?", check: () => [] },
   { q: "Tell me about Acme Widgets Corp", check: (a) => [/don'?t have (?:that |any )?information|not (?:in|among) (?:our|the) (?:portfolio|customers)/i.test(a) || "should say it has no information",
       !/please let me know|could you (?:share|provide)/i.test(a) || "asks the user for information"] },
   { q: "What is our FX exposure by currency?", check: (a) => [hasNumber(a, C.eur) || `EUR open receivables ${C.eur} (USD) missing`] },
   { q: "Which customers improved recently?", check: () => [] },
   // ── Advice: answer first, then Suggested next steps CreditPilot can act on ──
-  { q: "What should I do about Brixton Fasteners?", check: (a) => advice(a) },
-  { q: "Should we extend Arconic's payment terms to 60 days? Do we need collateral?", check: (a) => [
+  { q: "What should I do about Brightwater Retail Fixtures?", check: (a) => advice(a) },
+  { q: "Should we extend Marlow Industrial Castings' payment terms to 60 days? Do we need collateral?", check: (a) => [
       ...advice(a, { asksTier3: true }),
-      /financial|accounts/i.test(a) || "should suggest asking for Arconic's latest accounts (none on file)"] },
-  { q: "Can we raise Lockheed Martin's credit limit?", check: (a) => advice(a) },
-  { q: "Is Triumph Group safe to extend more credit to?", check: (a) => advice(a) },
-  { q: "Should we approve the proposed actions for Heliogen?", check: (a) => advice(a) },
-  { q: "Do we have credit insurance on Kaman?", check: (a) => [
+      // Ask for the latest accounts only where none are on file (Marlow's are recent).
+      C.marlowFye || /financial|accounts/i.test(a) || "should suggest asking for Marlow Industrial Castings' latest accounts (none on file)"] },
+  { q: "Can we raise Calloway Defense Systems' credit limit?", check: (a) => advice(a) },
+  { q: "Is Carrick Process Equipment safe to extend more credit to?", check: (a) => advice(a) },
+  { q: "Should we approve the proposed actions for Solenne?", check: (a) => advice(a) },
+  { q: "Do we have credit insurance on Dunmore?", check: (a) => [
       !/^\W*I don't have/i.test(a) || "opens with what is missing", /insurance/i.test(a) || "should say credit insurance is not tracked"] },
   // A thread: the earlier turns go with the question, so "their" means the customer asked about.
-  { q: "Is that more than their limit allows for?", history: [{ question: "What is Arconic's current balance?", answer: "Arconic's current balance is $2,750,000." }],
-    check: (a) => [/arconic/i.test(a) || "lost the customer from the thread", /\$3,000,000|3\.0 ?M|\$3M/i.test(a) || "no credit limit",
-      !/^\W*yes\b/i.test(a) || "says yes: the balance is under the limit (92% used)",
-      (last.customers ?? []).some((c) => /arconic/i.test(c.company_name)) || "no customer for the actions under the answer"] },
+  { q: "Is that more than their limit allows for?", history: [{ question: "What is Marlow Industrial Castings' current balance?", answer: `Marlow Industrial Castings' current balance is $${Number(C.marlow[7]).toLocaleString("en-US")}.` }],
+    check: (a) => [/marlow/i.test(a) || "lost the customer from the thread", hasNumber(a, Number(C.marlow[6])) || "no credit limit",
+      !/^\W*yes\b/i.test(a) || "says yes: the balance is under the limit",
+      (last.customers ?? []).some((c) => /marlow/i.test(c.company_name)) || "no customer for the actions under the answer"] },
   // Charts are computed in code from the rows read: one named customer gets its payment trend.
-  { q: "How late does Arconic pay now compared with before?", check: () => [
+  { q: "How late does Marlow Industrial Castings pay now compared with before?", check: () => [
       (last.charts ?? []).some((c) => /days late/.test(c.title) && c.rows.length === 2) || "no payment-trend chart"] },
   // Scores on CreditPilot's scale (founder 2026-11-19): 58 is Adequate, not a reason to cut a limit;
   // an agency's watch is a long-term view, not a reason on its own.
-  { q: "Should I reduce Arconic's credit limit?", check: (a) => [
-      /adequate/i.test(a) || "58/100 not described as Adequate",
-      !/58[^.\n]{0,60}\b(elevated|weak|poor|high|concerning)\b/i.test(a) || "calls a 58 score risky",
+  { q: "Should I reduce Dunmore Machine Tool's credit limit?", check: (a) => [
+      /adequate/i.test(a) || `${C.dunmore[1]}/100 not described as Adequate`,
+      !new RegExp(`${C.dunmore[1]}[^.\\n]{0,60}\\b(elevated|weak|poor|high|concerning)\\b`, "i").test(a) || `calls a ${C.dunmore[1]} score risky`,
       !/negative watch[^.\n]{0,80}\b(reason|justif|warrant)/i.test(a) || "uses the agency watch as a reason"] },
   // ── CIA v2: live web research next to the ledger, each web fact cited to its page ──
-  { q: "What's the latest news on American Airlines, and how exposed are we?", check: (a) => [
+  // The demo companies are fictional, so the web question is about a market, not a customer.
+  { q: "Where are steel prices heading, and which of our customers are exposed?", check: (a) => [
       /\$[\d,.]+/.test(a) || "no exposure figure from our data",
       (last.sources ?? []).some((s) => s.source_type === "web" && /^https?:/.test(s.url ?? "")) || "no web page cited",
       (last.sources ?? []).every((s, i) => s.n === i + 1) || "citation numbers out of order"] },
   // A follow-up that names no company carries the earlier question's company over.
-  { q: "And how do they pay?", previous: "What is Arconic's credit limit and current balance?", check: (a) => [
-      /arconic/i.test(a) || "lost the company from the earlier question", /on.?time|late|days/i.test(a) || "no payment facts"] },
+  { q: "And how do they pay?", previous: "What is Marlow Industrial Castings' credit limit and current balance?", check: (a) => [
+      /marlow/i.test(a) || "lost the company from the earlier question", /on.?time|late|days/i.test(a) || "no payment facts"] },
   { q: "Summarize the portfolio's credit risk in three sentences.", check: () => [] },
   // ── Trade Credit Policy: the CIA states the company's own rule with its value ──
   { q: "How many days late can a customer pay and still count as on time?", check: (a) => [
@@ -215,7 +217,10 @@ let failed = 0;
 const summary = [];
 for (const [i, c] of CASES.entries()) {
   const answer = await ask(c.q, c.previous, c.history);
-  const problems = c.check(answer).filter((x) => x !== true);
+  // Every answer: no database field names or demo labels shown to the user (2026-11-23: a
+  // spliced list printed "credit_score=64/100, scenario=payment_issues").
+  const raw = answer.match(/\b[a-z]+(?:_[a-z]+)+=|\bscenario\b/);
+  const problems = [...c.check(answer), raw ? `shows a raw field: ${raw[0]}` : true].filter((x) => x !== true);
   if (/\[(OFFICIAL|[CIPNFEUM]\d+)/.test(answer)) problems.push("internal tag shown in the answer");
   else if (/\[(?!\d{1,3}\])[^\]]+\](?!\()/.test(answer)) problems.push("bracketed text in the answer (looks like a citation label)");
   failed += problems.length ? 1 : 0;
