@@ -1,0 +1,77 @@
+name: Demo stories
+
+# Loads the demo portfolio (supabase/functions/_shared/demo/stories.ts) into a throwaway local
+# install, runs the agents the way the daily demo refresh does (no assistant call: the CIA runs
+# with skip_briefing), and checks every customer shows exactly its story: the expected events and
+# proposal, nothing on the quiet ones (scripts/demo-story-check.mjs). Nothing here touches the
+# hosted project and nothing costs money.
+
+on:
+  pull_request:
+    paths:
+      - supabase/functions/**
+      - scripts/demo-load.mjs
+      - scripts/demo-story-check.mjs
+      - .github/workflows/demo-stories.yml
+  schedule:
+    - cron: "37 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # The public AWS registry has a download quota that repeated runs can exhaust ("Data limit
+  # exceeded"); the same Supabase images are on Docker Hub.
+  SUPABASE_INTERNAL_IMAGE_REGISTRY: docker.io
+
+jobs:
+  stories:
+    name: Demo stories (local stack)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Postgres client
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client >/dev/null
+      - name: Set up CreditPilot (demo)
+        run: scripts/setup-local.sh
+      - name: Replace the old demo data with the stories
+        run: |
+          eval "$(npx --yes supabase@3.1.0 status -o env | grep -E '^(API_URL|DB_URL|SERVICE_ROLE_KEY)=')"
+          psql "$DB_URL" -q -c "truncate customers, seed_news, seed_sec_filings, credit_events, pending_actions cascade"
+          SUPABASE_URL="$API_URL" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" node --experimental-strip-types scripts/demo-load.mjs
+      - name: Run the agents as the daily refresh does
+        run: |
+          npx --yes supabase@3.1.0 functions serve --env-file supabase/functions/.env.local > /tmp/functions.log 2>&1 &
+          eval "$(npx --yes supabase@3.1.0 status -o env | grep -E '^(API_URL|ANON_KEY)=')"
+          SECRET="$(sed -n 's/^SCHEDULER_SECRET=//p' supabase/functions/.env.local)"
+          # Ready when the scheduler answers 200 (as in Fresh install); the image pull can be slow.
+          for i in $(seq 1 90); do
+            CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 -X POST "$API_URL/functions/v1/agent-scheduler" -H "x-scheduler-secret: $SECRET" -H 'Content-Type: application/json' --data '{"dry_run":true}' || true)"
+            [ "$CODE" = 200 ] && break; sleep 5
+          done
+          [ "$CODE" = 200 ] || { tail -40 /tmp/functions.log; echo "::error::functions did not start"; exit 1; }
+          call() {
+            code="$(curl -s -o "/tmp/$1.json" -w '%{http_code}' --max-time 300 -X POST "$API_URL/functions/v1/$1" -H "Authorization: Bearer $ANON_KEY" -H "apikey: $ANON_KEY" -H 'Content-Type: application/json' --data "$2" || echo timeout)"
+            echo "$1 $code $(head -c 300 "/tmp/$1.json" 2>/dev/null)"
+          }
+          pids=""
+          for fn in ar-aging-agent news-monitor-agent sec-monitor-agent payment-behaviour-agent industry-risk-agent credit-rating-agent country-risk-agent fx-risk-agent; do
+            call "$fn" '{"triggered_by":"auto"}' & pids="$pids $!"
+          done
+          wait $pids   # only the agent calls: a bare wait would also wait for functions serve
+          call risk-agent '{"triggered_by":"auto"}'
+          call cia-agent '{"skip_briefing":true,"triggered_by":"auto"}'
+      - name: Check every story
+        run: |
+          eval "$(npx --yes supabase@3.1.0 status -o env | grep -E '^(API_URL|SERVICE_ROLE_KEY)=')"
+          SUPABASE_URL="$API_URL" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" node --experimental-strip-types scripts/demo-story-check.mjs --no-assistant
+      - name: Functions log (on failure)
+        if: failure()
+        run: grep -iE "error|fail" /tmp/functions.log | tail -60

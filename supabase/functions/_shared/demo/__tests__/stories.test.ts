@@ -52,7 +52,7 @@ describe("demo portfolio: every page agrees", () => {
   });
   it("exposure = open invoices, and the limit gives the story's limit use (within 5 points)", () => {
     for (const c of demo.customers) {
-      const o = open(c.id as string).reduce((s, i) => s + (i.amount_outstanding as number), 0);
+      const o = open(c.id as string).reduce((s, i) => s + (i.outstanding_amount as number), 0);
       expect(c.current_exposure).toBe(o);
       const story = DEMO_CUSTOMERS.find((d) => demoCustomerId(d.n) === c.id)!;
       expect(Math.abs((o / (c.credit_limit as number)) * 100 - story.limitUse)).toBeLessThan(5);
@@ -124,5 +124,19 @@ describe("demo portfolio: the stories", () => {
   it("only the score stories carry a previous score", () => {
     const withPrev = DEMO_CUSTOMERS.filter((c) => c.previousScore != null).map((c) => c.story).sort();
     expect(withPrev).toEqual(["bankruptcy", "going_concern", "improving", "score_drop"]);
+  });
+});
+
+describe("demo portfolio: fits the database", () => {
+  const SECTORS = ["Aerospace & Defense", "Energy", "Industrial Manufacturing", "Materials", "Transportation", "Mining", "Other"];
+  const SCENARIOS = ["normal_operations", "payment_issues", "credit_deterioration", "negative_news", "growth_opportunity", "bankruptcy", "sec_filing_monitoring"];
+  it("uses only the database's sectors, scenarios and invoice statuses", () => {
+    for (const c of demo.customers) { expect(SECTORS).toContain(c.sector); expect(SCENARIOS).toContain(c.scenario); }
+    for (const i of demo.invoices) expect(["current", "overdue", "pre_petition", "paid"]).toContain(i.status);
+  });
+  it("never writes the computed column amount_outstanding, and fills every required column", () => {
+    for (const i of demo.invoices) expect(i).not.toHaveProperty("amount_outstanding");
+    for (const f of demo.seedSecFilings) expect(f.document_url).toBeTruthy();
+    for (const c of demo.customers) for (const k of ["company_name", "scenario", "credit_limit", "current_exposure", "payment_terms_days", "sector", "country_code"]) expect(c[k]).not.toBeNull();
   });
 });
