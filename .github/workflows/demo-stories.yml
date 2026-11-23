@@ -20,6 +20,11 @@ on:
 permissions:
   contents: read
 
+env:
+  # The public AWS registry has a download quota that repeated runs can exhaust ("Data limit
+  # exceeded"); the same Supabase images are on Docker Hub.
+  SUPABASE_INTERNAL_IMAGE_REGISTRY: docker.io
+
 jobs:
   stories:
     name: Demo stories (local stack)
