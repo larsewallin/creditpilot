@@ -114,6 +114,14 @@ export function demoCustomerId(n: number): string {
   return `d0000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 }
 
+/** customers.scenario is the database's scenario_type list; the story itself lives here. */
+const SCENARIO: Record<Story, string> = {
+  steady: "normal_operations", improving: "normal_operations",
+  slowing: "payment_issues", strategic_slowing: "payment_issues", over_limit: "payment_issues",
+  news_shock: "negative_news", going_concern: "sec_filing_monitoring", covenant_waiver: "sec_filing_monitoring",
+  bankruptcy: "bankruptcy", score_drop: "credit_deterioration",
+};
+
 const CURRENCY: Record<DemoCustomer["country"], string> = { US: "USD", DE: "EUR", GB: "GBP", JP: "JPY" };
 
 /** Days late an invoice is paid (positive = late), by how many days ago it fell due. Timed from
@@ -225,7 +233,7 @@ export function buildDemo(today: Date): DemoRows {
 
     const limit = round(open / (c.limitUse / 100), 25_000) || 25_000;
     rows.customers.push({
-      id, company_name: c.name, scenario: c.story, lifecycle_status: "active",
+      id, company_name: c.name, scenario: SCENARIO[c.story], lifecycle_status: "active",
       country_code: c.country, city: c.city, headquarters: `${c.city}, ${c.country}`, industry: c.industry, sector: c.industry,
       invoicing_currency: CURRENCY[c.country], payment_terms_days: c.terms,
       credit_limit: limit, current_exposure: open,
