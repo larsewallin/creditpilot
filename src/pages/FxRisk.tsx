@@ -25,7 +25,9 @@ const EVENT_ICON: Record<string, any> = {
 function pct(n: number | null | undefined, digits = 1) {
   if (n == null || Number.isNaN(Number(n))) return "—";
   const v = Number(n);
-  return `${v > 0 ? "+" : ""}${v.toFixed(digits)}%`;
+  const t = Math.abs(v).toFixed(digits);
+  if (Number(t) === 0) return `${(0).toFixed(digits)}%`; // never "-0.0%"
+  return `${v > 0 ? "+" : "-"}${t}%`;
 }
 
 function signed(n: number) {
@@ -131,6 +133,7 @@ export default function FxRisk() {
             custMap.set(r.customer_id, e);
           }
           const custs = [...custMap.values()].sort((a, b) => b.unhedged - a.unhedged);
+          const today = new Date().toISOString().slice(0, 10);
 
           return (
             <div
@@ -170,7 +173,7 @@ export default function FxRisk() {
                   <Metric label="Current rate" sub={st ? `${pct(st.change_30d_pct)} USD value over 30 days` : undefined}>
                     {st ? `${Number(st.rate).toFixed(code === "JPY" ? 2 : 4)} ${code}/USD` : "—"}
                   </Metric>
-                  <Metric label="Volatility (annualised)" sub={`a further 10% move = ${formatCurrency(sens)}`}>
+                  <Metric label="Volatility (annualised)" sub={`a further 10% move = ${formatCurrency(sens)} (10% of today's value, ${formatCurrency(unhedgedUsd + delta)})`}>
                     {st?.volatility_pct != null ? `${Number(st.volatility_pct).toFixed(1)}%` : "—"}
                   </Metric>
                 </div>
@@ -199,7 +202,9 @@ export default function FxRisk() {
                           <td className={cn("py-1.5 pr-3 text-right tabular-nums", c.delta < 0 ? "text-severity-critical" : c.delta > 0 ? "text-emerald-600" : "")}>
                             {c.unhedged > 0 ? signed(c.delta) : "—"}
                           </td>
-                          <td className="py-1.5 text-right tabular-nums text-muted-foreground">{c.nextPay}</td>
+                          <td className={cn("py-1.5 text-right tabular-nums", c.nextPay < today ? "text-severity-critical" : "text-muted-foreground")}>
+                            {c.nextPay < today ? `overdue since ${c.nextPay}` : c.nextPay}
+                          </td>
                         </tr>
                       ))}
                     </tbody>

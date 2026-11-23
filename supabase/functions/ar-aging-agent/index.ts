@@ -206,7 +206,15 @@ Deno.serve(async (req) => {
       const thresholdCrossed = utilizationPct > UTILIZATION_CRITICAL ? UTILIZATION_CRITICAL : UTILIZATION_HIGH;
       const overageUsd = currentExposure > creditLimit ? (currentExposure - creditLimit) : null;
       const overText = overageUsd !== null ? ` (over limit by $${overageUsd.toLocaleString()})` : "";
-      const summary = `${companyName}: credit utilization at ${utilizationPct.toFixed(1)}% of a $${creditLimit.toLocaleString()} limit${overText}.`;
+      // Over the limit, say what that means for the next order (review 2026-11-23: Pellham was
+      // critical with no action and no explanation). A good payer gets no limit cut; the control
+      // is the order hold until the balance is back under the limit.
+      const overMeaning = overageUsd !== null
+        ? weakSignal
+          ? " New orders wait until the balance is back under the limit; the policy also weighs a limit cut."
+          : " New orders wait until the balance is back under the limit, or until a person approves a temporary increase. It pays on time, so no limit cut is proposed."
+        : "";
+      const summary = `${companyName}: credit utilization at ${utilizationPct.toFixed(1)}% of a $${creditLimit.toLocaleString()} limit${overText}.${overMeaning}`;
 
       try {
         await publishEvent({

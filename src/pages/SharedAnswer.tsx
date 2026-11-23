@@ -83,7 +83,7 @@ export default function SharedAnswer() {
                     <a href={open.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary underline">Open the page<ExternalLink className="h-3.5 w-3.5" /></a>
                   </>
                 ) : (
-                  <p className="text-xs">{sourceLabel(open)} · {agentLabel(open.agent, open.source_type)}{open.date ? ` · ${new Date(open.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""}</p>
+                  <p className="text-xs">{sourceLabel(open)} · {agentLabel(open.agent, open.source_type)}{open.date ? ` · ${new Date(/^\d{4}-\d{2}-\d{2}$/.test(open.date) ? `${open.date}T00:00:00` : open.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""}</p>
                 )}
               </div>
             </>

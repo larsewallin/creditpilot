@@ -283,7 +283,11 @@ Deno.serve(async (req) => {
       const direction = change.type === "CREDIT_RATING_DOWNGRADE" ? "downgraded" : "upgraded";
       const ratingText = c.credit_rating_raw ? ` (now ${c.credit_rating_raw})` : "";
       const summary = `${c.company_name}: credit rating ${direction}${ratingText} — score ${change.previous_score} → ${change.current_score} (${change.delta > 0 ? "+" : ""}${change.delta} pts).` +
-        (change.action_required ? " Review of the credit limit is recommended." : "");
+        // What the drop does under the policy, rather than a vague "review recommended" with no
+        // proposal behind it (review 2026-11-23: Ormsby).
+        (change.action_required && change.type === "CREDIT_RATING_DOWNGRADE"
+          ? " Under the policy this lowers the limit use at which a cut is proposed; a cut appears in Actions only if limit use reaches that level."
+          : "");
 
       try {
         await publishEvent({

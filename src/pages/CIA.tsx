@@ -70,7 +70,10 @@ function severityDot(severity: string | null) {
 function formatDate(dateStr?: string) {
   if (!dateStr) return "";
   try {
-    return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    // A date-only string ("2026-11-23") parses as UTC midnight, which is the evening before in
+    // the Americas: read it as a local calendar day (sources showed "Nov 22" for today's events).
+    const d = /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? new Date(`${dateStr}T00:00:00`) : new Date(dateStr);
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   } catch {
     return "";
   }
