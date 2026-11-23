@@ -1,7 +1,7 @@
 name: Demo stories
 
-# Loads the demo portfolio (supabase/functions/_shared/demo/stories.ts) into a throwaway local
-# install, runs the agents the way the daily demo refresh does (no assistant call: the CIA runs
+# Presses Reset Demo in a throwaway local install (the rebuild from supabase/functions/_shared/demo/
+# stories.ts replaces the seed data), runs the agents the way the daily demo refresh does (no assistant call: the CIA runs
 # with skip_briefing), and checks every customer shows exactly its story: the expected events and
 # proposal, nothing on the quiet ones (scripts/demo-story-check.mjs). Nothing here touches the
 # hosted project and nothing costs money.
@@ -10,7 +10,6 @@ on:
   pull_request:
     paths:
       - supabase/functions/**
-      - scripts/demo-load.mjs
       - scripts/demo-story-check.mjs
       - .github/workflows/demo-stories.yml
   schedule:
@@ -41,11 +40,6 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client >/dev/null
       - name: Set up CreditPilot (demo)
         run: scripts/setup-local.sh
-      - name: Replace the old demo data with the stories
-        run: |
-          eval "$(npx --yes supabase@3.1.0 status -o env | grep -E '^(API_URL|DB_URL|SERVICE_ROLE_KEY)=')"
-          psql "$DB_URL" -q -c "truncate customers, seed_news, seed_sec_filings, credit_events, pending_actions cascade"
-          SUPABASE_URL="$API_URL" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" node --experimental-strip-types scripts/demo-load.mjs
       - name: Run the agents as the daily refresh does
         run: |
           npx --yes supabase@3.1.0 functions serve --env-file supabase/functions/.env.local > /tmp/functions.log 2>&1 &
@@ -57,6 +51,10 @@ jobs:
             [ "$CODE" = 200 ] && break; sleep 5
           done
           [ "$CODE" = 200 ] || { tail -40 /tmp/functions.log; echo "::error::functions did not start"; exit 1; }
+          # Reset Demo, as a visitor or the daily refresh does: the rebuild replaces the seed data
+          # with the stories (replay false: the agents run below, one by one, with their answers shown).
+          curl -sf --max-time 300 -X POST "$API_URL/functions/v1/demo-actions" -H "Authorization: Bearer $ANON_KEY" -H "apikey: $ANON_KEY" -H 'Content-Type: application/json' --data '{"action":"reset","replay":false}' || { grep -i "rebuild" /tmp/functions.log | tail -20; echo "::error::Reset Demo failed"; exit 1; }
+          echo
           call() {
             code="$(curl -s -o "/tmp/$1.json" -w '%{http_code}' --max-time 300 -X POST "$API_URL/functions/v1/$1" -H "Authorization: Bearer $ANON_KEY" -H "apikey: $ANON_KEY" -H 'Content-Type: application/json' --data "$2" || echo timeout)"
             echo "$1 $code $(head -c 300 "/tmp/$1.json" 2>/dev/null)"

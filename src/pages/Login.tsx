@@ -61,7 +61,7 @@ export default function Login() {
           <section aria-labelledby="try-demo" className="space-y-3 rounded-lg border bg-card p-6">
             <div className="space-y-1">
               <h2 id="try-demo" className="text-sm font-semibold">Try the demo</h2>
-              <p className="text-xs text-muted-foreground">Sample data, shared with other visitors. No sign-up needed.</p>
+              <p className="text-xs text-muted-foreground">Fictional companies and figures, shared with other visitors. No sign-up needed.</p>
             </div>
             {PERSONAS.map((p) => (
               <Button key={p.key} type="button" variant="outline" className="w-full h-auto flex-col items-start py-2 text-left" disabled={submitting} onClick={() => onTry(p.key)}>

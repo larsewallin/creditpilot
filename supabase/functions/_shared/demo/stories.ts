@@ -48,7 +48,7 @@ export interface DemoCustomer {
   };
 }
 
-const STEADY = { events: [], proposal: "none" } as const;
+const STEADY: DemoCustomer["expect"] = { events: [], proposal: "none" };
 
 /** The 40 customers. 27 quiet, 13 with a story (plan, story table). */
 export const DEMO_CUSTOMERS: DemoCustomer[] = [
@@ -72,8 +72,7 @@ export const DEMO_CUSTOMERS: DemoCustomer[] = [
   { n: 17, name: "Harrowgate Power Systems Inc", story: "steady", country: "US", city: "Schenectady", industry: "Energy equipment", terms: 60, invoice: 260_000, cadence: 20, limitUse: 60, score: 79, sinceYear: 2013, expect: STEADY },
   { n: 18, name: "Fenmoor Instruments Inc", story: "steady", country: "US", city: "Boulder", industry: "Industrial electronics", terms: 30, invoice: 40_000, cadence: 10, limitUse: 33, score: 75, sinceYear: 2020, expect: STEADY },
   { n: 19, name: "Glenrock Mining Supply Co", story: "steady", country: "US", city: "Elko", industry: "Mining equipment", terms: 45, invoice: 80_000, cadence: 14, limitUse: 47, score: 64, sinceYear: 2018, expect: STEADY },
-  { n: 20, name: "Brennecke Antriebstechnik GmbH", story: "steady", country: "DE", city: "Stuttgart", industry: "Industrial equipment", terms: 45, invoice: 180_000, cadence: 15, limitUse: 54, score: 82, policyGroup: "export", sinceYear: 2016,
-    expect: { events: ["RISK_CHANGE"], proposal: "none" } }, // the German exposure the risk agent maps (country, currency, industry)
+  { n: 20, name: "Brennecke Antriebstechnik GmbH", story: "steady", country: "DE", city: "Stuttgart", industry: "Industrial equipment", terms: 45, invoice: 180_000, cadence: 15, limitUse: 54, score: 82, policyGroup: "export", sinceYear: 2016, expect: STEADY },
   { n: 21, name: "Elbwerk Logistik GmbH", story: "steady", country: "DE", city: "Hamburg", industry: "Logistics", terms: 30, invoice: 75_000, cadence: 10, limitUse: 41, score: 72, policyGroup: "export", sinceYear: 2019, expect: STEADY },
   { n: 22, name: "Wexford Marine Engineering Ltd", story: "steady", country: "GB", city: "Southampton", industry: "Marine engineering", terms: 45, invoice: 130_000, cadence: 15, limitUse: 49, score: 70, policyGroup: "export", sinceYear: 2017, expect: STEADY },
   { n: 23, name: "Ashcombe Aero Parts Ltd", story: "steady", country: "GB", city: "Bristol", industry: "Aerospace components", terms: 45, invoice: 150_000, cadence: 15, limitUse: 57, score: 76, policyGroup: "export", sinceYear: 2015, expect: STEADY },
@@ -107,7 +106,7 @@ export const DEMO_CUSTOMERS: DemoCustomer[] = [
     expect: { events: ["CREDIT_RATING_DOWNGRADE"], proposal: "none" } },
   { n: 39, name: "Tidewell Water Systems Inc", story: "improving", country: "US", city: "Tampa", industry: "Flow control", terms: 45, invoice: 60_000, cadence: 14, limitUse: 46, score: 66, previousScore: 58, sinceYear: 2018,
     expect: { events: ["PAYMENT_IMPROVEMENT", "CREDIT_RATING_UPGRADE"], proposal: "none" } },
-  { n: 40, name: "Vantor Aerospace Holdings Inc", story: "strategic_slowing", country: "US", city: "Fort Worth", industry: "Aerospace components", terms: 45, invoice: 600_000, cadence: 10, limitUse: 82, score: 64, policyGroup: "strategic", sinceYear: 2010,
+  { n: 40, name: "Larkspur Aerospace Holdings Inc", story: "strategic_slowing", country: "US", city: "Fort Worth", industry: "Aerospace components", terms: 45, invoice: 600_000, cadence: 10, limitUse: 82, score: 64, policyGroup: "strategic", sinceYear: 2010,
     expect: { events: ["PAYMENT_DETERIORATION", "OVERDUE_AR", "UTILIZATION_THRESHOLD_BREACH"], proposal: "cut_small" } },
 ];
 
@@ -194,6 +193,11 @@ const addDays = (d: Date, n: number) => new Date(d.getTime() + n * 86_400_000);
 const round = (x: number, to: number) => Math.round(x / to) * to;
 
 export interface DemoRows {
+  /** Industry, country and currency samples the portfolio agents read (one story each). */
+  industryEcon: Record<string, unknown>[];
+  industryNews: Record<string, unknown>[];
+  /** Updates to seed_country_risk, by country code: one change (Japan's policy rate); the rest unchanged. */
+  countryUpdates: { country_code: string; values: Record<string, unknown> }[];
   customers: Record<string, unknown>[];
   invoices: Record<string, unknown>[];
   payments: Record<string, unknown>[];
@@ -205,7 +209,22 @@ export interface DemoRows {
 /** All demo rows for `today` (a date; only its calendar day is used). */
 export function buildDemo(today: Date): DemoRows {
   const t0 = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
-  const rows: DemoRows = { customers: [], invoices: [], payments: [], seedNews: [], seedSecFilings: [], secMonitoring: [] };
+  const day = (n: number) => iso(addDays(t0, -n));
+  const rows: DemoRows = {
+    // Steel input costs up 18% over the year: a downturn signal for the industrial manufacturers
+    // that buy it. One port labor dispute for the logistics customers. Both fictional, dated from today.
+    industryEcon: [
+      { sector: "Industrial Manufacturing", indicator: "commodity_price", source_series: "Demo series: steel input prices", observation_date: day(20), change_percent: 18, period_days: 365 },
+    ],
+    industryNews: [
+      { sector: "Transportation", headline: "Port labor talks stall, raising the risk of a strike at two East Coast ports", summary: "Contract talks between dockworkers and port operators have stalled; shippers are rerouting some cargo ahead of a possible strike next month.", url: null, source: "Demo Newswire", published_date: day(5), disruption_type: "labor" },
+    ],
+    countryUpdates: [
+      { country_code: "JP", values: { previous_policy_rate: 0.5, policy_rate: 0.75, rate_effective_date: day(12) } },
+      { country_code: "DE", values: { previous_rating: "AAA", current_rating: "AAA", rating_outlook: "stable", rating_effective_date: day(400) } },
+      { country_code: "US", values: { tariff_change_percent: null, tariff_affected_countries: null, tariff_affected_sectors: null, tariff_effective_date: null, tariff_summary: null } },
+    ],
+    customers: [], invoices: [], payments: [], seedNews: [], seedSecFilings: [], secMonitoring: [] };
 
   for (const c of DEMO_CUSTOMERS) {
     const id = demoCustomerId(c.n);
@@ -261,7 +280,7 @@ export function buildDemo(today: Date): DemoRows {
       invoicing_currency: CURRENCY[c.country], payment_terms_days: c.terms,
       credit_limit: limit, current_exposure: open,
       credit_rating_score: c.score, credit_rating_previous_score: c.previousScore ?? null,
-      credit_rating_source: "Demo score", credit_rating_updated_at: iso(addDays(t0, c.previousScore != null ? -6 : -40)),
+      credit_rating_source: "other", credit_rating_updated_at: iso(addDays(t0, c.previousScore != null ? -6 : -40)),
       financials_fye: yearEndFor(t0, c.score),
       customer_since: `${c.sinceYear}-01-01`, company_type: c.invoice >= 200_000 ? "public" : "private",
       policy_group: c.policyGroup ?? null, website: `https://${prefix.toLowerCase()}${c.n}.example.com`,

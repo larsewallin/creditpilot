@@ -30,19 +30,13 @@ import { AuthError, requireUser, type AuthedUser } from "../_shared/auth.ts";
 import { loadPolicy } from "../_shared/policy/policy.ts";
 import { authorityOf, authorityText, mayApprove } from "../_shared/policy/authority.ts";
 import { inBackground, replayDemoAgents } from "../_shared/demo_replay.ts";
+import { rebuildDemo } from "../_shared/demo/rebuild.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
-
-// Same 3 demo customers reset by the original client-side initDemo().
-const SEED_CREDIT_LIMITS = [
-  { id: "c0000001-0000-0000-0000-000000000029", limit: 3000000 },
-  { id: "c0000001-0000-0000-0000-000000000008", limit: 4500000 },
-  { id: "c0000001-0000-0000-0000-000000000005", limit: 5000000 },
-];
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -193,84 +187,11 @@ Deno.serve(async (req) => {
     }
 
     if (action === "reset") {
-      // F5 (2026-10-01, see CreditPilot_Deferred_Backlog.md): previously flipped every
-      // demo pending_actions row back to 'pending', regardless of status — which could
-      // resurrect a stale, no-longer-applicable row (or leave it masking the fact that
-      // current data wouldn't actually re-trigger it) alongside whatever cia-agent
-      // inserts fresh later in the same reset sequence (initDemo.ts runs this reset
-      // first, then the sensing agents, then cia-agent last). Expiring them here instead
-      // clears the review queue without resurrecting anything; cia-agent's own dedup
-      // (added alongside this fix) then regenerates whatever the refreshed demo data
-      // actually warrants. Approved/rejected history is left alone on purpose — this only
-      // clears rows a user might otherwise still see sitting in "pending".
-      await supabase
-        .from("pending_actions")
-        .update({ status: "expired", reviewed_by: null, reviewed_at: null, review_note: null })
-        .eq("is_demo", true)
-        .eq("status", "pending")
-        .neq("action_type", "NEW_CREDIT_LIMIT"); // onboarding proposals are not demo-reset data
-
-      await supabase.from("agent_messages").update({ status: "pending" }).eq("is_demo", true);
-
-      // cia-agent rebuilds its multi-signal assessments after every reset; archive the
-      // previous ones (kept, not deleted) so there is one current assessment per customer.
-      await supabase
-        .from("credit_events")
-        .update({ archived_at: new Date().toISOString() })
-        .eq("is_demo", true)
-        .eq("source_agent", "cia-agent")
-        .in("event_type", ["COMPOSITE_RISK_CRITICAL", "COMPOSITE_RISK_ELEVATED"])
-        .is("archived_at", null);
-
-      // Put back every limit a demo approval lowered: the limit before the first
-      // demo approval for that customer (credit_actions keeps it), then the seed list.
-      const restore = new Map<string, number>(SEED_CREDIT_LIMITS.map(({ id, limit }) => [id, limit]));
-      const { data: approvals } = await supabase
-        .from("credit_actions")
-        .select("customer_id, old_limit, created_at")
-        .eq("performed_by", "demo_user")
-        .eq("action_type", "CREDIT_LIMIT_REDUCTION")
-        .not("old_limit", "is", null)
-        .order("created_at", { ascending: true });
-      const firstOld = new Map<string, number>();
-      for (const a of approvals ?? []) if (a.customer_id && !firstOld.has(a.customer_id)) firstOld.set(a.customer_id, Number(a.old_limit));
-      for (const [id, limit] of firstOld) if (!restore.has(id)) restore.set(id, limit);
-      for (const [id, limit] of restore) {
-        await supabase.from("customers").update({ credit_limit: limit }).eq("id", id);
-      }
-
-      await supabase
-        .from("negative_news")
-        .update({ reviewed: false, reviewed_by: null, reviewed_at: null })
-        .eq("is_demo", true);
-
-      // Excludes source_agent = 'cia-agent': those rows are cia-agent's OWN
-      // synthesis output (DAILY_BRIEFING, COMPOSITE_RISK_CRITICAL/ELEVATED),
-      // not a sensing-agent signal. Un-marking them as unprocessed here fed
-      // cia-agent's own prior output back into its next run as if it were a
-      // fresh signal from a new agent -- a self-reinforcing feedback loop
-      // (confirmed live 2026-10-02: Ironwood Machine Works picked up
-      // "cia-agent" itself as a 3rd flagging agent, escalating severity, and
-      // pending-action counts grew 14 -> 20 -> 20 across repeated resets
-      // instead of stabilizing). Only the 5 real sensing agents' events
-      // (ar_aging_agent, news_monitor_agent, sec_monitor_agent,
-      // payment_behaviour_agent, industry_risk_agent) should be marked
-      // unprocessed for cia-agent to pick up fresh each reset.
-      await supabase
-        .from("credit_events")
-        .update({ cia_processed: false, cia_processed_at: null })
-        .eq("is_demo", true)
-        .neq("source_agent", "cia-agent");
-
-      const { error: invoiceDateError } = await supabase.rpc("fn_reset_demo_invoice_dates");
-      if (invoiceDateError) {
-        console.error("[demo-actions:reset] invoice date reset failed:", invoiceDateError.message);
-      }
-
-      const { error: paymentDateError } = await supabase.rpc("fn_reset_demo_payment_dates");
-      if (paymentDateError) {
-        console.error("[demo-actions:reset] payment date reset failed:", paymentDateError.message);
-      }
+      // Rebuild the demo from the story table for today (founder 2026-11-22, the demo data rewrite):
+      // every demo row deleted and written again, nothing rolled forward, so every page agrees and
+      // the demo looks the same any day. The agents then run on it (below).
+      const rebuilt = await rebuildDemo(supabase, new Date());
+      console.log("[demo-actions:reset] rebuilt", JSON.stringify(rebuilt));
 
       // Then the agents, on the server, so the replay finishes even if the visitor
       // closes the page (body.replay === false: state only, the caller runs them).

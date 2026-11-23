@@ -26,9 +26,22 @@ export const ENDPOINT = `${SUPABASE_URL}/functions/v1/cia-agent`;
 
 // ── Load questions ─────────────────────────────────────────────────────────
 
+// The demo moved to the story portfolio (supabase/functions/_shared/demo/stories.ts, 2026-11):
+// ask about the companies the live demo actually has. questions-stories.json once the story
+// customers are there, questions.json (the old portfolio) before.
+async function storyPortfolioLive() {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/customers?select=id&id=eq.d0000000-0000-4000-8000-000000000001`, {
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+    });
+    return r.ok && (await r.json()).length === 1;
+  } catch { return false; }
+}
+export const QUESTIONS_FILE = (await storyPortfolioLive()) ? "questions-stories.json" : "questions.json";
 export const { questions } = JSON.parse(
-  await readFile(resolve(__dir, "questions.json"), "utf8")
+  await readFile(resolve(__dir, QUESTIONS_FILE), "utf8")
 );
+console.log(`Questions: ${QUESTIONS_FILE}`);
 
 // ── Ask one question ───────────────────────────────────────────────────────
 
