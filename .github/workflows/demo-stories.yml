@@ -1,0 +1,65 @@
+name: Demo stories
+
+# Loads the demo portfolio (supabase/functions/_shared/demo/stories.ts) into a throwaway local
+# install, runs the agents the way the daily demo refresh does (no assistant call: the CIA runs
+# with skip_briefing), and checks every customer shows exactly its story: the expected events and
+# proposal, nothing on the quiet ones (scripts/demo-story-check.mjs). Nothing here touches the
+# hosted project and nothing costs money.
+
+on:
+  pull_request:
+    paths:
+      - supabase/functions/**
+      - scripts/demo-load.mjs
+      - scripts/demo-story-check.mjs
+      - .github/workflows/demo-stories.yml
+  schedule:
+    - cron: "37 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  stories:
+    name: Demo stories (local stack)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Postgres client
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client >/dev/null
+      - name: Set up CreditPilot (demo)
+        run: scripts/setup-local.sh
+      - name: Replace the old demo data with the stories
+        run: |
+          eval "$(npx --yes supabase@3.1.0 status -o env | grep -E '^(API_URL|DB_URL|SERVICE_ROLE_KEY)=')"
+          psql "$DB_URL" -q -c "truncate customers, seed_news, seed_sec_filings, credit_events, pending_actions cascade"
+          SUPABASE_URL="$API_URL" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" node --experimental-strip-types scripts/demo-load.mjs
+      - name: Run the agents as the daily refresh does
+        run: |
+          npx --yes supabase@3.1.0 functions serve --env-file supabase/functions/.env.local > /tmp/functions.log 2>&1 &
+          eval "$(npx --yes supabase@3.1.0 status -o env | grep -E '^(API_URL|ANON_KEY)=')"
+          call() { curl -s -o "/tmp/$1.json" -w "$1 %{http_code}\n" -X POST "$API_URL/functions/v1/$1" -H "Authorization: Bearer $ANON_KEY" -H "apikey: $ANON_KEY" -H 'Content-Type: application/json' --data "$2"; }
+          for i in $(seq 1 60); do
+            [ "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$API_URL/functions/v1/ar-aging-agent" -H "Authorization: Bearer $ANON_KEY" -H 'Content-Type: application/json' --data '{"dry_run":true}')" != 000 ] && break; sleep 5
+          done
+          for fn in ar-aging-agent news-monitor-agent sec-monitor-agent payment-behaviour-agent industry-risk-agent credit-rating-agent country-risk-agent fx-risk-agent; do
+            call "$fn" '{"triggered_by":"auto"}' &
+          done
+          wait
+          call risk-agent '{"triggered_by":"auto"}'
+          call cia-agent '{"skip_briefing":true,"triggered_by":"auto"}'
+          head -c 600 /tmp/cia-agent.json; echo
+      - name: Check every story
+        run: |
+          eval "$(npx --yes supabase@3.1.0 status -o env | grep -E '^(API_URL|SERVICE_ROLE_KEY)=')"
+          SUPABASE_URL="$API_URL" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" node --experimental-strip-types scripts/demo-story-check.mjs
+      - name: Functions log (on failure)
+        if: failure()
+        run: grep -iE "error|fail" /tmp/functions.log | tail -60

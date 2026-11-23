@@ -52,7 +52,7 @@ describe("demo portfolio: every page agrees", () => {
   });
   it("exposure = open invoices, and the limit gives the story's limit use (within 5 points)", () => {
     for (const c of demo.customers) {
-      const o = open(c.id as string).reduce((s, i) => s + (i.amount_outstanding as number), 0);
+      const o = open(c.id as string).reduce((s, i) => s + (i.outstanding_amount as number), 0);
       expect(c.current_exposure).toBe(o);
       const story = DEMO_CUSTOMERS.find((d) => demoCustomerId(d.n) === c.id)!;
       expect(Math.abs((o / (c.credit_limit as number)) * 100 - story.limitUse)).toBeLessThan(5);

@@ -92,9 +92,9 @@ export const DEMO_CUSTOMERS: DemoCustomer[] = [
   { n: 34, name: "Ellsworth Plastics Molding Inc", story: "news_shock", country: "US", city: "Grand Rapids", industry: "Plastics", terms: 45, invoice: 50_000, cadence: 14, limitUse: 47, score: 59, sinceYear: 2019,
     expect: { events: ["NEWS_EVENT"], proposal: "none" } },
   { n: 35, name: "Solenne Battery Technologies Inc", story: "going_concern", country: "US", city: "Reno", industry: "Energy storage", terms: 30, invoice: 70_000, cadence: 14, limitUse: 72, score: 21, previousScore: 44, sinceYear: 2021,
-    expect: { events: ["SEC_GOING_CONCERN", "CREDIT_RATING_DOWNGRADE", "PAYMENT_DETERIORATION"], proposal: "cut_to_owed" } },
+    expect: { events: ["GOING_CONCERN", "CREDIT_RATING_DOWNGRADE", "PAYMENT_DETERIORATION"], proposal: "cut_to_owed" } },
   { n: 36, name: "Granitefold Engineering Corp", story: "covenant_waiver", country: "US", city: "Denver", industry: "Engineering services", terms: 45, invoice: 140_000, cadence: 15, limitUse: 55, score: 54, sinceYear: 2014,
-    expect: { events: ["SEC_FILING"], proposal: "none" } },
+    expect: { events: ["COVENANT_WAIVER", "CEO_DEPARTURE"], proposal: "none" } },
   { n: 37, name: "Brightwater Retail Fixtures Inc", story: "bankruptcy", country: "US", city: "Newark", industry: "Retail fixtures", terms: 45, invoice: 65_000, cadence: 10, limitUse: 80, score: 6, previousScore: 24, sinceYear: 2016,
     expect: { events: ["NEWS_EVENT"], proposal: "hold" } },
   { n: 38, name: "Ormsby Specialty Alloys Ltd", story: "score_drop", country: "GB", city: "Sheffield", industry: "Metal fabrication", terms: 45, invoice: 90_000, cadence: 15, limitUse: 50, score: 52, previousScore: 70, policyGroup: "export", sinceYear: 2016,
@@ -216,7 +216,7 @@ export function buildDemo(today: Date): DemoRows {
       if (!isPaid) open += inv.amount;
       rows.invoices.push({
         customer_id: id, invoice_number: number, invoice_amount: inv.amount,
-        amount_paid: isPaid ? inv.amount : 0, amount_outstanding: isPaid ? 0 : inv.amount, outstanding_amount: isPaid ? 0 : inv.amount,
+        amount_paid: isPaid ? inv.amount : 0, outstanding_amount: isPaid ? 0 : inv.amount, // amount_outstanding is computed by the database
         invoice_date: iso(invoiceDate), due_date: iso(dueDate),
         days_overdue: !isPaid && dueAgo > 0 ? dueAgo : 0, status, currency, claimable: status === "pre_petition",
         escalated_to_collections: false, is_demo: true,
@@ -241,7 +241,7 @@ export function buildDemo(today: Date): DemoRows {
     const news = (daysAgo: number, headline: string, summary: string, relevance = 0.92) =>
       rows.seedNews.push({ customer_id: id, company_name: c.name, headline, summary, source: "Demo Newswire", published_date: iso(addDays(t0, -daysAgo)), relevance_score: relevance, provider: "manual" });
     const filing = (daysAgo: number, type: string, flags: string[], summary: string) => {
-      rows.seedSecFilings.push({ cik, company_name: c.name, filing_type: type, filing_date: iso(addDays(t0, -daysAgo)), accession_number: `${cik}-DEMO-${c.n}${type.replace(/\W/g, "")}`, document_url: null, risk_flags: flags, summary, provider: "sample" });
+      rows.seedSecFilings.push({ cik, company_name: c.name, filing_type: type, filing_date: iso(addDays(t0, -daysAgo)), accession_number: `${cik}-DEMO-${c.n}${type.replace(/\W/g, "")}`, document_url: null, risk_signals: flags, key_findings: summary, provider: "sample" });
     };
     if (c.story === "news_shock" && c.limitUse > 80) news(3, `${c.name} loses its largest customer as distributor contract ends`, `${c.name} said its largest customer, about a third of revenue, will not renew a supply contract ending next quarter. The company is reviewing costs and its credit facilities.`);
     if (c.story === "news_shock" && c.limitUse <= 80) news(4, `${c.name} in dispute with key resin supplier`, `${c.name} confirmed a pricing dispute with its main resin supplier that has slowed deliveries to customers this month.`, 0.85);
