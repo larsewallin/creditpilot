@@ -34,7 +34,7 @@ The **Credit Intelligence Agent (CIA)** watches nothing itself. It reads what th
 - **Customers, AR Aging, Payment Behaviour, News, SEC Filings:** each analyst's data, customer by customer.
 - **Industry, Country and FX Risk:** the sectors, countries and currencies the portfolio is exposed to, and what changed.
 - **New customers:** onboarding a new account. The company is looked up in official registers (Company Lookup), screened against sanctions lists, scored from the credit provider's report the credit team attaches (D&B, Creditsafe, Coface, Allianz Trade, Experian…), and given a proposed limit for a credit manager to approve. Customers never use CreditPilot themselves.
-- **Settings:** the company's rules (which score comes first, how old financial statements may be, when each agent runs) and **Connectors**, every data source and whether it is connected.
+- **Settings:** the company's **Credit policy** (below), its users and what each may approve, which score comes first and when each agent runs, and **Connectors**, every data source and whether it is connected.
 
 ---
 
@@ -51,16 +51,35 @@ Every finding has one of the same levels, everywhere in the app.
 
 Good news, such as a customer paying faster, is recorded as low or as information only.
 
-Each agent sets severity by fixed rules, so the same facts always give the same level. Some examples:
+Each agent sets severity by fixed rules, so the same facts always give the same level. Many of those rules are the company's own, set in its Credit policy (below). Some examples with CreditPilot's starting values:
 
 - **AR aging:** critical when a customer is over its credit limit or has invoices more than 90 days overdue; high at 61–90 days, or above 80% of the limit when other signs are weak; medium at 31–60 days; low at 1–30 days.
-- **Payments:** critical when a customer pays 20 or more days later than before; high at 10–20 days; medium when slightly later.
+- **Payments:** measured against each customer's own terms, so one rule fits net 15 and net 90: critical when a customer pays much later than before, high or medium when the slowdown is smaller.
 - **SEC filings:** critical for a going-concern doubt; high for a covenant waiver or a CEO departure; medium for other warnings.
 - **Credit score:** critical for a fall of 30 points or more; high at 20; medium at 10; low below that.
 - **Exchange rates:** critical when an invoice currency moved 10% or more against you in 30 days; high at 6%.
 - **News:** each story is rated on how directly it threatens the customer's ability to pay.
 
 When several agents flag the same customer, the CIA writes one **Several warning signs** card, rated at the severity of its most serious signal. It weighs an Action, such as a lower limit, when limit use reaches the policy's action level (75% by default, lower for each warning sign), when three or more agents flag the customer, or when its score is High risk; the policy then sets how large the cut is. A customer in bankruptcy gets a hold at $0.
+
+---
+
+## The Credit policy
+
+Every alert, limit proposal and answer follows one set of rules: the company's **Credit policy**, in **Settings › Credit policy**. CreditPilot comes with starting values; they are a starting point, not an industry standard. A credit team sets them to match its own written policy and risk appetite, and every change is kept with who made it and when.
+
+What the policy decides:
+
+- **Payments:** how many days after the due date still count as on time, and when a customer is paying late or getting slower, measured against its own terms.
+- **Alerts:** when overdue invoices, high limit use, a falling score or a currency move raise an alert, and how serious it is.
+- **Limit cuts:** the limit use at which a cut is proposed and how much each warning sign lowers it, how large a single cut may be, and what happens at a High risk score or in bankruptcy.
+- **Approvals:** the largest limit each role (or person) may approve; above it, a proposal waits for someone whose authority covers it.
+- **New customers:** what evidence to ask for, how the first limit is set, and when screening sends an application to a person.
+- **Customer groups:** a few rules set differently for a group, such as more room for strategic accounts or stricter rules for high-risk ones.
+
+The assistant quotes the same rules, with their values, when it explains an alert or a proposal. **Download policy** in Settings gives the whole policy as a document. In the demo the policy is read-only and shows the starting values; on your own CreditPilot your team sets it.
+
+Not yet in the policy: the age bands for overdue invoices, the severity of SEC filing findings, and the country and industry triggers; these are still fixed in the code.
 
 ---
 
