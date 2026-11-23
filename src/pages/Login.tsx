@@ -7,8 +7,8 @@ import { useAuth, type DemoPersona } from "@/lib/auth";
 import { DEMO_MODE } from "@/lib/constants";
 
 const PERSONAS: { key: DemoPersona; label: string; blurb: string }[] = [
-  { key: "credit_manager", label: "Credit manager", blurb: "Approves new customers and credit limits, clears screening hits." },
-  { key: "credit_analyst", label: "Credit analyst", blurb: "Adds new customers and runs screening; a manager approves." },
+  { key: "credit_manager", label: "Credit manager", blurb: "Approves or rejects proposed credit limit changes." },
+  { key: "credit_analyst", label: "Credit analyst", blurb: "Approves limit cuts, and limits up to $250,000; a manager approves larger ones." },
   { key: "sales", label: "Sales rep", blurb: "Looks around: customers, alerts and the assistant." },
 ];
 

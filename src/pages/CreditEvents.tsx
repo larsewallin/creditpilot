@@ -181,7 +181,7 @@ export default function CreditEvents() {
         </p>
       </div>
 
-      <DemoDataNotice message="Demo portfolio. Real company names are used for illustration only: every event, figure, score and news item below is fictional and says nothing about those companies." />
+      <DemoDataNotice message="Demo portfolio. Every company, event, figure, score and news item below is fictional." />
 
       {showPendingBanner && (
         <div className="flex items-center gap-3 bg-agent-aging/10 border border-agent-aging/30 rounded-xl px-4 py-3">
