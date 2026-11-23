@@ -45,17 +45,23 @@ jobs:
         run: |
           npx --yes supabase@3.1.0 functions serve --env-file supabase/functions/.env.local > /tmp/functions.log 2>&1 &
           eval "$(npx --yes supabase@3.1.0 status -o env | grep -E '^(API_URL|ANON_KEY)=')"
-          call() { curl -s -o "/tmp/$1.json" -w "$1 %{http_code}\n" -X POST "$API_URL/functions/v1/$1" -H "Authorization: Bearer $ANON_KEY" -H "apikey: $ANON_KEY" -H 'Content-Type: application/json' --data "$2"; }
-          for i in $(seq 1 60); do
-            [ "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$API_URL/functions/v1/ar-aging-agent" -H "Authorization: Bearer $ANON_KEY" -H 'Content-Type: application/json' --data '{"dry_run":true}')" != 000 ] && break; sleep 5
+          SECRET="$(sed -n 's/^SCHEDULER_SECRET=//p' supabase/functions/.env.local)"
+          # Ready when the scheduler answers 200 (as in Fresh install); the image pull can be slow.
+          for i in $(seq 1 90); do
+            CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 -X POST "$API_URL/functions/v1/agent-scheduler" -H "x-scheduler-secret: $SECRET" -H 'Content-Type: application/json' --data '{"dry_run":true}' || true)"
+            [ "$CODE" = 200 ] && break; sleep 5
           done
+          [ "$CODE" = 200 ] || { tail -40 /tmp/functions.log; echo "::error::functions did not start"; exit 1; }
+          call() {
+            code="$(curl -s -o "/tmp/$1.json" -w '%{http_code}' --max-time 300 -X POST "$API_URL/functions/v1/$1" -H "Authorization: Bearer $ANON_KEY" -H "apikey: $ANON_KEY" -H 'Content-Type: application/json' --data "$2" || echo timeout)"
+            echo "$1 $code $(head -c 300 "/tmp/$1.json" 2>/dev/null)"
+          }
           for fn in ar-aging-agent news-monitor-agent sec-monitor-agent payment-behaviour-agent industry-risk-agent credit-rating-agent country-risk-agent fx-risk-agent; do
             call "$fn" '{"triggered_by":"auto"}' &
           done
           wait
           call risk-agent '{"triggered_by":"auto"}'
           call cia-agent '{"skip_briefing":true,"triggered_by":"auto"}'
-          head -c 600 /tmp/cia-agent.json; echo
       - name: Check every story
         run: |
           eval "$(npx --yes supabase@3.1.0 status -o env | grep -E '^(API_URL|SERVICE_ROLE_KEY)=')"
