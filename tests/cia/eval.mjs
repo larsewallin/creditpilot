@@ -166,7 +166,7 @@ const CASES = [
   { q: "Which customers' payments are getting worse?", check: (a) => C.deteriorating.map((n) => mentions(a, n) || `${n} (deteriorating) missing`) },
   { q: "Which customers are flagged by three or more agents?", check: () => [] },
   { q: "Should we be worried about Calloway Defense Systems?", check: () => [] },
-  { q: "Tell me about Acme Widgets Corp", check: (a) => [/don'?t have (?:that |any )?information|not (?:in|among) (?:our|the) (?:portfolio|customers)/i.test(a) || "should say it has no information",
+  { q: "Tell me about Acme Widgets Corp", check: (a) => [/don'?t have (?:that |any )?information|don'?t have (?:a|any) customer|not (?:in|among) (?:our|the) (?:portfolio|customers)/i.test(a) || "should say it has no information",
       !/please let me know|could you (?:share|provide)/i.test(a) || "asks the user for information"] },
   { q: "What is our FX exposure by currency?", check: (a) => [hasNumber(a, C.eur) || `EUR open receivables ${C.eur} (USD) missing`] },
   { q: "Which customers improved recently?", check: () => [] },
@@ -175,7 +175,7 @@ const CASES = [
   { q: "Should we extend Marlow Industrial Castings' payment terms to 60 days? Do we need collateral?", check: (a) => [
       ...advice(a, { asksTier3: true }),
       // Ask for the latest accounts only where none are on file (Marlow's are recent).
-      C.marlowFye || /financial|accounts/i.test(a) || "should suggest asking for Marlow Industrial Castings' latest accounts (none on file)"] },
+      !!C.marlowFye || /financial|accounts/i.test(a) || "should suggest asking for Marlow Industrial Castings' latest accounts (none on file)"] },
   { q: "Can we raise Calloway Defense Systems' credit limit?", check: (a) => advice(a) },
   { q: "Is Carrick Process Equipment safe to extend more credit to?", check: (a) => advice(a) },
   { q: "Should we approve the proposed actions for Solenne?", check: (a) => advice(a) },
