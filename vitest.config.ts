@@ -12,6 +12,7 @@ export default defineConfig({
       "src/**/*.{test,spec}.{ts,tsx}",
       "supabase/functions/_shared/skills/**/*.{test,spec}.{ts,tsx}",
       "supabase/functions/_shared/policy/**/*.{test,spec}.{ts,tsx}",
+      "supabase/functions/_shared/demo/**/*.{test,spec}.{ts,tsx}",
       "tests/guards/**/*.test.ts",
     ],
   },
