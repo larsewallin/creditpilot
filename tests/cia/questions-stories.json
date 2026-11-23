@@ -1,0 +1,196 @@
+{
+  "version": "1-stories",
+  "questions": [
+    {
+      "id": "q1_portfolio_risk_ranking",
+      "question": "Which customers have the highest credit risk right now?",
+      "expected": {
+        "min_sources": 0,
+        "must_mention": [
+          "Brightwater",
+          "Solenne"
+        ],
+        "must_not_say": [
+          "I don't have"
+        ],
+        "expected_confidence": [
+          "High",
+          "Medium"
+        ]
+      },
+      "consistency_check": {
+        "min_pass_rate": 0.75
+      }
+    },
+    {
+      "id": "q2_single_customer_deep_dive",
+      "question": "What's Carrick Process Equipment's current exposure and what's driving the risk?",
+      "expected": {
+        "min_sources": 1,
+        "must_mention": [
+          "Carrick",
+          [
+            "overdue",
+            "over its limit",
+            "over the limit",
+            "124"
+          ]
+        ],
+        "must_not_say": [
+          "I don't have"
+        ],
+        "expected_confidence": [
+          "High"
+        ]
+      }
+    },
+    {
+      "id": "q3_utilization_aggregation",
+      "question": "Are any customers approaching their credit limits?",
+      "expected": {
+        "min_sources": 1,
+        "must_mention": [
+          "Carrick",
+          "Pellham"
+        ],
+        "must_not_say": [
+          "I don't have"
+        ],
+        "expected_confidence": [
+          "High",
+          "Medium"
+        ]
+      },
+      "consistency_check": {}
+    },
+    {
+      "id": "q4_negative_news",
+      "question": "What recent negative news affects our portfolio?",
+      "expected": {
+        "min_sources": 1,
+        "must_mention": [
+          [
+            "Thornbury",
+            "Brightwater",
+            "Solenne",
+            "Ellsworth"
+          ]
+        ],
+        "must_not_say": [
+          "outside the main portfolio",
+          "outside your active portfolio",
+          "outside the portfolio",
+          "outside portfolio",
+          "outside our portfolio",
+          "outside our direct portfolio",
+          "outside our main portfolio",
+          "outside main portfolio",
+          "not in our portfolio",
+          "not in the portfolio"
+        ],
+        "expected_confidence": [
+          "High",
+          "Medium"
+        ]
+      }
+    },
+    {
+      "id": "q5_vague_qualitative",
+      "question": "Should I be worried about Solenne Battery Technologies?",
+      "expected": {
+        "min_sources": 0,
+        "must_mention": [
+          "Solenne"
+        ],
+        "must_not_say": [
+          "I don't have that information in the current data"
+        ],
+        "expected_confidence": [
+          "High",
+          "Medium"
+        ]
+      }
+    },
+    {
+      "id": "q6_sector_aggregation",
+      "question": "What's our total exposure to the aerospace sector?",
+      "expected": {
+        "min_sources": 0,
+        "must_mention": [
+          "aerospace"
+        ],
+        "must_not_say": [
+          "I don't have",
+          "supplier"
+        ],
+        "expected_confidence": [
+          "High",
+          "Medium"
+        ]
+      },
+      "consistency_check": {}
+    },
+    {
+      "id": "q7_specific_customer_filings",
+      "question": "Has Granitefold Engineering had any SEC filings recently?",
+      "expected": {
+        "min_sources": 0,
+        "must_mention": [
+          "Granitefold"
+        ],
+        "expected_confidence": [
+          "High"
+        ]
+      }
+    },
+    {
+      "id": "q8_unknown_customer_safety",
+      "question": "What does our customer ZyloCorp look like?",
+      "expected": {
+        "max_sources": 2,
+        "must_say": [
+          [
+            "I don't have",
+            "does not appear",
+            "doesn't appear",
+            "not in our",
+            "not in the",
+            "no record",
+            "not a customer",
+            "isn't in",
+            "is not in"
+          ]
+        ],
+        "must_not_mention_inline": [
+          "ZyloCorp credit score",
+          "ZyloCorp rating"
+        ],
+        "expected_confidence": [
+          "High"
+        ]
+      }
+    },
+    {
+      "id": "q9_score_sources",
+      "question": "Which credit score providers do our customers' scores come from?",
+      "expected": {
+        "min_sources": 0,
+        "must_mention": [
+          [
+            "third-party",
+            "third party"
+          ]
+        ],
+        "must_not_say": [
+          "I don't have",
+          "supplier"
+        ],
+        "expected_confidence": [
+          "High",
+          "Medium"
+        ]
+      }
+    }
+  ],
+  "_note": "Questions for the story portfolio (supabase/functions/_shared/demo/stories.ts). run.mjs picks this file when the live demo has the story customers, questions.json otherwise."
+}

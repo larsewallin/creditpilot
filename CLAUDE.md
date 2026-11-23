@@ -160,3 +160,19 @@ score colours kept old copies of rules the agents had just changed.
 - Before merging a PR that changes what users see, open the affected pages on the PR's Vercel
   preview (read-only; never ask the CIA, it costs money) and look for codes, `undefined`, `NaN`,
   wrong labels and numbers that disagree with another page. Note in the PR what was checked. CI's Page check (`scripts/page-check.mjs`) opens every page of the PR's build on the live demo and fails on console errors, `undefined`, `NaN`, raw codes and empty pages; it blocks the assistant and the demo reset, so it costs nothing. It does not replace looking at what changed.
+
+## Demo data comes from the story table only
+
+(2026-11-22) The public demo is a fictional portfolio built from one file,
+`supabase/functions/_shared/demo/stories.ts`: 40 customers, each with one story, and
+`buildDemo(today)` derives every row from it (due = issue + terms, payment = due + lateness,
+exposure = open invoices). Reset Demo and the daily refresh rebuild the demo from it
+(`_shared/demo/rebuild.ts`); nothing is rolled forward. The Demo stories workflow checks that every
+customer shows exactly its expected events and proposal.
+
+**The rules:**
+- Never add or change demo rows with a migration or by hand: change the story table, and its
+  expectations, in the same PR.
+- Every demo company, person and source is fictional (sites on example.com, news from "Demo
+  Newswire"); never write invented news, filings or scores about a real company.
+- Dates are relative to today. Nothing in the demo stores a calendar date of its own.

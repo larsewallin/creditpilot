@@ -134,6 +134,11 @@ describe("demo portfolio: fits the database", () => {
     for (const c of demo.customers) { expect(SECTORS).toContain(c.sector); expect(SCENARIOS).toContain(c.scenario); }
     for (const i of demo.invoices) expect(["current", "overdue", "pre_petition", "paid"]).toContain(i.status);
   });
+  it("portfolio samples: one industry signal, one industry story, dated from today, no real outlet named", () => {
+    for (const r of [...demo.industryEcon, ...demo.industryNews]) expect(SECTORS).toContain(r.sector);
+    for (const n of demo.industryNews) { expect(n.source).toBe("Demo Newswire"); expect(days("2026-11-22", n.published_date as string)).toBeLessThanOrEqual(30); }
+    expect(demo.countryUpdates.map((u) => u.country_code).sort()).toEqual(["DE", "JP", "US"]);
+  });
   it("never writes the computed column amount_outstanding, and fills every required column", () => {
     for (const i of demo.invoices) expect(i).not.toHaveProperty("amount_outstanding");
     for (const f of demo.seedSecFilings) expect(f.document_url).toBeTruthy();

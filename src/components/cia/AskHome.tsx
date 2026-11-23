@@ -7,10 +7,10 @@ import { useNavigate } from "react-router-dom";
 import { ArrowRight, Globe, Sparkles } from "lucide-react";
 
 const TRY = [
-  { q: "Should I reduce Arconic's credit limit?", hint: "Advice with next steps" },
-  { q: "What's the latest news on American Airlines, and how exposed are we?", hint: "Searches the web", web: true },
+  { q: "Should I reduce Marlow Industrial Castings' credit limit?", hint: "Advice with next steps" },
+  { q: "Where are steel prices heading, and which of our customers are exposed?", hint: "Searches the web", web: true },
   { q: "Which customers have the highest credit risk right now?", hint: "Portfolio view" },
-  { q: "Why is Triumph Group flagged across multiple agents?", hint: "Signals explained" },
+  { q: "Why is Carrick Process Equipment flagged across multiple agents?", hint: "Signals explained" },
   { q: "Whose payments are getting worse?", hint: "With a chart" },
   { q: "What negative news have we seen recently?", hint: "From the news agent" },
 ];
