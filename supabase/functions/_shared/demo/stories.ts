@@ -40,7 +40,12 @@ export interface DemoCustomer {
   policyGroup?: "strategic" | "high_risk" | "export";
   sinceYear: number;
   /** For the expected proposal (story check). */
-  expect: { events: string[]; proposal: "none" | "hold" | "cut_to_owed" | "cut" | "cut_small" };
+  expect: {
+    events: string[];
+    proposal: "none" | "hold" | "cut_to_owed" | "cut" | "cut_small";
+    /** The proposal depends on a news event; news is read by the assistant, so CI cannot check it. */
+    proposalNeedsNews?: boolean;
+  };
 }
 
 const STEADY = { events: [], proposal: "none" } as const;
@@ -67,7 +72,8 @@ export const DEMO_CUSTOMERS: DemoCustomer[] = [
   { n: 17, name: "Harrowgate Power Systems Inc", story: "steady", country: "US", city: "Schenectady", industry: "Energy equipment", terms: 60, invoice: 260_000, cadence: 20, limitUse: 60, score: 79, sinceYear: 2013, expect: STEADY },
   { n: 18, name: "Fenmoor Instruments Inc", story: "steady", country: "US", city: "Boulder", industry: "Industrial electronics", terms: 30, invoice: 40_000, cadence: 10, limitUse: 33, score: 75, sinceYear: 2020, expect: STEADY },
   { n: 19, name: "Glenrock Mining Supply Co", story: "steady", country: "US", city: "Elko", industry: "Mining equipment", terms: 45, invoice: 80_000, cadence: 14, limitUse: 47, score: 64, sinceYear: 2018, expect: STEADY },
-  { n: 20, name: "Brennecke Antriebstechnik GmbH", story: "steady", country: "DE", city: "Stuttgart", industry: "Industrial equipment", terms: 45, invoice: 180_000, cadence: 15, limitUse: 54, score: 82, policyGroup: "export", sinceYear: 2016, expect: STEADY },
+  { n: 20, name: "Brennecke Antriebstechnik GmbH", story: "steady", country: "DE", city: "Stuttgart", industry: "Industrial equipment", terms: 45, invoice: 180_000, cadence: 15, limitUse: 54, score: 82, policyGroup: "export", sinceYear: 2016,
+    expect: { events: ["RISK_CHANGE"], proposal: "none" } }, // the German exposure the risk agent maps (country, currency, industry)
   { n: 21, name: "Elbwerk Logistik GmbH", story: "steady", country: "DE", city: "Hamburg", industry: "Logistics", terms: 30, invoice: 75_000, cadence: 10, limitUse: 41, score: 72, policyGroup: "export", sinceYear: 2019, expect: STEADY },
   { n: 22, name: "Wexford Marine Engineering Ltd", story: "steady", country: "GB", city: "Southampton", industry: "Marine engineering", terms: 45, invoice: 130_000, cadence: 15, limitUse: 49, score: 70, policyGroup: "export", sinceYear: 2017, expect: STEADY },
   { n: 23, name: "Ashcombe Aero Parts Ltd", story: "steady", country: "GB", city: "Bristol", industry: "Aerospace components", terms: 45, invoice: 150_000, cadence: 15, limitUse: 57, score: 76, policyGroup: "export", sinceYear: 2015, expect: STEADY },
@@ -78,31 +84,31 @@ export const DEMO_CUSTOMERS: DemoCustomer[] = [
 
   // ── Stories (13) ────────────────────────────────────────────────────────────────────
   { n: 28, name: "Marlow Industrial Castings Inc", story: "slowing", country: "US", city: "Toledo", industry: "Metal fabrication", terms: 45, invoice: 95_000, cadence: 12, limitUse: 86, score: 52, sinceYear: 2016,
-    expect: { events: ["PAYMENT_DETERIORATION", "UTILIZATION_THRESHOLD_BREACH"], proposal: "cut" } },
+    expect: { events: ["PAYMENT_DETERIORATION", "OVERDUE_AR", "UTILIZATION_THRESHOLD_BREACH"], proposal: "cut" } },
   { n: 29, name: "Dunmore Machine Tool Co", story: "slowing", country: "US", city: "Dayton", industry: "Industrial equipment", terms: 45, invoice: 60_000, cadence: 14, limitUse: 58, score: 57, sinceYear: 2018,
-    expect: { events: ["PAYMENT_DETERIORATION"], proposal: "none" } },
+    expect: { events: ["PAYMENT_DETERIORATION", "OVERDUE_AR"], proposal: "none" } },
   { n: 30, name: "Vossberg Metallbau GmbH", story: "slowing", country: "DE", city: "Dortmund", industry: "Metal fabrication", terms: 45, invoice: 70_000, cadence: 15, limitUse: 62, score: 55, policyGroup: "export", sinceYear: 2017,
-    expect: { events: ["PAYMENT_DETERIORATION"], proposal: "none" } },
+    expect: { events: ["PAYMENT_DETERIORATION", "OVERDUE_AR"], proposal: "none" } },
   { n: 31, name: "Carrick Process Equipment Inc", story: "over_limit", country: "US", city: "Birmingham, AL", industry: "Industrial equipment", terms: 30, invoice: 85_000, cadence: 10, limitUse: 124, score: 41, policyGroup: "high_risk", sinceYear: 2019,
     expect: { events: ["UTILIZATION_THRESHOLD_BREACH", "OVERDUE_AR", "PAYMENT_DETERIORATION"], proposal: "cut" } },
   { n: 32, name: "Pellham Freight Group Inc", story: "over_limit", country: "US", city: "Columbus, OH", industry: "Logistics", terms: 30, invoice: 55_000, cadence: 7, limitUse: 112, score: 61, sinceYear: 2021,
     expect: { events: ["UTILIZATION_THRESHOLD_BREACH"], proposal: "none" } },
   { n: 33, name: "Thornbury Electrical Supply Inc", story: "news_shock", country: "US", city: "Indianapolis", industry: "Electrical distribution", terms: 45, invoice: 110_000, cadence: 10, limitUse: 84, score: 62, sinceYear: 2015,
-    expect: { events: ["NEWS_EVENT", "UTILIZATION_THRESHOLD_BREACH"], proposal: "cut" } },
+    expect: { events: ["NEWS_EVENT"], proposal: "cut", proposalNeedsNews: true } },
   { n: 34, name: "Ellsworth Plastics Molding Inc", story: "news_shock", country: "US", city: "Grand Rapids", industry: "Plastics", terms: 45, invoice: 50_000, cadence: 14, limitUse: 47, score: 59, sinceYear: 2019,
     expect: { events: ["NEWS_EVENT"], proposal: "none" } },
   { n: 35, name: "Solenne Battery Technologies Inc", story: "going_concern", country: "US", city: "Reno", industry: "Energy storage", terms: 30, invoice: 70_000, cadence: 14, limitUse: 72, score: 21, previousScore: 44, sinceYear: 2021,
-    expect: { events: ["GOING_CONCERN", "CREDIT_RATING_DOWNGRADE", "PAYMENT_DETERIORATION"], proposal: "cut_to_owed" } },
+    expect: { events: ["GOING_CONCERN", "NEWS_EVENT", "CREDIT_RATING_DOWNGRADE", "PAYMENT_DETERIORATION", "OVERDUE_AR"], proposal: "cut_to_owed" } },
   { n: 36, name: "Granitefold Engineering Corp", story: "covenant_waiver", country: "US", city: "Denver", industry: "Engineering services", terms: 45, invoice: 140_000, cadence: 15, limitUse: 55, score: 54, sinceYear: 2014,
-    expect: { events: ["COVENANT_WAIVER", "CEO_DEPARTURE"], proposal: "none" } },
+    expect: { events: ["SEC_OTHER"], proposal: "none" } }, // the SEC agent files covenant and CEO signals as SEC_OTHER
   { n: 37, name: "Brightwater Retail Fixtures Inc", story: "bankruptcy", country: "US", city: "Newark", industry: "Retail fixtures", terms: 45, invoice: 65_000, cadence: 10, limitUse: 80, score: 6, previousScore: 24, sinceYear: 2016,
-    expect: { events: ["NEWS_EVENT"], proposal: "hold" } },
+    expect: { events: ["NEWS_EVENT", "CREDIT_RATING_DOWNGRADE", "PAYMENT_DETERIORATION"], proposal: "hold" } },
   { n: 38, name: "Ormsby Specialty Alloys Ltd", story: "score_drop", country: "GB", city: "Sheffield", industry: "Metal fabrication", terms: 45, invoice: 90_000, cadence: 15, limitUse: 50, score: 52, previousScore: 70, policyGroup: "export", sinceYear: 2016,
     expect: { events: ["CREDIT_RATING_DOWNGRADE"], proposal: "none" } },
   { n: 39, name: "Tidewell Water Systems Inc", story: "improving", country: "US", city: "Tampa", industry: "Flow control", terms: 45, invoice: 60_000, cadence: 14, limitUse: 46, score: 66, previousScore: 58, sinceYear: 2018,
     expect: { events: ["PAYMENT_IMPROVEMENT", "CREDIT_RATING_UPGRADE"], proposal: "none" } },
   { n: 40, name: "Vantor Aerospace Holdings Inc", story: "strategic_slowing", country: "US", city: "Fort Worth", industry: "Aerospace components", terms: 45, invoice: 600_000, cadence: 10, limitUse: 82, score: 64, policyGroup: "strategic", sinceYear: 2010,
-    expect: { events: ["PAYMENT_DETERIORATION"], proposal: "cut_small" } },
+    expect: { events: ["PAYMENT_DETERIORATION", "OVERDUE_AR", "UTILIZATION_THRESHOLD_BREACH"], proposal: "cut_small" } },
 ];
 
 export const BANKRUPTCY_FILED_DAYS_AGO = 21;
@@ -148,7 +154,7 @@ export function latenessFor(c: DemoCustomer, dueDaysAgo: number, r: () => number
     case "slowing":
       return Math.round(2 + 18 * recent) + jitter; // 2 → 20 days late
     case "strategic_slowing":
-      return Math.round(3 + 10 * recent) + jitter; // 3 → 13
+      return Math.round(2 + 16 * recent) + jitter; // 2 → 18
     case "over_limit":
       // The weak one stopped paying about 85 days ago (its oldest invoice is 61–90 days overdue)
       // after slowing; the other pays about on time but buys more than its limit.
@@ -173,6 +179,14 @@ function rng(seed: number): () => number {
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+}
+
+/** Latest accounts' period end, recent enough for the score (Settings › how old accounts may
+ *  be: 15 months at 70+, 12, 9, 6 below 40): stronger customers send annual accounts, weaker ones
+ *  half-year or quarterly accounts. A month end, 11 / 8 / 5 / 3 months before today. */
+function yearEndFor(t0: Date, score: number): string {
+  const back = score >= 70 ? 11 : score >= 55 ? 8 : score >= 40 ? 5 : 3;
+  return new Date(Date.UTC(t0.getUTCFullYear(), t0.getUTCMonth() - back + 1, 0)).toISOString().slice(0, 10);
 }
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
@@ -248,7 +262,7 @@ export function buildDemo(today: Date): DemoRows {
       credit_limit: limit, current_exposure: open,
       credit_rating_score: c.score, credit_rating_previous_score: c.previousScore ?? null,
       credit_rating_source: "Demo score", credit_rating_updated_at: iso(addDays(t0, c.previousScore != null ? -6 : -40)),
-      financials_fye: `${today.getUTCFullYear() - (today.getUTCMonth() < 3 ? 2 : 1)}-12-31`,
+      financials_fye: yearEndFor(t0, c.score),
       customer_since: `${c.sinceYear}-01-01`, company_type: c.invoice >= 200_000 ? "public" : "private",
       policy_group: c.policyGroup ?? null, website: `https://${prefix.toLowerCase()}${c.n}.example.com`,
     });

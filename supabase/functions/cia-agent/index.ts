@@ -51,6 +51,7 @@ import { calculateCreditLimitProposal } from "../_shared/skills/analytical/calcu
 import { detectRatingChange } from "../_shared/skills/analytical/detect-rating-change.ts";
 import { loadPolicy, policyFor } from "../_shared/policy/policy.ts";
 import { describePolicy } from "../_shared/policy/describe.ts";
+import { isRiskSignal } from "../_shared/risk_signals.ts";
 import { quietAfterRejection } from "../_shared/policy/quiet.ts";
 import { composeTeamsAlert } from "../_shared/skills/generative/compose-teams-alert.ts";
 import { deliverMessage, EmailProvider, TeamsProvider, SlackProvider, LogProvider } from "../_shared/skills/integration/deliver-message.ts";
@@ -2393,8 +2394,9 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one plain sentence 
     });
   }
 
-  for (const [custId, custEvents] of Object.entries(groupedEvents)) {
+  for (const [custId, allEvents] of Object.entries(groupedEvents)) {
     if (custId === "__portfolio__") continue;
+    const custEvents = (allEvents as any[]).filter(isRiskSignal); // good news is not a risk signal
     const agentsSeen = new Set(custEvents.map((e: any) => e.source_agent));
     if (agentsSeen.size >= 2) {
       const maxSeverity = custEvents.reduce((max: string, e: any) =>
@@ -2482,7 +2484,7 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one plain sentence 
     if ((c as any).credit_rating_score != null && (c as any).credit_rating_score < r.limit_review.distress_score_below) reviewIds.add((c as any).id);
   }
   for (const custId of reviewIds) {
-    const custEvents = (groupedEvents[custId] ?? []) as any[];
+    const custEvents = ((groupedEvents[custId] ?? []) as any[]).filter(isRiskSignal); // good news is not a risk signal
 
     const customer = (customers ?? []).find((c: any) => c.id === custId);
     if (!customer?.credit_limit) continue;

@@ -71,7 +71,7 @@ jobs:
       - name: Check every story
         run: |
           eval "$(npx --yes supabase@3.1.0 status -o env | grep -E '^(API_URL|SERVICE_ROLE_KEY)=')"
-          SUPABASE_URL="$API_URL" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" node --experimental-strip-types scripts/demo-story-check.mjs
+          SUPABASE_URL="$API_URL" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" node --experimental-strip-types scripts/demo-story-check.mjs --no-assistant
       - name: Functions log (on failure)
         if: failure()
         run: grep -iE "error|fail" /tmp/functions.log | tail -60
