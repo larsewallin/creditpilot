@@ -40,6 +40,7 @@ import { fetchSecFilings, fetchSeedSecFilings } from "../_shared/skills/integrat
 import { deliverMessage, LogProvider } from "../_shared/skills/integration/deliver-message.ts";
 import { publishEvent } from "../_shared/publishEvent.ts";
 import { agentCallerProblem } from "../_shared/agent_gate.ts";
+import { isDemoReplay } from "../_shared/demo/replay_auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -83,7 +84,8 @@ Deno.serve(async (req) => {
     .in("status", ["completed", "running"])
     .limit(1);
 
-  if (recentRuns && recentRuns.length > 0) {
+  // The demo's own rebuild is not rate limited (it has just deleted the demo's events).
+  if (recentRuns && recentRuns.length > 0 && !isDemoReplay(req)) {
     return new Response(JSON.stringify({
       error: "rate_limited",
       message: "This agent was run recently. Please wait before running again.",

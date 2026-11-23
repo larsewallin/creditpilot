@@ -31,6 +31,7 @@ import { loadPolicy } from "../_shared/policy/policy.ts";
 import { authorityOf, authorityText, mayApprove } from "../_shared/policy/authority.ts";
 import { inBackground, replayDemoAgents } from "../_shared/demo_replay.ts";
 import { rebuildDemo } from "../_shared/demo/rebuild.ts";
+import { DEMO_REPLAY_HEADER } from "../_shared/demo/replay_auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -197,7 +198,9 @@ Deno.serve(async (req) => {
       // closes the page (body.replay === false: state only, the caller runs them).
       if (body?.replay !== false) {
         const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
-        const pending = inBackground(replayDemoAgents(Deno.env.get("SUPABASE_URL")!, anonKey, {}, "demo-actions:reset"));
+        // The replay header lets the agents run even if a reset ran less than an hour ago.
+        const replayHeaders = { [DEMO_REPLAY_HEADER]: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "" };
+        const pending = inBackground(replayDemoAgents(Deno.env.get("SUPABASE_URL")!, anonKey, replayHeaders, "demo-actions:reset"));
         if (pending) await pending;
         return json({ ok: true, replay: "started" });
       }

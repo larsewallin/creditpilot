@@ -39,6 +39,7 @@ import { TradeCreditMonitorProvider, tcmBase } from "../_shared/skills/integrati
 import { publishEvent } from "../_shared/publishEvent.ts";
 import { severityToScore } from "../_shared/event_schemas.ts";
 import { agentCallerProblem } from "../_shared/agent_gate.ts";
+import { isDemoReplay } from "../_shared/demo/replay_auth.ts";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -80,7 +81,8 @@ Deno.serve(async (req) => {
     .limit(1);
   if (recentRunsError) console.error("[news-monitor-agent] agent_runs query failed:", recentRunsError.message);
 
-  if (recentRuns && recentRuns.length > 0) {
+  // The demo's own rebuild is not rate limited (it has just deleted the demo's events).
+  if (recentRuns && recentRuns.length > 0 && !isDemoReplay(req)) {
     return new Response(
       JSON.stringify({
         error: "rate_limited",

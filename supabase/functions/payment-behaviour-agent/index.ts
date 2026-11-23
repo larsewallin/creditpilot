@@ -60,6 +60,7 @@ import { loadPolicy, policyFor } from "../_shared/policy/policy.ts";
 import { publishEvent } from "../_shared/publishEvent.ts";
 import { severityToScore } from "../_shared/event_schemas.ts";
 import { agentCallerProblem } from "../_shared/agent_gate.ts";
+import { isDemoReplay } from "../_shared/demo/replay_auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -104,7 +105,8 @@ Deno.serve(async (req) => {
     .limit(1);
   if (recentRunsError) console.error("[payment-behaviour-agent] agent_runs query failed:", recentRunsError.message);
 
-  if (recentRuns && recentRuns.length > 0) {
+  // The demo's own rebuild is not rate limited (it has just deleted the demo's events).
+  if (recentRuns && recentRuns.length > 0 && !isDemoReplay(req)) {
     return new Response(JSON.stringify({
       error: "rate_limited",
       message: "This agent was run recently. Please wait before running again.",
