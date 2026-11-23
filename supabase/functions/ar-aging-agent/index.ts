@@ -168,7 +168,7 @@ Deno.serve(async (req) => {
         .select("payment_date, days_to_pay, days_early_late, on_time, amount:amount_paid")
         .eq("customer_id", customerId)
         .order("payment_date", { ascending: false })
-        .limit(24);
+        .limit(500); // all history, like the Payments page's "On-time (all)"
       if (transactionsError) console.error("[ar-aging-agent] payment_transactions query failed:", transactionsError.message);
 
       const behaviour = analysePaymentBehaviour(transactions ?? [], rules.payments, custInfo?.payment_terms_days ?? 30);

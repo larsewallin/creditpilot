@@ -137,16 +137,14 @@ describe("analysePaymentBehaviour", () => {
     expect(deter.trend).toBe("deteriorating");
   });
 
-  it("amount-weighted: large late payment lowers on_time_rate more than count suggests", () => {
+  it("on_time_rate is the share of payments on time, as on the Payments page (2026-11-23)", () => {
     const transactions: PaymentTransaction[] = [
-      tx("2025-01-01", 0, true, 1_000),    // small, on time
-      tx("2025-02-01", 0, true, 1_000),    // small, on time
-      tx("2025-03-01", 30, false, 100_000), // large, late
+      tx("2025-01-01", 0, true, 1_000),
+      tx("2025-02-01", 0, true, 1_000),
+      tx("2025-03-01", 30, false, 100_000),
     ];
     const result = analysePaymentBehaviour(transactions);
-    // Count-based would be 2/3 ≈ 0.67
-    // Amount-weighted: 2000 / 102000 ≈ 0.020
-    expect(result.on_time_rate).toBeLessThan(0.1);
+    expect(result.on_time_rate).toBe(0.667);
   });
 
   it("calculates recent_on_time_rate from last 3 transactions", () => {

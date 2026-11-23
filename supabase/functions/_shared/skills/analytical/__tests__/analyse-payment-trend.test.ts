@@ -155,3 +155,20 @@ describe("analysePaymentTrend", () => {
     expect(result.prior_window_count).toBe(1);
   });
 });
+
+describe("windows in whole days, like the Payments page (2026-11-23)", () => {
+  it("a payment exactly 90 days old is in the current window whatever the hour the agent runs", () => {
+    const ref = new Date("2026-11-23T09:00:00Z");
+    const tx = [
+      { payment_date: "2026-08-25", days_early_late: 10 }, // 90 days before 2026-11-23
+      { payment_date: "2026-08-24", days_early_late: 0 },  // 91 days: prior window
+    ];
+    const r = analysePaymentTrend(tx, ref, undefined, 30);
+    expect(r.has_sufficient_data).toBe(true);
+    if (r.has_sufficient_data) {
+      expect(r.current_window_count).toBe(1);
+      expect(r.prior_window_count).toBe(1);
+      expect(r.current_avg_days_late).toBe(10);
+    }
+  });
+});

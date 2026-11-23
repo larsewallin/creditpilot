@@ -135,17 +135,19 @@ export function analysePaymentTrend(
     (t): t is PaymentTrendTransaction & { days_early_late: number } => t.days_early_late !== null
   );
 
-  const now = referenceDate.getTime();
-  const currentStart = now - windowDays * MS_PER_DAY;
-  const priorStart = now - 2 * windowDays * MS_PER_DAY;
-
+  // Whole days, exactly like the Payments page (v_payment_behaviour_current): a payment
+  // 0–90 days old is in the current window, 91–180 in the prior one. Comparing timestamps
+  // put a payment made exactly 90 days ago on the other side whenever the agent ran later in
+  // the day than midnight, so the alert and the page showed different averages.
+  const today = Date.UTC(referenceDate.getUTCFullYear(), referenceDate.getUTCMonth(), referenceDate.getUTCDate());
   const currentWindow: number[] = [];
   const priorWindow: number[] = [];
   for (const t of valid) {
-    const ts = new Date(t.payment_date).getTime();
-    if (ts >= currentStart && ts <= now) {
+    const day = Date.parse(String(t.payment_date).slice(0, 10) + "T00:00:00Z");
+    const age = Math.round((today - day) / MS_PER_DAY);
+    if (age >= 0 && age <= windowDays) {
       currentWindow.push(t.days_early_late);
-    } else if (ts >= priorStart && ts < currentStart) {
+    } else if (age > windowDays && age <= 2 * windowDays) {
       priorWindow.push(t.days_early_late);
     }
   }
