@@ -8,7 +8,8 @@
         "min_sources": 0,
         "must_mention": [
           "Brightwater",
-          "Solenne"
+          "Solenne",
+          ["bankruptcy", "Chapter 11"]
         ],
         "must_not_say": [
           "I don't have"
