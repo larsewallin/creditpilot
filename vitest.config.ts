@@ -13,6 +13,7 @@ export default defineConfig({
       "supabase/functions/_shared/skills/**/*.{test,spec}.{ts,tsx}",
       "supabase/functions/_shared/policy/**/*.{test,spec}.{ts,tsx}",
       "supabase/functions/_shared/demo/**/*.{test,spec}.{ts,tsx}",
+      "supabase/functions/_shared/__tests__/**/*.test.ts",
       "tests/guards/**/*.test.ts",
     ],
   },
