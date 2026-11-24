@@ -50,7 +50,10 @@ export async function rebuildDemo(db: Db, today = new Date()): Promise<RebuildRe
   await must("seed_industry_econ_signals", db.from("seed_industry_econ_signals").delete().not("id", "is", null));
   await must("seed_industry_news", db.from("seed_industry_news").delete().not("id", "is", null));
 
-  // 4. Write today's rows.
+  // 4. Write today's rows, and the day they describe: the pages age invoices against it
+  // (private.app_today()), not against the database's UTC date (review 2026-11-23).
+  const asOf = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())).toISOString().slice(0, 10);
+  await must("demo as-of date", db.from("instance_settings").update({ demo_as_of: asOf }).eq("id", true));
   await must("customers", db.from("customers").upsert(rows.customers, { onConflict: "id" }));
   for (const [table, data] of [
     ["invoices", rows.invoices], ["payment_transactions", rows.payments], ["seed_news", rows.seedNews],

@@ -9,6 +9,10 @@ import { useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { DemoDataNotice } from "@/components/DemoDataNotice";
+import { useAppToday, daysBetween } from "@/hooks/use-app-today";
+import { POLICY_DEFAULTS } from "../../supabase/functions/_shared/policy/defaults";
+
+const TREND_WINDOW = POLICY_DEFAULTS.payment_trend.window_days;
 
 // Positive days_early_late = paid late, negative = paid early
 // (docs/DEMO_DATA_CONTRACT.md). Render accordingly.
@@ -27,6 +31,7 @@ function formatDelta(delta: number | null): { text: string; className: string } 
 }
 
 export default function Payments() {
+  const appToday = useAppToday();
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [searchParams] = useSearchParams();
@@ -231,11 +236,11 @@ export default function Payments() {
                               <tbody className="divide-y divide-border/50">
                                 {(transactions ?? []).map((t: any) => {
                                   const timing = formatDaysLate(t.days_early_late);
-                                  const ageDays = Math.floor(
-                                    (Date.now() - new Date(t.payment_date + "T00:00:00Z").getTime()) / 86400000
-                                  );
+                                  // The page's own windows (policy payment_trend.window_days, 90): last 90
+                                  // days, the 90 before, older. Aged against the app's date like the view.
+                                  const ageDays = daysBetween(t.payment_date, appToday);
                                   const windowLabel =
-                                    ageDays <= 30 ? "current" : ageDays <= 60 ? "prior" : "older";
+                                    ageDays <= TREND_WINDOW ? "current" : ageDays <= 2 * TREND_WINDOW ? "prior" : "older";
                                   return (
                                     <tr key={t.id}>
                                       <td className="py-1.5 font-mono tabular-nums">{t.payment_date}</td>
@@ -246,7 +251,7 @@ export default function Payments() {
                                       <td className={cn("py-1.5 text-right font-mono tabular-nums", timing.className)}>
                                         {timing.text}
                                       </td>
-                                      <td className="py-1.5 pl-4 text-muted-foreground">{t.payment_method ?? "—"}</td>
+                                      <td className="py-1.5 pl-4 text-muted-foreground">{t.payment_method ? String(t.payment_method).replace(/_/g, " ").replace(/^./, (c: string) => c.toUpperCase()) : "—"}</td>
                                       <td className="py-1.5">
                                         <span
                                           className={cn(
@@ -258,7 +263,7 @@ export default function Payments() {
                                               : "text-muted-foreground/60"
                                           )}
                                         >
-                                          {windowLabel}
+                                          {windowLabel === "current" ? `last ${TREND_WINDOW} days` : windowLabel === "prior" ? `${TREND_WINDOW} days before` : "older"}
                                         </span>
                                       </td>
                                     </tr>
