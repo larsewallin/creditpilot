@@ -246,7 +246,10 @@ const CASES = [
   { q: "Why is a credit limit cut proposed for Carrick Process Equipment?", check: (a) => C.carrickCut.length ? [
       hasNumber(a, C.carrickCut[1]) || `proposed limit ${C.carrickCut[1]} missing`, hasNumber(a, C.carrickCut[0]) || `current limit ${C.carrickCut[0]} missing`] : [] },
   { q: "Which customers have recent negative news?", check: (a) => C.news.map((n) => mentions(a, n) || `${n} (news) missing`) },
-  { q: "Which customers are exposed to an industry downturn?", check: (a) => C.industry.map((n) => mentions(a, n) || `${n} (industry) missing`) },
+  // A whole sector (22 customers in the demo): the count and the combined balance, not every name.
+  { q: "Which customers are exposed to an industry downturn?", check: (a) => {
+      const total = Number(one(`select coalesce(sum(current_exposure),0) from customers where ${ACTIVE} and company_name = any(array[${C.industry.map((n) => `'${n.replace(/'/g, "''")}'`).join(",") || "''"}])`));
+      return [hasNumber(a, C.industry.length) || `count ${C.industry.length} missing`, hasNumber(a, total) || `combined balance ${total} missing`]; } },
   { q: "What is total overdue AR in the aerospace sector?", check: (a) => [hasNumber(a, C.aeroOverdue) || `aerospace overdue ${C.aeroOverdue} missing`] },
   { q: "What is the combined exposure of Marlow Industrial Castings and Carrick Process Equipment?", check: (a) => [hasNumber(a, C.marlowCarrick) || `combined ${C.marlowCarrick} missing`] },
   { q: "How many days late can Carrick Process Equipment pay and still count as on time?", check: (a) => [
