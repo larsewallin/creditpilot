@@ -1909,6 +1909,10 @@ serve(async (req: Request) => {
         // brackets or puts it mid-sentence ("over their limit [{{HIGH_UTILIZATION_LIST}}].").
         .replace(/\s*[\[(]\s*(\{\{\s*[A-Z_]+\s*\}\})\s*[\])]\.?/g, "\n\n$1\n")
         .replace(/([^\n])[ \t]*(\{\{\s*[A-Z_]+\s*\}\})/g, "$1\n\n$2")
+        // A database field copied into the answer ("$291,000 (invoicing_currency=EUR)", follow-up audit
+        // 2026-11-24): a parenthesis holding only field=value goes; a bare field= keeps its value.
+        .replace(/\s*\((?:\s*[a-z]+(?:_[a-z]+)+=[^,()\n]*,?)+\)/g, "")
+        .replace(/\b[a-z]+(?:_[a-z]+)+=/g, "")
         // A tag closed with the wrong bracket ("$600,000 [C1)]" in the 2026-11-19 eval).
         .replace(/\[((?:[CIPNFEUMW]\d+\s*,\s*)*[CIPNFEUMW]\d+)\)\]?/g, "[$1]");
       if (answerMessage.stop_reason === "max_tokens") {
@@ -2120,7 +2124,7 @@ Schema: {"confidence":"High|Medium|Low","confidence_reason":"one plain sentence 
         const followUpMessage = await anthropic.messages.create({
           model: "claude-haiku-4-5",
           max_tokens: 150,
-          system: `Generate exactly 3 short follow-up questions (at most 14 words each, one question each) a credit manager would ask after reading this answer. Return ONLY a JSON array of 3 strings. Questions must be specific to the companies and issues mentioned, and each must name the company it is about; when the answer names no company, ask about the portfolio instead and never invent a company name. Only ask what CreditPilot's data can answer: ${ANSWERABLE_TOPICS}. Never ask about collateral, guarantees, letters of credit, credit insurance, bank data, contracts, orders, or what the customer said. Never ask the reader about themselves (their authority, their plans).`,
+          system: `Generate exactly 3 short follow-up questions (at most 14 words each, one question each) a credit manager would ask after reading this answer. Return ONLY a JSON array of 3 strings. Questions must be specific to the companies and issues mentioned, and each must name the company it is about; when the answer names no company, ask about the portfolio instead and never invent a company name. Only ask what CreditPilot's data can answer: ${ANSWERABLE_TOPICS}. Never ask about collateral, guarantees, letters of credit, credit insurance, bank data, contracts, orders, or what the customer said. The data is today's snapshot plus payment history: never ask how exposure, a currency or a balance changed over time, for a filing or bankruptcy date, or for aging or payments broken down by currency. Never ask the reader about themselves (their authority, their plans).`,
           messages: [{
             role: "user",
             content: `Question: ${question}\nAnswer just given: ${plainAnswerText.slice(0, 700)}\n\nGenerate 3 follow-up questions.`,

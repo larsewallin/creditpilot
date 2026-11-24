@@ -3,7 +3,7 @@ name: AI spend
 # Every morning after the demo refresh: what the assistant cost yesterday and this month, read-only.
 # Visitor answers are saved with their estimated cost (cia_answers.answer.usage.est_cost_usd); the
 # test runs are not saved, so they are counted from CI: only runs whose questions actually ran
-# (about $0.10 each: 9 demo answers on the small model, about 1 cent each). Fails, so GitHub emails the owner, when yesterday passed $5 or the month passed $40
+# (a harness run about $0.10: 9 demo answers on the small model, about 1 cent each; an eval run about $2.50). Fails, so GitHub emails the owner, when yesterday passed $5 or the month passed $40
 # (founder 2026-11-22: "if you think we are going to spend a lot of money let me know").
 # The Anthropic Console's usage page is the exact figure; this is the early warning.
 
@@ -40,13 +40,16 @@ jobs:
           MONTH_USD="$(q "select round($COST, 2) from cia_answers where created_at >= date_trunc('month', now())")"
           MONTH_START="$(date -u +%Y-%m-01)"
           TEST_RUNS=0
+          EVAL_RUNS=0
           for wf in ci.yml deploy.yml cia-eval.yml; do
             for id in $(gh run list -R "$GITHUB_REPOSITORY" --workflow "$wf" --created ">=$MONTH_START" --limit 300 --json databaseId --jq '.[].databaseId'); do
-              n="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id/jobs" --jq '[.jobs[] | select(.name | test("CIA harness|eval"; "i")) | .steps[] | select((.name | test("tests/cia")) and .conclusion == "success" or (.name | test("tests/cia")) and .conclusion == "failure")] | length')"
-              TEST_RUNS=$((TEST_RUNS + n))
+              steps="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id/jobs" --jq '[.jobs[] | select(.name | test("CIA harness|eval"; "i")) | .steps[] | select((.name | test("tests/cia")) and (.conclusion == "success" or .conclusion == "failure")) | .name]')"
+              TEST_RUNS=$((TEST_RUNS + $(echo "$steps" | jq '[.[] | select(test("eval.mjs") | not)] | length')))
+              EVAL_RUNS=$((EVAL_RUNS + $(echo "$steps" | jq '[.[] | select(test("eval.mjs"))] | length')))
             done
           done
-          TEST_USD="$(echo "$TEST_RUNS * 0.10" | bc)"
+          # A harness run is ~9 answers (~$0.10); an eval run ~63 questions plus up to 120 follow-ups (~$2.50).
+          TEST_USD="$(echo "$TEST_RUNS * 0.10 + $EVAL_RUNS * 2.50" | bc)"
           TOTAL="$(echo "$MONTH_USD + $TEST_USD" | bc)"
           {
             echo "### AI spend (estimated)"
@@ -54,7 +57,7 @@ jobs:
             echo "| --- | --- | --- |"
             echo "| Last 24 hours, visitors | $DAY_ANSWERS | \$$DAY_USD |"
             echo "| This month, visitors | $MONTH_ANSWERS | \$$MONTH_USD |"
-            echo "| This month, test runs | $TEST_RUNS runs | about \$$TEST_USD |"
+            echo "| This month, test runs | $TEST_RUNS harness + $EVAL_RUNS eval runs | about \$$TEST_USD |"
             echo "| **This month, total** | | **about \$$TOTAL** |"
           } | tee -a "$GITHUB_STEP_SUMMARY"
           fail=0
