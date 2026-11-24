@@ -64,6 +64,8 @@ import { streamClaude, WEB_SEARCH_TOOL, type WebSource } from "../_shared/claude
 import { buildCharts } from "../_shared/cia_charts.ts";
 import { lastDemoRefresh } from "../_shared/demo_refresh_time.ts";
 import { SCORE_GUIDANCE, scoreBand } from "../_shared/score_scale.ts";
+import { gradeFromCitations } from "../_shared/cia_confidence.ts";
+import { UNANSWERABLE_FOLLOW_UP } from "../_shared/cia_followups.ts";
 import { ANSWERABLE_TOPICS, capabilityStatus, isAdviceQuestion, playbookBlock } from "../_shared/cia_playbook.ts";
 import { appToday } from "../_shared/app_today.ts";
 import { rankPortfolioRisk, RISK_TIER_TITLES } from "../_shared/cia_risk_ranking.ts";
@@ -121,6 +123,8 @@ interface CIARequest {
   stream?: boolean;
   /** The question a follow-up click came from (its company carries over). */
   previous_question?: string;
+  /** Internal tests only: return the facts and computed lists, no answer call (free audit). */
+  context_only?: boolean;
   force_refresh?: boolean;
   customer_id?: string;
   /** Skip the Anthropic briefing call entirely (used by initDemo.ts on reset
@@ -146,9 +150,6 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-
-// Follow-ups CreditPilot's data cannot answer (seen in the follow-up audit of the eval).
-const UNANSWERABLE_FOLLOW_UP = /\bwhen (?:will|is|was|did)\b|\b(?:trend\w*|history|changed?|evolv\w*|over (?:the )?(?:last|past) \d+ (?:days|months))\b[^?]*\b(?:score|rating|exposure|currency|EUR|GBP|JPY|balance)\b|\b(?:score|rating|exposure|currency|EUR|GBP|JPY|balance)\b[^?]*\b(?:trend\w*|history|before the|changed|over (?:the )?(?:last|past) \d+ (?:days|months))\b|\bwhat (?:triggered|caused|drove)\b[^?]*\b(?:score|rating)\b[^?]*\b(?:improv|increas|ris)|\b(?:reorgani[sz]ation|recovery|recoveries|court|plan of|filing date|petition date)\b|\b(?:score|rating)\b[^?]*\b(?:breakdown|components?|factors|drivers|methodology|inputs)\b|\b(?:aging|payments?|paid|days|history)\b[^?]*\b(?:by|per|across|in|denominated in) (?:\w+ ){0,3}(?:currenc|EUR|GBP|JPY)|collateral|guarantee|letters? of credit|insurance/i;
 
 const DEMO_SUGGESTIONS = [
   "Why is Carrick Process Equipment flagged across multiple agents?",
@@ -1086,7 +1087,9 @@ function estimateCost(model: string, u: { input_tokens: number; output_tokens: n
 
 // ─── Saved answers (demo) ────────────────────────────────────────────────────
 
-const SAVED_ANSWER_MAX_AGE_MS = 6 * 3600 * 1000;
+// The demo's data only changes at a rebuild, so a saved answer is good until the next one
+// (was 6 hours; founder 2026-11-24, cost).
+const SAVED_ANSWER_MAX_AGE_MS = 24 * 3600 * 1000;
 /** Bump when the way CIA answers changes, so saved demo answers written before are not replayed. */
 const ANSWER_VERSION = 5; // 5: convergence list spliced in code (2026-11-24)
 
@@ -1104,7 +1107,8 @@ async function savedAnswer(db: any, question: string): Promise<{ id: string; cre
     } catch { /* fall back to the daily refresh */ }
     const since = new Date(Math.max(rebuilt, Date.now() - SAVED_ANSWER_MAX_AGE_MS)).toISOString();
     const { data, error } = await db.from("cia_answers").select("id, created_at, answer")
-      .eq("is_demo", true).eq("question", question.trim().slice(0, 1000)).gte("created_at", since)
+      // The same question in other capitals is the same question (case-insensitive, no wildcards).
+      .eq("is_demo", true).ilike("question", question.trim().slice(0, 1000).replace(/[\\%_]/g, (c) => "\\" + c)).gte("created_at", since)
       .order("created_at", { ascending: false }).limit(1).maybeSingle();
     if (error || !data) return null;
     const a = data.answer as Record<string, unknown>;
@@ -1301,10 +1305,14 @@ serve(async (req: Request) => {
     // cannot run up the bill: CIA_DEMO_DAILY_LIVE_CAP, default 300 (saved answers do not count).
     if (DEMO_MODE && !isInternalTest) {
       const cap = Number(Deno.env.get("CIA_DEMO_DAILY_LIVE_CAP") ?? "300");
+      // And a ceiling in dollars (founder 2026-11-24): the answers' estimated cost since the last
+      // refresh, CIA_DEMO_DAILY_USD_CAP, default $3.
+      const usdCap = Number(Deno.env.get("CIA_DEMO_DAILY_USD_CAP") ?? "3");
       try {
-        const { count } = await supabaseClient.from("cia_answers").select("id", { count: "exact", head: true })
-          .eq("is_demo", true).gte("created_at", lastDemoRefresh().toISOString());
-        if (Number.isFinite(cap) && (count ?? 0) >= cap) {
+        const { data: today, count } = await supabaseClient.from("cia_answers").select("cost:answer->usage->>est_cost_usd", { count: "exact" })
+          .eq("is_demo", true).gte("created_at", lastDemoRefresh().toISOString()).limit(1000);
+        const spent = (today ?? []).reduce((t: number, r: { cost: string | null }) => t + (Number(r.cost) || 0), 0);
+        if ((Number.isFinite(cap) && (count ?? 0) >= cap) || (Number.isFinite(usdCap) && spent >= usdCap)) {
           return jsonRes({
             answer: "The demo has answered all the live questions it can for today. The suggested questions on the Ask page still work (they replay today's answers). New questions open again after the daily refresh at 4 am New York time, or run your own copy from the [GitHub repo](https://github.com/larsewallin/creditpilot).",
             sources: [], confidence: "Low", confidence_reason: "The demo's daily limit of live answers was reached.", relatedQuestions: [],
@@ -1868,12 +1876,26 @@ serve(async (req: Request) => {
       ? `\nRequired step (include it in Suggested next steps): ask ${accountsNeeded.join(", ")} for the latest annual accounts, then re-score.` : ""));
 
     const context = contextParts.join("\n\n");
+    // Free audit (founder 2026-11-24): the internal tests can read the facts handed to the model,
+    // and the lists spliced in code, without the answer call. Only with the internal test secret.
+    if (isInternalTest && body.context_only === true) {
+      return jsonRes({
+        context,
+        lists: {
+          high_risk: buildHighRiskListBlock(highRiskLines),
+          high_utilization: buildHighUtilizationListBlock(highUtilizationLines, utilizationLevel),
+          payment_worse: paymentWorseBlock, payment_better: paymentBetterBlock, convergence: convergenceBlock,
+        },
+      });
+    }
 
     const model = DEMO_MODE ? "claude-haiku-4-5" : "claude-sonnet-5";
     // Live web research (Perplexity for trade credit): for a question about named companies, a
     // sector, or what is happening now. The ledger stays the source of every figure about our
     // own customers; the web adds outside context, cited to its pages. CIA_WEB_SEARCH=off stops it.
-    const useWeb = (Deno.env.get("CIA_WEB_SEARCH") ?? "on") !== "off" && (
+    // Off by default in the public demo (founder 2026-11-24: cost, and its companies are fictional);
+    // CIA_WEB_SEARCH=on turns it back on there.
+    const useWeb = (Deno.env.get("CIA_WEB_SEARCH") ?? (DEMO_MODE ? "off" : "on")) !== "off" && (
       companyMentions.length > 0 || !!sector ||
       /\b(news|latest|recent(ly)?|why|market|industry|sector|economy|economic|tariffs?|outlook|happening|today|this (week|month)|going on|headwinds?|rates?|recession|bankrupt\w*|lawsuit|strike|layoffs?)\b/i.test(question));
     // A list answer with its citation tags runs long: at 600 tokens one was cut off mid-list
@@ -2056,7 +2078,17 @@ serve(async (req: Request) => {
         confidence_reason: "See answer for details",
       };
       let metaMessage: Anthropic.Message | undefined;
-      try {
+      // The grade is worked out in code from the citations (founder 2026-11-24, cost: the model
+      // grader re-sent all the data, about half the cost of an answer). CIA_CONFIDENCE_MODEL=on
+      // brings the model grader back outside the demo.
+      const modelGrade = !DEMO_MODE && Deno.env.get("CIA_CONFIDENCE_MODEL") === "on";
+      if (!modelGrade) meta = gradeFromCitations({
+        cited: citedTags.size, verified: verifiedTags.length, web: webSources.length,
+        computedList: /\{\{\s*[A-Z_]+\s*\}\}/.test(rawAnswerText),
+        noData: /^\W*I don't have that information/i.test(plainAnswerText),
+        hasFigures: /\d/.test(plainAnswerText.replace(/\b(?:19|20)\d\d\b/g, "")),
+      });
+      if (modelGrade) try {
         metaMessage = await anthropic.messages.create({
           model: DEMO_MODE ? "claude-haiku-4-5" : "claude-sonnet-5",
           max_tokens: 4000,

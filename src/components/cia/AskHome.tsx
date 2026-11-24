@@ -5,10 +5,14 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, Globe, Sparkles } from "lucide-react";
+import { DEMO_MODE } from "@/lib/constants";
 
 const TRY = [
   { q: "Should I reduce Marlow Industrial Castings' credit limit?", hint: "Advice with next steps" },
-  { q: "Where are steel prices heading, and which of our customers are exposed?", hint: "Searches the web", web: true },
+  // Web research is off in the public demo (founder 2026-11-24, cost): the industry agent's own signal answers it.
+  DEMO_MODE
+    ? { q: "Where are steel prices heading, and which of our customers are exposed?", hint: "Industry risk" }
+    : { q: "Where are steel prices heading, and which of our customers are exposed?", hint: "Searches the web", web: true },
   { q: "Which customers have the highest credit risk right now?", hint: "Portfolio view" },
   { q: "Why is Carrick Process Equipment flagged across multiple agents?", hint: "Signals explained" },
   { q: "Whose payments are getting worse?", hint: "With a chart" },
@@ -26,8 +30,9 @@ export function AskHome() {
           <Sparkles className="h-6 w-6 text-primary" />Ask anything about your receivables
         </h1>
         <p className="text-sm text-muted-foreground">
-          The assistant reads your customers, invoices, payments and the monitoring agents' alerts, checks the web for current news,
-          and cites every figure it gives you.
+          {DEMO_MODE
+            ? <>The assistant reads your customers, invoices, payments and the monitoring agents' alerts, and cites every figure it gives you. Web research is off in this public demo; it is on when you <a className="underline" href="https://github.com/larsewallin/creditpilot#run-it-yourself" target="_blank" rel="noopener">run your own copy</a>.</>
+            : <>The assistant reads your customers, invoices, payments and the monitoring agents' alerts, checks the web for current news, and cites every figure it gives you.</>}
         </p>
       </div>
       <form onSubmit={(e) => { e.preventDefault(); ask(q); }} className="relative">
