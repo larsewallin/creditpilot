@@ -77,7 +77,8 @@ const C = {
   carrickCut: sql(`select p.current_value, p.proposed_value from pending_actions p join customers c on c.id = p.customer_id where c.company_name ilike 'Carrick%' and p.status = 'pending' and p.action_type = 'CREDIT_LIMIT_REDUCTION' limit 1`)[0]?.map(Number) ?? [],
   highRiskScore: col(`select company_name from customers where ${ACTIVE} and credit_rating_score < coalesce((select (value->>'distress_score_below')::int from company_settings where key = 'policy.limit_review'), 25) order by 1`),
   news: col(`select distinct c.company_name from credit_events e join customers c on c.id = e.customer_id where e.is_demo and e.event_type = 'NEGATIVE_NEWS' and e.created_at > now() - interval '90 days' order by 1`),
-  industry: col(`select distinct c.company_name from credit_events e join customers c on c.id = e.customer_id where e.is_demo and e.event_type = 'INDUSTRY_DOWNTURN' and e.created_at > now() - interval '90 days' order by 1`),
+  // An industry signal is about a sector (payload.sector): every active customer in it is exposed.
+  industry: col(`select distinct c.company_name from credit_events e join customers c on c.sector = e.payload->>'sector' or c.id = e.customer_id where e.is_demo and e.event_type = 'INDUSTRY_DOWNTURN' and e.created_at > now() - interval '90 days' and c.${ACTIVE} order by 1`),
   aeroOverdue: Number(one(`select coalesce(sum(bucket_1_30 + bucket_31_60 + bucket_61_90 + bucket_over_90),0) from v_ar_aging_current a join customers c on c.company_name = a.company_name where c.sector = 'Aerospace & Defense' and c.${ACTIVE}`)),
   marlowCarrick: Number(one(`select coalesce(sum(current_exposure),0) from customers where ${ACTIVE} and (company_name ilike 'Marlow Industrial Castings%' or company_name ilike 'Carrick%')`)),
   carrickGroupGrace: Number(one(`select coalesce((select value->'high_risk'->'overrides'->'payments'->>'grace_days' from company_settings where key = 'policy.groups'), '0')`)),

@@ -505,6 +505,7 @@ interface RetrievedData {
   pending_actions: { company_name: string; action_type: string; current_value: number | null; proposed_value: number | null; severity: string | null }[] | null;
   bankruptcy: { company_name: string; pre_petition: number; invoices: number }[] | null;
   industry_signals?: any[] | null;
+  industry_customers?: { company_name: string; current_exposure: number | null; sector: string }[] | null;
   risk_events?: { customer_id: string; event_type: string; severity: string | null; title: string | null }[] | null;
   payment_trend: any[] | null;
   payment_trend_named: any[] | null;
@@ -621,6 +622,14 @@ async function fetchRelevantData(
         .order("created_at", { ascending: false }).limit(200);
       if (error) { console.error("industry signals error:", error.message); return; }
       results.industry_signals = data ?? [];
+      // The agent raises a signal for a sector (payload.sector), not for a customer: every active
+      // customer in that sector is exposed.
+      const sectors = [...new Set((data ?? []).map((e: any) => e.payload?.sector).filter(Boolean))];
+      if (sectors.length) {
+        const { data: inSector } = await supabase.from("customers").select("company_name, current_exposure, sector")
+          .eq("lifecycle_status", "active").in("sector", sectors).limit(1000);
+        results.industry_customers = inSector ?? [];
+      }
     })(),
 
     // Proposed actions waiting for approval (Actions page): always small, listed in full.
@@ -1850,12 +1859,14 @@ serve(async (req: Request) => {
       for (const e of data.industry_signals as any[]) {
         const k = String(e.title ?? "Industry signal");
         const g = bySignal.get(k) ?? { severity: String(e.severity ?? ""), names: new Map(), sectors: new Set() };
+        const sector = e.payload?.sector ?? e.customers?.sector;
+        if (sector) g.sectors.add(sector);
         if (e.customers?.company_name) g.names.set(e.customers.company_name, Number(e.customers.current_exposure ?? 0));
-        if (e.customers?.sector) g.sectors.add(e.customers.sector);
+        for (const c of data.industry_customers ?? []) if (c.sector === sector) g.names.set(c.company_name, Number(c.current_exposure ?? 0));
         bySignal.set(k, g);
       }
       contextParts.push(
-        `## OFFICIAL INDUSTRY SIGNALS (computed in code from the industry agent's alerts of the last 90 days, whole portfolio; the answer to "which customers are exposed to <an industry trend, input prices, a commodity such as steel>": name exactly these customers, never pick customers by sector yourself)\n` +
+        `## OFFICIAL INDUSTRY SIGNALS (computed in code from the industry agent's alerts of the last 90 days and every active customer in the sector each alert is about, whole portfolio; the answer to "which customers are exposed to <an industry trend, input prices, a commodity such as steel>": name exactly these customers, never pick customers by sector yourself)\n` +
         [...bySignal.entries()].map(([t, g]) => `- ${sanitize(t)} (${sanitize(g.severity.toLowerCase())}; ${[...g.sectors].map(sanitize).join(", ")}): ` +
           `${g.names.size} customer${g.names.size === 1 ? "" : "s"}, combined balance $${[...g.names.values()].reduce((a, b) => a + b, 0).toLocaleString()} — ` +
           [...g.names.entries()].sort((a, b) => b[1] - a[1]).map(([n, v]) => `${sanitize(n)} $${v.toLocaleString()}`).join(", ")).join("\n"));
