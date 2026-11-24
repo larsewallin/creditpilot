@@ -66,6 +66,7 @@ import { lastDemoRefresh } from "../_shared/demo_refresh_time.ts";
 import { SCORE_GUIDANCE, scoreBand } from "../_shared/score_scale.ts";
 import { ANSWERABLE_TOPICS, capabilityStatus, isAdviceQuestion, playbookBlock } from "../_shared/cia_playbook.ts";
 import { appToday } from "../_shared/app_today.ts";
+import { rankPortfolioRisk, RISK_TIER_TITLES } from "../_shared/cia_risk_ranking.ts";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -263,10 +264,11 @@ const HIGH_UTIL_MARKER_TEST = /\{\{\s*HIGH_UTILIZATION_LIST\s*\}\}/;
 const HIGH_UTIL_MARKER_REPLACE = /\{\{\s*HIGH_UTILIZATION_LIST\s*\}\}/g;
 
 function buildHighUtilizationListBlock(
-  lines: { tag: string; company_name: string | null; credit_limit: number | null; current_exposure: number | null }[]
+  lines: { tag: string; company_name: string | null; credit_limit: number | null; current_exposure: number | null }[],
+  level = "80% of the limit",
 ): string {
   if (lines.length === 0) {
-    return "**No customers** are currently at or above 85% utilization.";
+    return `**No customers** are at or above the policy's alert level (${level}).`;
   }
   // Over the limit first (most over first), then close to it: "over their credit limit"
   // and "near their limit" are different answers (seen 2026-11-17: 4 over, 16 close).
@@ -279,7 +281,7 @@ function buildHighUtilizationListBlock(
   parts.push(over.length
     ? `**${over.length} customer${over.length === 1 ? " is" : "s are"} over their credit limit:**\n${over.map(bullet).join("\n")}`
     : "**No customers** are over their credit limit.");
-  if (near.length) parts.push(`**${near.length} more ${near.length === 1 ? "is" : "are"} close to it (85–100% of the limit):**\n${near.map(bullet).join("\n")}`);
+  if (near.length) parts.push(`**${near.length} more ${near.length === 1 ? "is" : "are"} close to it (at or above the policy's alert level, ${level}):**\n${near.map(bullet).join("\n")}`);
   return parts.join("\n\n");
 }
 
@@ -291,18 +293,23 @@ const HIGH_RISK_MARKER_TEST = /\{\{\s*HIGH_RISK_LIST\s*\}\}/;
 const HIGH_RISK_MARKER_REPLACE = /\{\{\s*HIGH_RISK_LIST\s*\}\}/g;
 
 function buildHighRiskListBlock(
-  lines: { tag: string; customer: any; line: string }[]
+  lines: { tag: string; customer: any; tier: 1 | 2 | 3 | 4; reasons: string[] }[]
 ): string {
   if (lines.length === 0) {
-    return "**No customers** currently meet the high-risk criteria.";
+    return "**No customers** show serious warning signs right now.";
   }
-  const totalCreditLimit = lines.reduce((sum, { customer: c }) => sum + (c.credit_limit ?? 0), 0);
+  // Ranked in code by how serious the risk is (_shared/cia_risk_ranking.ts), with each
+  // customer's reasons: never by size alone (review 2026-11-23: the largest account came first).
   const totalExposure = lines.reduce((sum, { customer: c }) => sum + (c.current_exposure ?? 0), 0);
-  const bullets = lines.map(({ tag, customer: c }) =>
-    // Shown to the user as it stands: plain words, never field names or the demo's scenario label.
-    `- **${sanitize(c.company_name)}**: ${c.credit_rating_score != null ? `score ${c.credit_rating_score}/100 (${scoreBand(c.credit_rating_score)?.label ?? "no label"})` : "no score"}, exposure $${c.current_exposure?.toLocaleString()} [${tag}]`
-  ).join("\n");
-  return `**${lines.length} customer${lines.length === 1 ? "" : "s"}** currently meet the high-risk criteria (combined credit limit $${totalCreditLimit.toLocaleString()}, combined exposure $${totalExposure.toLocaleString()}):\n${bullets}`;
+  const groups: string[] = [];
+  for (const tier of [1, 2, 3, 4] as const) {
+    const rows = lines.filter((l) => l.tier === tier);
+    if (!rows.length) continue;
+    groups.push(`**${RISK_TIER_TITLES[tier]}:**\n` + rows.map(({ tag, customer: c, reasons }) =>
+      `- **${sanitize(c.company_name)}**: ${reasons.join("; ")}. Exposure $${Number(c.current_exposure ?? 0).toLocaleString()}${c.credit_rating_score != null ? `, score ${c.credit_rating_score}/100 (${scoreBand(c.credit_rating_score)?.label ?? "no label"})` : ""} [${tag}]`
+    ).join("\n"));
+  }
+  return `**${lines.length} customer${lines.length === 1 ? "" : "s"}** show warning signs (combined exposure $${totalExposure.toLocaleString()}), most serious first:\n\n${groups.join("\n\n")}`;
 }
 
 // ─── Question router ─────────────────────────────────────────────────────────
@@ -493,6 +500,7 @@ interface RetrievedData {
   financials_settings: any;
   pending_actions: { company_name: string; action_type: string; current_value: number | null; proposed_value: number | null; severity: string | null }[] | null;
   bankruptcy: { company_name: string; pre_petition: number; invoices: number }[] | null;
+  risk_events?: { customer_id: string; event_type: string; severity: string | null; title: string | null }[] | null;
   payment_trend: any[] | null;
   payment_trend_named: any[] | null;
   country_totals: { country: string; customers: number; exposure: number; limit: number }[] | null;
@@ -580,7 +588,20 @@ async function fetchRelevantData(
       if (error) { console.error("score sources error:", error.message); return; }
       const eff = effectiveSettings(Object.fromEntries((settingRows ?? []).map((r: any) => [r.key, r.value]))) as any;
       results.financials_settings = eff.financials;
-      results.score_sources = summarizeScoreSources(rows ?? [], eff.financials, new Date().toISOString().slice(0, 10));
+      results.score_sources = summarizeScoreSources(rows ?? [], eff.financials, await appToday(supabase));
+    })(),
+
+    // Every customer's open warnings (90 days), for the risk ranking below: the keyword-filtered
+    // credit_events table further down is not complete enough to rank the whole portfolio.
+    (async () => {
+      const { data, error } = await supabase
+        .from("credit_events")
+        .select("customer_id, event_type, severity, title")
+        .eq("is_demo", demoMode).not("customer_id", "is", null)
+        .gte("created_at", new Date(Date.now() - 90 * 86_400_000).toISOString())
+        .limit(2000);
+      if (error) { console.error("risk events error:", error.message); return; }
+      results.risk_events = data ?? [];
     })(),
 
     // Proposed actions waiting for approval (Actions page): always small, listed in full.
@@ -1060,7 +1081,7 @@ function estimateCost(model: string, u: { input_tokens: number; output_tokens: n
 
 const SAVED_ANSWER_MAX_AGE_MS = 6 * 3600 * 1000;
 /** Bump when the way CIA answers changes, so saved demo answers written before are not replayed. */
-const ANSWER_VERSION = 3; // 3: one limit-use rule (2026-11-23)
+const ANSWER_VERSION = 4; // 4: risk ranking by seriousness with reasons (2026-11-23)
 
 // deno-lint-ignore no-explicit-any
 async function savedAnswer(db: any, question: string): Promise<{ id: string; created_at: string; answer: Record<string, unknown> } | null> {
@@ -1379,13 +1400,14 @@ serve(async (req: Request) => {
     // (2026-11-18 eval: the model listed 10 of 21 "getting worse" customers).
     let paymentWorseBlock = "";
     let paymentBetterBlock = "";
+    let utilizationLevel = "80% of the limit";
     let highUtilizationLines: { tag: string; company_name: string | null; credit_limit: number | null; current_exposure: number | null }[] = [];
 
     // Hoisted for the same reason as highUtilizationLines above: still reachable
     // after Call 1, when the {{HIGH_RISK_LIST}} marker (if present) gets spliced
     // with this exact, already-correct data rather than trusting free-text
     // enumeration of up to dozens of names.
-    let highRiskLines: { tag: string; customer: any; line: string }[] = [];
+    let highRiskLines: { tag: string; customer: any; tier: 1 | 2 | 3 | 4; reasons: string[] }[] = [];
 
     if (data.customers.length > 0) {
       // Single pass: assign each customer's tag once, keep the customer object and
@@ -1406,7 +1428,7 @@ serve(async (req: Request) => {
         return {
           tag,
           customer: c,
-          line: `- [${tag}] ${sanitize(c.company_name)} (type:${sanitize(c.company_type)}, credit_limit=$${c.credit_limit?.toLocaleString()}, balance=$${c.current_exposure?.toLocaleString()}, utilization=${c.credit_limit ? Math.round(c.current_exposure / c.credit_limit * 100) : "N/A"}%, ${c.credit_rating_score != null ? `credit_score=${c.credit_rating_score}/100, score_label=${scoreBand(c.credit_rating_score)?.label} (${sanitize(c.credit_rating_raw) || "N/A"} from ${sanitize(c.credit_rating_source) || "N/A"})` : "credit_score=NR (No Rating, provider=N/A)"}, ${c.financials_fye ? `financials_year_end=${String(c.financials_fye).slice(0, 10)}, ` : ""}${c.credit_rating_previous_score != null ? `previous_credit_score=${c.credit_rating_previous_score}/100${c.credit_rating_updated_at ? ` (score changed ${String(c.credit_rating_updated_at).slice(0, 10)})` : ""}, ` : ""}payment_terms=${c.payment_terms_days != null ? `net ${c.payment_terms_days} days` : "N/A"}, ${c.policy_group ? `policy_group=${sanitize(policyGroups[c.policy_group]?.name ?? c.policy_group)}, ` : ""}invoicing_currency=${sanitize(c.invoicing_currency) || "N/A"}, ${c.payment_avg_days_early_late != null ? `avg_days_late=${c.payment_avg_days_early_late}, ` : ""}account_manager=${sanitize(c.account_manager) || "N/A"}, credit_manager=${sanitize(c.credit_manager) || "N/A"}, sector=${sanitize(c.sector) || "N/A"}${c.industry ? ` (${sanitize(c.industry)})` : ""}, country=${sanitize(c.country_code) || "N/A"}${c.city ? ` (${sanitize(c.city)})` : ""}, ${c.customer_since ? `customer_since=${String(c.customer_since).slice(0, 10)}, ` : ""}${c.contract_expiry ? `contract_expiry=${String(c.contract_expiry).slice(0, 10)}, ` : ""}${c.last_reviewed ? `last_reviewed=${String(c.last_reviewed).slice(0, 10)}, ` : ""}${c.preferred_customer ? "preferred_customer=yes, " : ""}${c.primary_products ? `products=${sanitize(c.primary_products)}, ` : ""}scenario=${sanitize(c.scenario) || "N/A"}, payment_health=${sanitize(c.payment_health) || "unknown"}, risk_tags=[${(c.risk_tags ?? []).map(sanitize).join(", ")}]${c.is_high_risk ? ', RISK_FLAG=HIGH' : ''})`,
+          line: `- [${tag}] ${sanitize(c.company_name)} (type:${sanitize(c.company_type)}, credit_limit=$${c.credit_limit?.toLocaleString()}, balance=$${c.current_exposure?.toLocaleString()}, utilization=${c.credit_limit ? Math.round(c.current_exposure / c.credit_limit * 100) : "N/A"}%, ${c.credit_rating_score != null ? `credit_score=${c.credit_rating_score}/100, score_label=${scoreBand(c.credit_rating_score)?.label} (${sanitize(c.credit_rating_raw) || "N/A"} from ${sanitize(c.credit_rating_source) || "N/A"})` : "credit_score=NR (No Rating, provider=N/A)"}, ${c.financials_fye ? `financials_year_end=${String(c.financials_fye).slice(0, 10)}, ` : ""}${c.credit_rating_previous_score != null ? `previous_credit_score=${c.credit_rating_previous_score}/100${c.credit_rating_updated_at ? ` (score changed ${String(c.credit_rating_updated_at).slice(0, 10)})` : ""}, ` : ""}payment_terms=${c.payment_terms_days != null ? `net ${c.payment_terms_days} days` : "N/A"}, ${c.policy_group ? `policy_group=${sanitize(policyGroups[c.policy_group]?.name ?? c.policy_group)}, ` : ""}invoicing_currency=${sanitize(c.invoicing_currency) || "N/A"}, ${c.payment_avg_days_early_late != null ? `avg_days_late=${c.payment_avg_days_early_late}, ` : ""}account_manager=${sanitize(c.account_manager) || "N/A"}, credit_manager=${sanitize(c.credit_manager) || "N/A"}, sector=${sanitize(c.sector) || "N/A"}${c.industry ? ` (${sanitize(c.industry)})` : ""}, country=${sanitize(c.country_code) || "N/A"}${c.city ? ` (${sanitize(c.city)})` : ""}, ${c.customer_since ? `customer_since=${String(c.customer_since).slice(0, 10)}, ` : ""}${c.contract_expiry ? `contract_expiry=${String(c.contract_expiry).slice(0, 10)}, ` : ""}${c.last_reviewed ? `last_reviewed=${String(c.last_reviewed).slice(0, 10)}, ` : ""}${c.preferred_customer ? "preferred_customer=yes, " : ""}${c.primary_products ? `products=${sanitize(c.primary_products)}, ` : ""}scenario=${sanitize(c.scenario) || "N/A"}, payment_health=${sanitize(c.payment_health) || "unknown"}, risk_tags=[${(c.risk_tags ?? []).map(sanitize).join(", ")}])`,
         };
       });
 
@@ -1426,17 +1448,20 @@ serve(async (req: Request) => {
           ).join("\n")
         );
       }
-      highRiskLines = customerLines.filter(({ customer }) => customer.is_high_risk);
+      const tagById = new Map(customerLines.map(({ tag, customer }) => [customer.id, tag]));
+      highRiskLines = rankPortfolioRisk(
+        data.customers,
+        data.risk_events ?? [],
+        data.pending_actions ?? [],
+        data.bankruptcy ?? [],
+        { distress_score_below: creditPolicy.limit_review.distress_score_below, at_risk_on_time_below: creditPolicy.payments.at_risk_on_time_below },
+      ).filter((r) => tagById.has(r.customer.id)).map((r) => ({ ...r, tag: tagById.get(r.customer.id)! }));
       if (highRiskLines.length > 0) {
-        const highRiskTotalCreditLimit = highRiskLines.reduce((sum, { customer: c }) => sum + (c.credit_limit ?? 0), 0);
-        const highRiskTotalExposure = highRiskLines.reduce((sum, { customer: c }) => sum + (c.current_exposure ?? 0), 0);
         contextParts.push(
-          `## OFFICIAL HIGH-RISK CUSTOMER LIST (business-locked ranking — the complete, authoritative answer to any "highest risk" / "most at-risk" portfolio-wide question)\n` +
-          highRiskLines.map(({ tag, customer: c }) =>
-            `- ${sanitize(c.company_name)} [${tag}] (credit_score=${c.credit_rating_score ?? "NR"}/100, scenario=${sanitize(c.scenario) || "N/A"})`
-          ).join("\n") +
-          `\n- Combined credit limit across this high-risk set: $${highRiskTotalCreditLimit.toLocaleString()}\n` +
-          `- Combined current exposure across this high-risk set: $${highRiskTotalExposure.toLocaleString()}`
+          `## OFFICIAL HIGH-RISK CUSTOMER LIST (ranked in code by how serious the risk is, most serious first, with each customer's reasons — the complete, authoritative answer to any "highest risk" / "most at-risk" portfolio-wide question)\n` +
+          highRiskLines.map(({ tag, customer: c, tier, reasons }) =>
+            `- ${RISK_TIER_TITLES[tier]}: ${sanitize(c.company_name)} [${tag}]: ${reasons.join("; ")}`
+          ).join("\n")
         );
       }
 
@@ -1451,11 +1476,21 @@ serve(async (req: Request) => {
       // so customerLines can be filtered directly — no separate complete-data-source
       // fallback needed anymore.
       highUtilizationLines = customerLines
-        .map(({ tag, customer: c }) => ({ tag, company_name: c.company_name, credit_limit: c.credit_limit, current_exposure: c.current_exposure }))
-        .filter((c) => (c.credit_limit ?? 0) > 0 && ((c.current_exposure ?? 0) / (c.credit_limit as number)) >= 0.85);
+        // Audit 2026-11-23: was a hard-coded 85%; the alert threshold is the policy's
+        // utilization.high_pct (80%, High risk group 70%), the same rule the AR agent alerts on.
+        .map(({ tag, customer: c }) => ({ tag, company_name: c.company_name, credit_limit: c.credit_limit, current_exposure: c.current_exposure, high_pct: policyFor(creditPolicy, policyGroups, c.policy_group).utilization.high_pct }))
+        .filter((c) => (c.credit_limit ?? 0) > 0 && ((c.current_exposure ?? 0) / (c.credit_limit as number)) * 100 >= c.high_pct)
+        .sort((a, b) => (b.current_exposure as number) / (b.credit_limit as number) - (a.current_exposure as number) / (a.credit_limit as number));
+      {
+        const lower = Object.values(policyGroups)
+          .map((g: any) => ({ name: g?.name, pct: g?.overrides?.utilization?.high_pct }))
+          .filter((g) => typeof g.pct === "number" && g.pct !== creditPolicy.utilization.high_pct);
+        utilizationLevel = `${creditPolicy.utilization.high_pct}% of the limit` +
+          (lower.length ? ` (${lower.map((g) => `${g.pct}% for ${g.name} accounts`).join(", ")})` : "");
+      }
       if (highUtilizationLines.length > 0) {
         contextParts.push(
-          `## OFFICIAL HIGH-UTILIZATION CUSTOMER LIST (computed from credit_limit/current_exposure across the complete customer set, threshold utilization >= 85% — the complete, authoritative answer to any "approaching their credit limit" / "near their limit" / "over their credit limit" question)\n` +
+          `## OFFICIAL HIGH-UTILIZATION CUSTOMER LIST (computed from credit_limit/current_exposure across the complete customer set, threshold: limit use at or above the company's policy alert level (${creditPolicy.utilization.high_pct}%, or the customer's group level) — the complete, authoritative answer to any "approaching their credit limit" / "near their limit" / "over their credit limit" question)\n` +
           highUtilizationLines.map((c) =>
             `- ${sanitize(c.company_name)} [${c.tag}] (utilization=${Math.round(((c.current_exposure as number) / (c.credit_limit as number)) * 100)}%, balance=$${c.current_exposure?.toLocaleString()}, credit_limit=$${c.credit_limit?.toLocaleString()})`
           ).join("\n")
@@ -1499,11 +1534,28 @@ serve(async (req: Request) => {
         if (rows.length) contextParts.push("## LIMIT USE — NAMED CUSTOMER(S) (computed in code; whether a customer is over or under its limit comes from here)\n" + rows.join("\n"));
       }
 
+    // The rules that apply to each named customer, with its group's overrides already applied
+    // (audit 2026-11-23: "how late can Carrick pay and still be on time?" got the company's 5 days;
+    // Carrick is in the High risk group, which has no grace days).
+    if (companyMentions.length) {
+      const namedPolicy = customerLines.filter(({ customer: c }) =>
+        companyMentions.some((m) => String(c.company_name ?? "").toLowerCase().includes(m.toLowerCase()))).slice(0, 10);
+      if (namedPolicy.length) {
+        contextParts.push(
+          "## POLICY FOR NAMED CUSTOMER(S) (computed in code: the company's policy with the customer's group applied; these values win over the company-wide ones)\n" +
+          namedPolicy.map(({ tag, customer: c }) => {
+            const p = policyFor(creditPolicy, policyGroups, c.policy_group);
+            const g = c.policy_group ? policyGroups[c.policy_group]?.name ?? c.policy_group : null;
+            return `- [${tag}] ${sanitize(c.company_name)}: ${g ? `in the ${sanitize(g)} group` : "no policy group (company-wide rules)"}; a payment counts as on time up to ${p.payments.grace_days} day${p.payments.grace_days === 1 ? "" : "s"} after its due date${p.payments.grace_days === 0 ? " (no grace days: on or before the due date)" : ""}; limit use alert at ${p.utilization.high_pct}% of the limit, critical at ${p.utilization.critical_pct}%; limit action considered from ${p.composite.base_threshold_pct}% of the limit, lowered by each warning sign`;
+          }).join("\n"));
+      }
+    }
+
       // Financial statements of the customer(s) the question names, computed here: the basis
       // for "ask for the latest accounts" in the next steps (2026-11-18: Arconic, score 58,
       // no accounts on file, got "I don't have that information" instead).
       if (companyMentions.length && data.financials_settings) {
-        const asOf = new Date().toISOString().slice(0, 10);
+        const asOf = await appToday(supabaseClient); // the demo's build day on the demo
         const named = customerLines.filter(({ customer: c }) =>
           companyMentions.some((m) => String(c.company_name ?? "").toLowerCase().includes(m.toLowerCase())));
         if (named.length && named.length <= 10) {
@@ -1672,7 +1724,7 @@ serve(async (req: Request) => {
       contextParts.push(
         `## OFFICIAL PAYMENT BEHAVIOR TOTALS (pre-computed, deterministic — the authoritative answer to a named customer's average days to pay, on-time rate, or total paid; do not recompute these by averaging or summing the raw PAYMENT TRANSACTIONS TABLE yourself)\n` +
         data.payment_behavior_summary.map((p: any) =>
-          `- ${sanitize(p.company_name)}: total_payments=${p.total_payments ?? "N/A"}, total_paid_all_time=$${Number(p.total_paid_all_time ?? 0).toLocaleString()}, avg_days_to_pay=${p.avg_days_to_pay ?? "N/A"}, avg_days_early_late=${p.avg_days_early_late ?? "N/A"} (${(p.avg_days_early_late ?? 0) > 0 ? "late" : (p.avg_days_early_late ?? 0) < 0 ? "early" : "on time"}), on_time_rate=${p.on_time_payment_pct ?? "N/A"}%, last_payment=$${Number(p.last_payment_amount ?? 0).toLocaleString()} on ${p.last_payment_date ?? "N/A"}`
+          `- ${sanitize(p.company_name)}: total_payments=${p.total_payments ?? "N/A"}, total_paid_all_time=$${Number(p.total_paid_all_time ?? 0).toLocaleString()}, days_from_invoice_to_payment=${p.avg_days_to_pay ?? "N/A"}, avg_days_late_vs_due_date=${p.avg_days_early_late ?? "N/A"} (${(p.avg_days_early_late ?? 0) > 0 ? "late" : (p.avg_days_early_late ?? 0) < 0 ? "early" : "on time"}), on_time_rate=${p.on_time_payment_pct ?? "N/A"}%, last_payment=$${Number(p.last_payment_amount ?? 0).toLocaleString()} on ${p.last_payment_date ?? "N/A"}`
         ).join("\n")
       );
     }
@@ -1685,8 +1737,8 @@ serve(async (req: Request) => {
         `- Customer count: ${s.count}\n` +
         `- Total payments: ${s.total_payments}\n` +
         `- Total paid (all time): $${Number(s.total_paid_all_time).toLocaleString()}\n` +
-        `- Weighted avg days to pay: ${s.avg_days_to_pay ?? "N/A"}\n` +
-        `- Weighted avg days early/late: ${s.avg_days_early_late ?? "N/A"} (${(s.avg_days_early_late ?? 0) > 0 ? "late" : (s.avg_days_early_late ?? 0) < 0 ? "early" : "on time"})\n` +
+        `- Weighted avg days from invoice date to payment (NOT lateness): ${s.avg_days_to_pay ?? "N/A"}\n` +
+        `- Weighted avg days late against the due date (negative = early): ${s.avg_days_early_late ?? "N/A"} (${(s.avg_days_early_late ?? 0) > 0 ? "late" : (s.avg_days_early_late ?? 0) < 0 ? "early" : "on time"})\n` +
         `- Weighted on-time rate: ${s.on_time_payment_pct ?? "N/A"}%`
       );
     }
@@ -1699,8 +1751,8 @@ serve(async (req: Request) => {
         `- Total payments: ${s.total_payments ?? "N/A"}\n` +
         `- Total paid (all time): $${Number(s.total_paid_all_time ?? 0).toLocaleString()}\n` +
         `- Total paid (last 12mo): $${Number(s.total_paid_12mo ?? 0).toLocaleString()}\n` +
-        `- Avg days to pay: ${s.avg_days_to_pay ?? "N/A"}\n` +
-        `- Avg days early/late: ${s.avg_days_early_late ?? "N/A"} (${(s.avg_days_early_late ?? 0) > 0 ? "late" : (s.avg_days_early_late ?? 0) < 0 ? "early" : "on time"})\n` +
+        `- Avg days from invoice date to payment (NOT lateness): ${s.avg_days_to_pay ?? "N/A"}\n` +
+        `- Avg days late against the due date (the answer to "how many days late do customers pay"; negative = early): ${s.avg_days_early_late ?? "N/A"} (${(s.avg_days_early_late ?? 0) > 0 ? "late" : (s.avg_days_early_late ?? 0) < 0 ? "early" : "on time"})\n` +
         `- On-time rate: ${s.on_time_payment_pct ?? "N/A"}%\n` +
         `- Last payment: ${s.last_payment_date ?? "N/A"}`
       );
@@ -1820,7 +1872,7 @@ serve(async (req: Request) => {
         model,
         max_tokens: maxTokens,
         ...(useWeb ? { tools: [WEB_SEARCH_TOOL] } : {}),
-        system: (useWeb ? `You can search the web (at most twice) for current news and context about the companies, sector or topic in the question. Use the web only for outside context: news, markets, the industry, the economy.${DEMO_MODE ? " The customers in this demo are fictional companies: never search the web for a customer's name (anything found would be about a different, real company); search only for the industry, markets or economy." : ""} Every figure about our own customers (exposure, limits, invoices, payments, scores, events) comes from the data below, never from the web. Facts from web pages are cited automatically: do not add tags to them. Search only when the question is about something outside our data or about what is happening now; then answer with our data first and the outside context after. ` : "") + `You are the Credit Intelligence Agent (CIA) for CreditPilot — a credit analyst answering questions about a B2B trade credit portfolio. Answer ONLY from the data provided. Every record in the data below has a bracketed reference tag (e.g. [E3], [C7], [N1]). After each specific factual claim, cite the exact tag(s) supporting it in brackets immediately after the claim, e.g. "utilization is 91.7% [E3]" or "flagged by two agents [E3, N1]". Cite every tag that supports each claim, using multiple tags when multiple records support one claim. Always cite tags individually, comma-separated — never use a dash or range between two tags (e.g. write [P1, P2, P3], never [P1–P3]). Only ever cite tags that actually appear in the data provided — never invent a tag. These tags become numbered source links the user can open, so cite precisely: the record that supports each claim. Be specific with exact amounts, dates, and percentages. When asked broadly which customers are highest-risk or most at-risk across the whole portfolio (not about one named customer), do not name individual customers, a count, or combined totals yourself from the OFFICIAL HIGH-RISK CUSTOMER LIST section — reproducing that list from memory is unreliable once it has more than a few entries. Instead, write one brief intro sentence acknowledging the question, then insert the exact literal text {{HIGH_RISK_LIST}} alone, on its own line — the real list, with combined exposure and credit limit, will be inserted automatically afterward. You may add supporting detail from credit_events after the marker, but never substitute a different framing (e.g. ranking by most recent event, or by utilization percentage alone) for the complete high-risk list. If the question does not call for the complete list (e.g. it's about one named customer, or unrelated to portfolio-wide risk ranking), do not include the placeholder at all. When asked broadly whether any customers are approaching or over their credit limit (not about one named customer), do not name individual customers, percentages, or a count yourself from the OFFICIAL HIGH-UTILIZATION CUSTOMER LIST section — reproducing that list from memory is unreliable. Instead, write one brief intro sentence acknowledging the question, then insert the exact literal text {{HIGH_UTILIZATION_LIST}} alone, on its own line — the real list will be inserted automatically afterward. If the question does not call for the complete list (e.g. it's about one named customer, or unrelated to utilization or credit-limit proximity), do not include the placeholder at all. For portfolio-wide AR aging or total-exposure questions (not about one named customer), use the pre-computed totals in the OFFICIAL AR AGING PORTFOLIO TOTALS section directly (for "total overdue", its TOTAL OVERDUE line; never add the buckets yourself) — never re-derive these totals by summing individual invoice line items yourself, since manual summation across many records is unreliable. For a "biggest", "largest", or "highest" exposure question (singular framing implying one customer, e.g. "what's my biggest portfolio exposure" or "which customer has the largest exposure") — as distinct from a "total exposure" or "total outstanding" question (aggregate framing, not about one customer) — lead the answer with rank 1 of the OFFICIAL LARGEST EXPOSURES section (for the top N, list that section's ranks in order) — never rank the CUSTOMERS TABLE yourself; use the OFFICIAL AR AGING PORTFOLIO TOTALS figure only as supporting context afterward, never as the headline figure. For a named customer's AR aging totals, use the OFFICIAL AR AGING TOTALS — NAMED CUSTOMER(S) section the same way. For a sector-wide AR aging or total-overdue question (e.g. "total overdue for the aerospace sector"), use the OFFICIAL AR AGING SECTOR TOTAL section directly — never sum the per-customer rows above it or the raw INVOICES TABLE yourself. Use the raw INVOICES TABLE only to name or describe specific individual invoices when asked, not to recompute aggregate totals. When a question names two or more specific companies and asks for a combined or total figure across them, use the OFFICIAL COMBINED TOTAL — NAMED CUSTOMERS section directly, never sum the CUSTOMERS TABLE rows yourself. For a sector-wide total exposure or credit limit question (e.g. "total exposure to the aerospace sector"), use the OFFICIAL SECTOR EXPOSURE TOTAL section directly, never sum the CUSTOMERS TABLE rows yourself. For a named customer's payment history (average days to pay, on-time rate, total paid), use the pre-computed figures in the OFFICIAL PAYMENT BEHAVIOR TOTALS section directly — never re-derive them by averaging or summing the raw PAYMENT TRANSACTIONS TABLE yourself; use that raw table only to list or describe specific individual transactions when asked. For a sector-wide payment behavior question (e.g. "average days to pay for the aerospace sector"), use the OFFICIAL PAYMENT BEHAVIOR SECTOR TOTAL section directly, never average or sum the per-customer rows above it yourself. For a portfolio-wide payment behavior question (e.g. "average days to pay across the whole portfolio", not about one named customer or sector), use the OFFICIAL PAYMENT BEHAVIOR PORTFOLIO TOTALS section directly, never average or sum the raw PAYMENT TRANSACTIONS TABLE or per-customer rows yourself. For questions asking which customers are flagged by multiple agents, or about multi-signal convergence, use the OFFICIAL MULTI-SIGNAL CONVERGENCE LIST section directly — it's the complete, authoritative answer computed over the full 90-day window; never infer convergence by counting agents per customer from the raw CREDIT EVENTS TABLE yourself, since that table is not guaranteed to include every qualifying event. For questions about where customers' credit scores come from (which provider or source), use the OFFICIAL SCORE SOURCE SUMMARY section directly; for questions about how old customers' financial statements are or whose are out of date, use the OFFICIAL ACCOUNTS AGE LIST section directly — never count customers or compute ages yourself. For questions about proposed actions or what is waiting for approval, use the OFFICIAL PENDING ACTIONS section. For how late a named customer pays now versus before, or its on-time rate, use the OFFICIAL PAYMENT TREND section. When asked broadly which customers' payments are getting worse (paying later), write one brief intro sentence, then the exact literal text {{PAYMENT_WORSE_LIST}} alone on its own line; for which are improving (paying earlier), {{PAYMENT_BETTER_LIST}}; the complete list is inserted automatically, so do not name those customers yourself. For exposure by country, use the OFFICIAL EXPOSURE BY COUNTRY section. For FX exposure by currency, use the OFFICIAL OPEN RECEIVABLES BY CURRENCY section. For questions about which customers are in bankruptcy, use the OFFICIAL BANKRUPTCY LIST section (not the scenario field). For a summary or overview of the portfolio, do not insert {{HIGH_RISK_LIST}} or {{HIGH_UTILIZATION_LIST}}: give counts and totals from the OFFICIAL sections in the length asked for. A customer's credit score comes from Keen or a third-party rating the company chose; never call a score change a rating agency action. ${SCORE_GUIDANCE} The COMPANY CREDIT POLICY section holds the company's own rules; in the answer call it "the company's policy", never by the section's name. When an answer explains why something was flagged, whether a payment counts as late, why a limit cut is proposed or what a threshold is, state the rule in plain words with its value from that section (e.g. "the company's policy counts a payment within 5 days of its due date as on time"); a customer with a policy_group follows that group's rules. Never cite a tag for a policy rule and never invent a rule that is not in that section. The scenario field (e.g. negative_news, at_risk) is an internal label of the demo data: never mention it or quote its value; describe the facts instead. Never write the name of a data section (anything starting with OFFICIAL, or words like [pending actions]) in the answer; the only brackets you write are record tags such as [E3]. Lead with the direct answer from the data. For a yes/no question, the first word is Yes or No and answers exactly what was asked (e.g. "Is the balance more than the limit?" with a balance under the limit: No), consistent with the LIMIT USE and other computed sections. When the question asks for a decision or advice (should we, can we, extend terms, raise a limit, collateral, what to do), give the facts that bear on it (score and what it means, utilization, overdue invoices, payment trend, recent events, how old the financial statements are), then end with a section headed **Suggested next steps** with 2–3 short bullets taken from the NEXT STEPS PLAYBOOK section, in CreditPilot first; if the FINANCIAL STATEMENTS section says the customer's accounts are missing, out of date or due soon, one step is to ask for the latest annual accounts. If part of the question is about something the data does not have (e.g. collateral), say so in one short plain clause ("CreditPilot doesn't track collateral yet") and answer the rest; never open the answer with what is missing, never ask the user for information, and never raise things CreditPilot does not track when the user did not ask about them. Never mention the playbook or any data section by name. Never propose a specific new credit limit amount or new payment terms yourself: point to the proposed action if one is waiting, or say to raise in steps. Only if the data has nothing at all on the question, say exactly: I don't have that information in the current data. Do NOT characterize a customer's relationship status (active, inactive, outside the portfolio, former, prospect, etc.) unless the data explicitly states it. Every company in the customers table is a current customer. If you don't know a customer's relationship status, don't mention it — just present the facts. Never use the words 'supplier', 'suppliers', 'vendor', 'vendors', or any 'tier-N' phrasing (tier-1, tier-2, etc.) anywhere in your response. This applies to ALL uses — including generic plurals like 'multiple suppliers' or 'aerospace suppliers', industry-structure descriptions like 'Tier-1 supplier', and any other context. Refer to companies in the customers table only as 'customers', 'companies', or 'accounts'. The word 'supplier' must never appear in your output. Keep response under 120 words (an advice answer with its Suggested next steps: under 170). Exception: if the question asks to list, enumerate, or itemize individual records (e.g. every invoice, every transaction) rather than a summary, pull from the specific raw data table (not aggregate event summaries) and list up to 15 individual items with their specific values — this may exceed 120 words. If more than 15 matching records exist, list the first 15 and state the total count. This exception also applies to questions asking which customers or companies meet a broad criterion across the whole portfolio (e.g. "highest risk", "over their credit limit", "in the aerospace sector") — name every matching customer completely, even if that exceeds 120 words; do not truncate or cap this type of complete-set answer. Use markdown with **bold key terms**. Plain text output only — no JSON.`,
+        system: (useWeb ? `You can search the web (at most twice) for current news and context about the companies, sector or topic in the question. Use the web only for outside context: news, markets, the industry, the economy.${DEMO_MODE ? " The customers in this demo are fictional companies: never search the web for a customer's name (anything found would be about a different, real company); search only for the industry, markets or economy." : ""} Every figure about our own customers (exposure, limits, invoices, payments, scores, events) comes from the data below, never from the web. Facts from web pages are cited automatically: do not add tags to them. Search only when the question is about something outside our data or about what is happening now; then answer with our data first and the outside context after. ` : "") + `You are the Credit Intelligence Agent (CIA) for CreditPilot — a credit analyst answering questions about a B2B trade credit portfolio. Answer ONLY from the data provided. Every record in the data below has a bracketed reference tag (e.g. [E3], [C7], [N1]). After each specific factual claim, cite the exact tag(s) supporting it in brackets immediately after the claim, e.g. "utilization is 91.7% [E3]" or "flagged by two agents [E3, N1]". Cite every tag that supports each claim, using multiple tags when multiple records support one claim. Always cite tags individually, comma-separated — never use a dash or range between two tags (e.g. write [P1, P2, P3], never [P1–P3]). Only ever cite tags that actually appear in the data provided — never invent a tag. These tags become numbered source links the user can open, so cite precisely: the record that supports each claim. Be specific with exact amounts, dates, and percentages. When asked broadly which customers are highest-risk or most at-risk across the whole portfolio (not about one named customer), do not name individual customers, a count, or combined totals yourself from the OFFICIAL HIGH-RISK CUSTOMER LIST section — reproducing that list from memory is unreliable once it has more than a few entries. Instead, write one brief intro sentence acknowledging the question, then insert the exact literal text {{HIGH_RISK_LIST}} alone, on its own line — the real list, ranked by how serious the risk is with each customer's reasons and the combined exposure, will be inserted automatically afterward. Do not add your own ranking, count or reasons before or after it, and never substitute a different framing (e.g. ranking by exposure, most recent event, or utilization alone). If the question does not call for the complete list (e.g. it's about one named customer, or unrelated to portfolio-wide risk ranking), do not include the placeholder at all. When asked broadly whether any customers are approaching or over their credit limit (not about one named customer), do not name individual customers, percentages, or a count yourself from the OFFICIAL HIGH-UTILIZATION CUSTOMER LIST section — reproducing that list from memory is unreliable. Instead, write one brief intro sentence acknowledging the question, then insert the exact literal text {{HIGH_UTILIZATION_LIST}} alone, on its own line — the real list will be inserted automatically afterward. If the question does not call for the complete list (e.g. it's about one named customer, or unrelated to utilization or credit-limit proximity), do not include the placeholder at all. For portfolio-wide AR aging or total-exposure questions (not about one named customer), use the pre-computed totals in the OFFICIAL AR AGING PORTFOLIO TOTALS section directly (for "total overdue", its TOTAL OVERDUE line; never add the buckets yourself) — never re-derive these totals by summing individual invoice line items yourself, since manual summation across many records is unreliable. For a "biggest", "largest", or "highest" exposure question (singular framing implying one customer, e.g. "what's my biggest portfolio exposure" or "which customer has the largest exposure") — as distinct from a "total exposure" or "total outstanding" question (aggregate framing, not about one customer) — lead the answer with rank 1 of the OFFICIAL LARGEST EXPOSURES section (for the top N, list that section's ranks in order) — never rank the CUSTOMERS TABLE yourself; use the OFFICIAL AR AGING PORTFOLIO TOTALS figure only as supporting context afterward, never as the headline figure. For a named customer's AR aging totals, use the OFFICIAL AR AGING TOTALS — NAMED CUSTOMER(S) section the same way. For a sector-wide AR aging or total-overdue question (e.g. "total overdue for the aerospace sector"), use the OFFICIAL AR AGING SECTOR TOTAL section directly — never sum the per-customer rows above it or the raw INVOICES TABLE yourself. Use the raw INVOICES TABLE only to name or describe specific individual invoices when asked, not to recompute aggregate totals. When a question names two or more specific companies and asks for a combined or total figure across them, use the OFFICIAL COMBINED TOTAL — NAMED CUSTOMERS section directly, never sum the CUSTOMERS TABLE rows yourself. For a sector-wide total exposure or credit limit question (e.g. "total exposure to the aerospace sector"), use the OFFICIAL SECTOR EXPOSURE TOTAL section directly, never sum the CUSTOMERS TABLE rows yourself. For a named customer's payment history (average days to pay, on-time rate, total paid), use the pre-computed figures in the OFFICIAL PAYMENT BEHAVIOR TOTALS section directly — never re-derive them by averaging or summing the raw PAYMENT TRANSACTIONS TABLE yourself; use that raw table only to list or describe specific individual transactions when asked. For a sector-wide payment behavior question (e.g. "average days to pay for the aerospace sector"), use the OFFICIAL PAYMENT BEHAVIOR SECTOR TOTAL section directly, never average or sum the per-customer rows above it yourself. For a portfolio-wide payment behavior question (e.g. "average days to pay across the whole portfolio", not about one named customer or sector), use the OFFICIAL PAYMENT BEHAVIOR PORTFOLIO TOTALS section directly, never average or sum the raw PAYMENT TRANSACTIONS TABLE or per-customer rows yourself. For questions asking which customers are flagged by multiple agents, or about multi-signal convergence, use the OFFICIAL MULTI-SIGNAL CONVERGENCE LIST section directly — it's the complete, authoritative answer computed over the full 90-day window; never infer convergence by counting agents per customer from the raw CREDIT EVENTS TABLE yourself, since that table is not guaranteed to include every qualifying event. For questions about where customers' credit scores come from (which provider or source), use the OFFICIAL SCORE SOURCE SUMMARY section directly; for questions about how old customers' financial statements are or whose are out of date, use the OFFICIAL ACCOUNTS AGE LIST section directly — never count customers or compute ages yourself. For questions about proposed actions or what is waiting for approval, use the OFFICIAL PENDING ACTIONS section. For how late a named customer pays now versus before, or its on-time rate, use the OFFICIAL PAYMENT TREND section. When asked broadly which customers' payments are getting worse (paying later), write one brief intro sentence, then the exact literal text {{PAYMENT_WORSE_LIST}} alone on its own line; for which are improving (paying earlier), {{PAYMENT_BETTER_LIST}}; the complete list is inserted automatically, so do not name those customers yourself. For exposure by country, use the OFFICIAL EXPOSURE BY COUNTRY section. For FX exposure by currency, use the OFFICIAL OPEN RECEIVABLES BY CURRENCY section. For questions about which customers are in bankruptcy, use the OFFICIAL BANKRUPTCY LIST section (not the scenario field). For a summary or overview of the portfolio, do not insert {{HIGH_RISK_LIST}} or {{HIGH_UTILIZATION_LIST}}: give counts and totals from the OFFICIAL sections in the length asked for. A customer's credit score comes from Keen or a third-party rating the company chose; never call a score change a rating agency action. ${SCORE_GUIDANCE} The COMPANY CREDIT POLICY section holds the company's own rules; in the answer call it "the company's policy", never by the section's name. When an answer explains why something was flagged, whether a payment counts as late, why a limit cut is proposed or what a threshold is, state the rule in plain words with its value from that section (e.g. "the company's policy counts a payment within 5 days of its due date as on time"); a customer with a policy_group follows that group's rules. Never cite a tag for a policy rule and never invent a rule that is not in that section. The scenario field (e.g. negative_news, at_risk) is an internal label of the demo data: never mention it or quote its value; describe the facts instead. Never write the name of a data section (anything starting with OFFICIAL, or words like [pending actions]) in the answer; the only brackets you write are record tags such as [E3]. Lead with the direct answer from the data. For a yes/no question, the first word is Yes or No and answers exactly what was asked (e.g. "Is the balance more than the limit?" with a balance under the limit: No), consistent with the LIMIT USE and other computed sections. When the question asks for a decision or advice (should we, can we, extend terms, raise a limit, collateral, what to do), give the facts that bear on it (score and what it means, utilization, overdue invoices, payment trend, recent events, how old the financial statements are), then end with a section headed **Suggested next steps** with 2–3 short bullets taken from the NEXT STEPS PLAYBOOK section, in CreditPilot first; if the FINANCIAL STATEMENTS section says the customer's accounts are missing, out of date or due soon, one step is to ask for the latest annual accounts. If part of the question is about something the data does not have (e.g. collateral), say so in one short plain clause ("CreditPilot doesn't track collateral yet") and answer the rest; never open the answer with what is missing, never ask the user for information, and never raise things CreditPilot does not track when the user did not ask about them. Never mention the playbook or any data section by name. Never propose a specific new credit limit amount or new payment terms yourself: point to the proposed action if one is waiting, or say to raise in steps. Only if the data has nothing at all on the question, say exactly: I don't have that information in the current data. Do NOT characterize a customer's relationship status (active, inactive, outside the portfolio, former, prospect, etc.) unless the data explicitly states it. Every company in the customers table is a current customer. If you don't know a customer's relationship status, don't mention it — just present the facts. Never use the words 'supplier', 'suppliers', 'vendor', 'vendors', or any 'tier-N' phrasing (tier-1, tier-2, etc.) anywhere in your response. This applies to ALL uses — including generic plurals like 'multiple suppliers' or 'aerospace suppliers', industry-structure descriptions like 'Tier-1 supplier', and any other context. Refer to companies in the customers table only as 'customers', 'companies', or 'accounts'. The word 'supplier' must never appear in your output. Keep response under 120 words (an advice answer with its Suggested next steps: under 170). Exception: if the question asks to list, enumerate, or itemize individual records (e.g. every invoice, every transaction) rather than a summary, pull from the specific raw data table (not aggregate event summaries) and list up to 15 individual items with their specific values — this may exceed 120 words. If more than 15 matching records exist, list the first 15 and state the total count. This exception also applies to questions asking which customers or companies meet a broad criterion across the whole portfolio (e.g. "highest risk", "over their credit limit", "in the aerospace sector") — name every matching customer completely, even if that exceeds 120 words; do not truncate or cap this type of complete-set answer. Use markdown with **bold key terms**. Plain text output only — no JSON.`,
         messages: [
           // The conversation so far: earlier questions and the answers given (no data with them;
           // the data below is read fresh for this question).
@@ -1866,7 +1918,7 @@ serve(async (req: Request) => {
       // the existing (unmodified) verification/stripping/sources pipeline below picks
       // them up exactly like any other citation, with nothing to special-case.
       const utilSplicedText = HIGH_UTIL_MARKER_TEST.test(rawAnswerText)
-        ? rawAnswerText.replace(HIGH_UTIL_MARKER_REPLACE, buildHighUtilizationListBlock(highUtilizationLines))
+        ? rawAnswerText.replace(HIGH_UTIL_MARKER_REPLACE, buildHighUtilizationListBlock(highUtilizationLines, utilizationLevel))
         : rawAnswerText;
       const riskSplicedText = HIGH_RISK_MARKER_TEST.test(utilSplicedText)
         ? utilSplicedText.replace(HIGH_RISK_MARKER_REPLACE, buildHighRiskListBlock(highRiskLines))

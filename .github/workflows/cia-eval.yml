@@ -5,7 +5,7 @@
 name: CIA eval
 on:
   workflow_dispatch:
-  # Weekly (Mondays) since 2026-11-19: each run is ~45 live questions (API cost).
+  # Weekly (Mondays) since 2026-11-19: each run is ~60 live questions (API cost).
   schedule:
     - cron: "17 11 * * 1"
   pull_request:

@@ -35,7 +35,9 @@ const truth = {
   overdue: Number(one("select total_1_30 + total_31_60 + total_61_90 + total_over_90 from v_ar_aging_portfolio")),
   outstanding: Number(one("select total_outstanding from v_ar_aging_portfolio")),
   overLimit: col(`select company_name from customers where ${ACTIVE} and credit_limit > 0 and current_exposure > credit_limit order by company_name`),
-  nearOnly: col(`select company_name from customers where ${ACTIVE} and credit_limit > 0 and current_exposure >= 0.85 * credit_limit and current_exposure <= credit_limit`),
+  // At or above the policy's alert level (utilization.high_pct, 80; High risk group 70), as the AR agent alerts.
+  nearOnly: col(`select company_name from customers where ${ACTIVE} and credit_limit > 0 and current_exposure <= credit_limit and current_exposure * 100 >= credit_limit * (case when policy_group = 'high_risk' then 70 else 80 end)`),
+  under60pct: col(`select company_name from customers where ${ACTIVE} and credit_limit > 0 and current_exposure < 0.6 * credit_limit`),
   top5: col(`select company_name from customers where ${ACTIVE} order by current_exposure desc nulls last limit 5`),
   biggest: one(`select company_name || '|' || current_exposure from customers where ${ACTIVE} order by current_exposure desc nulls last limit 1`),
   customerCount: Number(one(`select count(*) from customers where ${ACTIVE}`)),
@@ -66,6 +68,19 @@ const C = {
   germany: Number(one(`select coalesce(sum(current_exposure),0) from customers where ${ACTIVE} and country_code = 'DE'`)),
   portfolioDaysLate: Number(one("select avg_days_early_late from v_payment_behaviour_portfolio")),
   deteriorating: col(`select company_name from v_payment_behaviour_current where deterioration_severity is not null order by company_name`),
+  // ── audit 2026-11-23: every OFFICIAL section has a question with its ground truth ──
+  erratic: col(`select company_name from v_payment_behaviour_current where volatility_severity is not null order by 1`),
+  improving: col(`select company_name from v_payment_behaviour_current where improvement_severity is not null order by 1`),
+  convergence: col(`select company_name from fn_multi_signal_convergence(true)`),
+  cutCustomers: col(`select distinct c.company_name from pending_actions p join customers c on c.id = p.customer_id where p.status = 'pending' and p.is_demo and p.action_type = 'CREDIT_LIMIT_REDUCTION' and p.proposed_value < p.current_value order by 1`),
+  cutTotal: Number(one(`select coalesce(sum(current_value - proposed_value),0) from pending_actions where status = 'pending' and is_demo and action_type = 'CREDIT_LIMIT_REDUCTION' and proposed_value < current_value`)),
+  carrickCut: sql(`select p.current_value, p.proposed_value from pending_actions p join customers c on c.id = p.customer_id where c.company_name ilike 'Carrick%' and p.status = 'pending' and p.action_type = 'CREDIT_LIMIT_REDUCTION' limit 1`)[0]?.map(Number) ?? [],
+  highRiskScore: col(`select company_name from customers where ${ACTIVE} and credit_rating_score < coalesce((select (value->>'distress_score_below')::int from company_settings where key = 'policy.limit_review'), 25) order by 1`),
+  news: col(`select distinct c.company_name from credit_events e join customers c on c.id = e.customer_id where e.is_demo and e.event_type = 'NEGATIVE_NEWS' and e.created_at > now() - interval '90 days' order by 1`),
+  industry: col(`select distinct c.company_name from credit_events e join customers c on c.id = e.customer_id where e.is_demo and e.event_type = 'INDUSTRY_DOWNTURN' and e.created_at > now() - interval '90 days' order by 1`),
+  aeroOverdue: Number(one(`select coalesce(sum(bucket_1_30 + bucket_31_60 + bucket_61_90 + bucket_over_90),0) from v_ar_aging_current a join customers c on c.company_name = a.company_name where c.sector = 'Aerospace & Defense' and c.${ACTIVE}`)),
+  marlowCarrick: Number(one(`select coalesce(sum(current_exposure),0) from customers where ${ACTIVE} and (company_name ilike 'Marlow Industrial Castings%' or company_name ilike 'Carrick%')`)),
+  carrickGroupGrace: Number(one(`select coalesce((select value->'high_risk'->'overrides'->'payments'->>'grace_days' from company_settings where key = 'policy.groups'), '0')`)),
 };
 console.log("Customer-level truth:", JSON.stringify(C, null, 1), "\n");
 
@@ -205,6 +220,37 @@ const CASES = [
   { q: "And how do they pay?", previous: "What is Marlow Industrial Castings' credit limit and current balance?", check: (a) => [
       /marlow/i.test(a) || "lost the company from the earlier question", /on.?time|late|days/i.test(a) || "no payment facts"] },
   { q: "Summarize the portfolio's credit risk in three sentences.", check: () => [] },
+  // ── Audit 2026-11-23: one question per computed section, each with its ground truth ──
+  // The ranked list: bankruptcy first, then High risk scores, then pending limit cuts; every one named.
+  { q: "Which customers have the highest credit risk right now?", check: (a) => {
+      const first = (n) => a.toLowerCase().indexOf(key(n).toLowerCase());
+      // Bankruptcy comes before everyone else in the list (2026-11-23: Larkspur, score 64, was named first).
+      const order = [...new Set([...C.highRiskScore, ...C.cutCustomers])].filter((n) => !truth.prePetition.includes(n));
+      return [
+        ...[...truth.prePetition, ...C.highRiskScore, ...C.cutCustomers].map((n) => mentions(a, n) || `${n} missing`),
+        ...truth.prePetition.flatMap((b) => order.map((n) => first(b) < first(n) || `${b} (bankruptcy) not before ${n}`)),
+      ];
+    } },
+  { q: "Are any customers approaching their credit limits?", check: (a) => [
+      ...[...truth.overLimit, ...truth.nearOnly].map((n) => mentions(a, n) || `${n} (at or over the alert level) missing`),
+      ...truth.under60pct.map((n) => !mentions(a, n) || `${n} (under 60% of its limit) named`)] },
+  { q: "Which customers are flagged by multiple agents?", check: (a) => C.convergence.length
+      ? C.convergence.map((n) => mentions(a, n) || `${n} (flagged by 2+ agents) missing`)
+      : [!/\$|flagged by (?:two|three|\d)/i.test(a) || "names customers but none is flagged by two agents"] },
+  { q: "Which customers pay erratically?", check: (a) => C.erratic.map((n) => mentions(a, n) || `${n} (erratic) missing`) },
+  { q: "Which customers are paying earlier than before?", check: (a) => C.improving.map((n) => mentions(a, n) || `${n} (improving) missing`) },
+  { q: "How much would the proposed limit cuts lower our credit limits by in total?", check: (a) => [hasNumber(a, C.cutTotal) || `total cut ${C.cutTotal} missing`] },
+  { q: "Why is a credit limit cut proposed for Carrick Process Equipment?", check: (a) => C.carrickCut.length ? [
+      hasNumber(a, C.carrickCut[1]) || `proposed limit ${C.carrickCut[1]} missing`, hasNumber(a, C.carrickCut[0]) || `current limit ${C.carrickCut[0]} missing`] : [] },
+  { q: "Which customers have recent negative news?", check: (a) => C.news.map((n) => mentions(a, n) || `${n} (news) missing`) },
+  { q: "Which customers are exposed to an industry downturn?", check: (a) => C.industry.map((n) => mentions(a, n) || `${n} (industry) missing`) },
+  { q: "What is total overdue AR in the aerospace sector?", check: (a) => [hasNumber(a, C.aeroOverdue) || `aerospace overdue ${C.aeroOverdue} missing`] },
+  { q: "What is the combined exposure of Marlow Industrial Castings and Carrick Process Equipment?", check: (a) => [hasNumber(a, C.marlowCarrick) || `combined ${C.marlowCarrick} missing`] },
+  { q: "How many days late can Carrick Process Equipment pay and still count as on time?", check: (a) => [
+      hasNumber(a, C.carrickGroupGrace) || /no grace|not (?:a single|one) day|due date itself|on or before/i.test(a) || `High risk grace ${C.carrickGroupGrace} days missing`, /high.?risk/i.test(a) || "does not say Carrick is in the High risk group"] },
+  { q: "Which customers' financial statements are out of date?", check: () => [] },
+  { q: "Where do our customers' credit scores come from?", check: () => [] },
+  { q: "What country risks affect our portfolio?", check: () => [] },
   // ── Trade Credit Policy: the CIA states the company's own rule with its value ──
   { q: "How many days late can a customer pay and still count as on time?", check: (a) => [
       hasNumber(a, policyGrace) || `grace days ${policyGrace} not in answer`, /polic/i.test(a) || "does not say it is the company's policy"] },
