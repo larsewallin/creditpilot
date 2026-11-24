@@ -499,6 +499,7 @@ interface RetrievedData {
   financials_settings: any;
   pending_actions: { company_name: string; action_type: string; current_value: number | null; proposed_value: number | null; severity: string | null }[] | null;
   bankruptcy: { company_name: string; pre_petition: number; invoices: number }[] | null;
+  risk_events?: { customer_id: string; event_type: string; severity: string | null; title: string | null }[] | null;
   payment_trend: any[] | null;
   payment_trend_named: any[] | null;
   country_totals: { country: string; customers: number; exposure: number; limit: number }[] | null;
