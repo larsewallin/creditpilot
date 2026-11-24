@@ -1657,6 +1657,18 @@ serve(async (req: Request) => {
     }
 
     if (data.payment_behavior_summary && data.payment_behavior_summary.length > 0) {
+      // One on-time rate (review 2026-11-23): v_payment_behaviour counts the stored on_time flag
+      // (company grace days), while the Payments page, the limit proposal and the trend block use
+      // the policy's rule with the customer's group (High risk: no grace days). Carrick read 15.4%
+      // here and 7.7% in the trend block. Quote the page's figure; fall back only if it is missing.
+      const pageOnTime = new Map<string, number>(
+        ((data.payment_trend ?? []) as any[]).filter((r) => r.all_time_on_time_rate != null)
+          .map((r) => [String(r.company_name), Math.round(Number(r.all_time_on_time_rate) * 1000) / 10]),
+      );
+      for (const p of data.payment_behavior_summary as any[]) {
+        const v = pageOnTime.get(String(p.company_name));
+        if (v != null) p.on_time_payment_pct = v;
+      }
       contextParts.push(
         `## OFFICIAL PAYMENT BEHAVIOR TOTALS (pre-computed, deterministic — the authoritative answer to a named customer's average days to pay, on-time rate, or total paid; do not recompute these by averaging or summing the raw PAYMENT TRANSACTIONS TABLE yourself)\n` +
         data.payment_behavior_summary.map((p: any) =>
