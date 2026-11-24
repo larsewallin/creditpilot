@@ -148,7 +148,7 @@ const CORS_HEADERS = {
 };
 
 // Follow-ups CreditPilot's data cannot answer (seen in the follow-up audit of the eval).
-const UNANSWERABLE_FOLLOW_UP = /\bwhen (?:will|is|was|did)\b|\b(?:trend\w*|history|changed?|evolv\w*|over (?:the )?(?:last|past) \d+ (?:days|months))\b[^?]*\b(?:score|rating|exposure|currency|EUR|GBP|JPY|balance)\b|\b(?:score|rating|exposure|currency|EUR|GBP|JPY|balance)\b[^?]*\b(?:trend\w*|history|before the|changed|over (?:the )?(?:last|past) \d+ (?:days|months))\b|\bwhat (?:triggered|caused|drove)\b[^?]*\b(?:score|rating)\b[^?]*\b(?:improv|increas|ris)|\b(?:reorgani[sz]ation|recovery|recoveries|court|plan of|filing date|petition date)\b|\b(?:aging|payments?|paid|days|history)\b[^?]*\b(?:by|per|across|in|denominated in) (?:\w+ ){0,3}(?:currenc|EUR|GBP|JPY)|collateral|guarantee|letters? of credit|insurance/i;
+const UNANSWERABLE_FOLLOW_UP = /\bwhen (?:will|is|was|did)\b|\b(?:trend\w*|history|changed?|evolv\w*|over (?:the )?(?:last|past) \d+ (?:days|months))\b[^?]*\b(?:score|rating|exposure|currency|EUR|GBP|JPY|balance)\b|\b(?:score|rating|exposure|currency|EUR|GBP|JPY|balance)\b[^?]*\b(?:trend\w*|history|before the|changed|over (?:the )?(?:last|past) \d+ (?:days|months))\b|\bwhat (?:triggered|caused|drove)\b[^?]*\b(?:score|rating)\b[^?]*\b(?:improv|increas|ris)|\b(?:reorgani[sz]ation|recovery|recoveries|court|plan of|filing date|petition date)\b|\b(?:score|rating)\b[^?]*\b(?:breakdown|components?|factors|drivers|methodology|inputs)\b|\b(?:aging|payments?|paid|days|history)\b[^?]*\b(?:by|per|across|in|denominated in) (?:\w+ ){0,3}(?:currenc|EUR|GBP|JPY)|collateral|guarantee|letters? of credit|insurance/i;
 
 const DEMO_SUGGESTIONS = [
   "Why is Carrick Process Equipment flagged across multiple agents?",
@@ -507,7 +507,7 @@ interface RetrievedData {
   payment_trend: any[] | null;
   payment_trend_named: any[] | null;
   country_totals: { country: string; customers: number; exposure: number; limit: number }[] | null;
-  currency_totals: { currency: string; invoices: number; usd: number; local: number }[] | null;
+  currency_totals: { currency: string; invoices: number; usd: number; local: number; customers?: Map<string, number> }[] | null;
 }
 
 // Lookup entry for a single tagged record ([C3], [E1], etc.) built while assembling
@@ -638,13 +638,17 @@ async function fetchRelevantData(
 
     // Open receivables by invoice currency, summed here (FX exposure questions).
     (async () => {
-      const { data, error } = await supabase.from("invoices").select("currency, currency_amount, outstanding_amount").gt("outstanding_amount", 0).limit(10000);
+      const { data, error } = await supabase.from("invoices").select("currency, currency_amount, outstanding_amount, customers(company_name)").gt("outstanding_amount", 0).limit(10000);
       if (error) { console.error("currency totals error:", error.message); return; }
-      const by = new Map<string, { currency: string; invoices: number; usd: number; local: number }>();
+      const by = new Map<string, { currency: string; invoices: number; usd: number; local: number; customers?: Map<string, number> }>();
       for (const r of (data ?? []) as any[]) {
         const k = r.currency ?? "USD";
-        const e = by.get(k) ?? { currency: k, invoices: 0, usd: 0, local: 0 };
+        const e = by.get(k) ?? { currency: k, invoices: 0, usd: 0, local: 0, customers: new Map() };
         e.invoices += 1; e.usd += Number(r.outstanding_amount ?? 0); e.local += r.currency_amount != null ? Number(r.currency_amount) : NaN; by.set(k, e);
+        // Each customer's share (follow-up audit 2026-11-24: "how much EUR exposure with Brennecke"
+        // got the EUR total, $854,500, instead of Brennecke's $420,500).
+        const name = r.customers?.company_name ?? "Unknown";
+        e.customers!.set(name, (e.customers!.get(name) ?? 0) + Number(r.outstanding_amount ?? 0));
       }
       results.currency_totals = [...by.values()].sort((a, b) => b.usd - a.usd);
     })(),
@@ -1434,7 +1438,7 @@ serve(async (req: Request) => {
         return {
           tag,
           customer: c,
-          line: `- [${tag}] ${sanitize(c.company_name)} (type:${sanitize(c.company_type)}, credit_limit=$${c.credit_limit?.toLocaleString()}, balance=$${c.current_exposure?.toLocaleString()}, utilization=${c.credit_limit ? Math.round(c.current_exposure / c.credit_limit * 100) : "N/A"}%, ${c.credit_rating_score != null ? `credit_score=${c.credit_rating_score}/100, score_label=${scoreBand(c.credit_rating_score)?.label} (${sanitize(c.credit_rating_raw) || "N/A"} from ${sanitize(c.credit_rating_source) || "N/A"})` : "credit_score=NR (No Rating, provider=N/A)"}, ${c.financials_fye ? `financials_year_end=${String(c.financials_fye).slice(0, 10)}, ` : ""}${c.credit_rating_previous_score != null ? `previous_credit_score=${c.credit_rating_previous_score}/100${c.credit_rating_updated_at ? ` (score changed ${String(c.credit_rating_updated_at).slice(0, 10)})` : ""}, ` : ""}payment_terms=${c.payment_terms_days != null ? `net ${c.payment_terms_days} days` : "N/A"}, ${c.policy_group ? `policy_group=${sanitize(policyGroups[c.policy_group]?.name ?? c.policy_group)}, ` : ""}invoicing_currency=${sanitize(c.invoicing_currency) || "N/A"}, ${c.payment_avg_days_early_late != null ? `avg_days_late=${c.payment_avg_days_early_late}, ` : ""}account_manager=${sanitize(c.account_manager) || "N/A"}, credit_manager=${sanitize(c.credit_manager) || "N/A"}, sector=${sanitize(c.sector) || "N/A"}${c.industry ? ` (${sanitize(c.industry)})` : ""}, country=${sanitize(c.country_code) || "N/A"}${c.city ? ` (${sanitize(c.city)})` : ""}, ${c.customer_since ? `customer_since=${String(c.customer_since).slice(0, 10)}, ` : ""}${c.contract_expiry ? `contract_expiry=${String(c.contract_expiry).slice(0, 10)}, ` : ""}${c.last_reviewed ? `last_reviewed=${String(c.last_reviewed).slice(0, 10)}, ` : ""}${c.preferred_customer ? "preferred_customer=yes, " : ""}${c.primary_products ? `products=${sanitize(c.primary_products)}, ` : ""}scenario=${sanitize(c.scenario) || "N/A"}, payment_health=${sanitize(c.payment_health) || "unknown"}, risk_tags=[${(c.risk_tags ?? []).map(sanitize).join(", ")}])`,
+          line: `- [${tag}] ${sanitize(c.company_name)} (type:${sanitize(c.company_type)}, credit_limit=$${c.credit_limit?.toLocaleString()}, balance=$${c.current_exposure?.toLocaleString()}, utilization=${c.credit_limit ? Math.round(c.current_exposure / c.credit_limit * 100) : "N/A"}%, ${c.credit_rating_score != null ? `credit_score=${c.credit_rating_score}/100, score_label=${scoreBand(c.credit_rating_score)?.label} (${sanitize(c.credit_rating_raw) || "N/A"} from ${sanitize(c.credit_rating_source) || "N/A"})` : "credit_score=NR (No Rating, provider=N/A)"}, ${c.financials_fye ? `financials_year_end=${String(c.financials_fye).slice(0, 10)}, ` : ""}${c.credit_rating_previous_score != null ? `previous_credit_score=${c.credit_rating_previous_score}/100${c.credit_rating_updated_at ? ` (score changed ${String(c.credit_rating_updated_at).slice(0, 10)})` : ""}, ` : ""}payment_terms=${c.payment_terms_days != null ? `net ${c.payment_terms_days} days` : "N/A"}, ${c.policy_group ? `policy_group=${sanitize(policyGroups[c.policy_group]?.name ?? c.policy_group)}, ` : ""}invoicing_currency=${sanitize(c.invoicing_currency) || "N/A"}, ${c.payment_avg_days_early_late != null ? `avg_days_late=${c.payment_avg_days_early_late}, ` : ""}account_manager=${sanitize(c.account_manager) || "N/A"}, credit_manager=${sanitize(c.credit_manager) || "N/A"}, sector=${sanitize(c.sector) || "N/A"}${c.industry ? ` (${sanitize(c.industry)})` : ""}, country=${sanitize(c.country_code) || "N/A"}${c.city ? ` (${sanitize(c.city)})` : ""}, ${c.customer_since ? `customer_since=${String(c.customer_since).slice(0, 10)}, ` : ""}${c.contract_expiry ? `contract_expiry=${String(c.contract_expiry).slice(0, 10)}, ` : ""}${c.last_reviewed ? `last_reviewed=${String(c.last_reviewed).slice(0, 10)}, ` : ""}${c.preferred_customer ? "preferred_customer=yes, " : ""}${c.primary_products ? `products=${sanitize(c.primary_products)}, ` : ""}payment_health=${sanitize(c.payment_health) || "unknown"}, risk_tags=[${(c.risk_tags ?? []).map(sanitize).join(", ")}])`,
         };
       });
 
@@ -1604,7 +1608,9 @@ serve(async (req: Request) => {
       contextParts.push(
         `## OFFICIAL OPEN RECEIVABLES BY CURRENCY (computed in code from every open invoice; the answer to "FX exposure by currency". Non-USD amounts are FX exposure; whether they are hedged is in the FX events)\n` +
         `- TOTAL in currencies other than USD (the FX exposure): $${data.currency_totals.filter((c) => c.currency !== "USD").reduce((t, c) => t + c.usd, 0).toLocaleString()}\n` +
-        data.currency_totals.map((c) => `- ${sanitize(c.currency)}: ${c.invoices} open invoice${c.invoices === 1 ? "" : "s"}, $${c.usd.toLocaleString()} in USD${c.currency !== "USD" && Number.isFinite(c.local) ? ` (${c.local.toLocaleString()} ${sanitize(c.currency)})` : ""}`).join("\n")
+        data.currency_totals.map((c) => `- ${sanitize(c.currency)}: ${c.invoices} open invoice${c.invoices === 1 ? "" : "s"}, $${c.usd.toLocaleString()} in USD${c.currency !== "USD" && Number.isFinite(c.local) ? ` (${c.local.toLocaleString()} ${sanitize(c.currency)})` : ""}` +
+          (c.currency !== "USD" && c.customers?.size ? "; by customer (each customer's own amount in this currency): " +
+            [...c.customers.entries()].sort((x, y) => y[1] - x[1]).map(([n, v]) => `${sanitize(n)} $${v.toLocaleString()}`).join(", ") : "")).join("\n")
       );
     }
     if (data.country_totals && data.country_totals.length) {
