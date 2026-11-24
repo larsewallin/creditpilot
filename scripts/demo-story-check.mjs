@@ -34,14 +34,15 @@ for (const c of DEMO_CUSTOMERS) {
   const id = demoCustomerId(c.n);
   const mine = events.filter((e) => e.customer_id === id);
   const types = [...new Set(mine.map((e) => e.event_type))];
-  const notChecked = NO_ASSISTANT ? c.expect.events.filter((t) => t === "NEWS_EVENT" && !types.includes(t)) : [];
+  // Demo news is classified without the assistant since 2026-11-24, so it is checked like the rest.
+  const notChecked = [];
   const missing = c.expect.events.filter((t) => !types.includes(t) && !notChecked.includes(t));
   const extra = types.filter((t) => !c.expect.events.includes(t) && !(CIA_TYPES.has(t) && (c.expect.proposal !== "none" || c.expect.events.filter((x) => !GOOD_NEWS.has(x)).length >= 2)));
   const props = actions.filter((a) => a.customer_id === id);
   const p = props[0];
   const cut = p ? 1 - Number(p.proposed_value) / Number(p.current_value) : 0;
   let proposalOk;
-  const proposalSkipped = NO_ASSISTANT && c.expect.proposalNeedsNews;
+  const proposalSkipped = false;
   switch (c.expect.proposal) {
     case "none": proposalOk = props.length === 0; break;
     case "hold": proposalOk = !!p && Number(p.proposed_value) === 0; break;
