@@ -65,6 +65,7 @@ import { buildCharts } from "../_shared/cia_charts.ts";
 import { lastDemoRefresh } from "../_shared/demo_refresh_time.ts";
 import { SCORE_GUIDANCE, scoreBand } from "../_shared/score_scale.ts";
 import { ANSWERABLE_TOPICS, capabilityStatus, isAdviceQuestion, playbookBlock } from "../_shared/cia_playbook.ts";
+import { appToday } from "../_shared/app_today.ts";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -808,7 +809,7 @@ async function fetchRelevantData(
         custIdSource = "sector";
       }
 
-      const todayStr = new Date().toISOString().split("T")[0];
+      const todayStr = await appToday(supabase); // the demo's build day on the demo, like AR Aging
       let q = supabase
         .from("invoices")
         .select("id, invoice_number, customer_id, invoice_date, due_date, invoice_amount, outstanding_amount, status, days_overdue")

@@ -10,6 +10,7 @@ import { SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AgentPill } from "@/components/AgentPill";
 import { eventLabel, titleWithoutSubject } from "@/lib/eventLabels";
+import { useAppToday, daysBetween } from "@/hooks/use-app-today";
 import { getAgentConfig } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
@@ -73,6 +74,7 @@ const plainAgents = (text: string | null | undefined) =>
 // ── Customer Detail Drawer ────────────────────────────────────────────────────
 
 export function CustomerDetail({ customer }: { customer: any }) {
+  const appToday = useAppToday();
   const { data: invoices } = useQuery({
     queryKey: ["customer-invoices", customer.id],
     queryFn: async () => {
@@ -163,8 +165,8 @@ export function CustomerDetail({ customer }: { customer: any }) {
             ) : null}
             {customer.financials_fye && (() => {
               const [y1, m1, d1] = String(customer.financials_fye).slice(0, 10).split("-").map(Number);
-              const t = new Date();
-              const months = Math.max(0, (t.getFullYear() - y1) * 12 + (t.getMonth() + 1 - m1) - (t.getDate() < d1 ? 1 : 0));
+              const [ty, tm, td] = appToday.split("-").map(Number);
+              const months = Math.max(0, (ty - y1) * 12 + (tm - m1) - (td < d1 ? 1 : 0));
               return <p className="text-[10px] text-muted-foreground mt-0.5">Financial year end {String(customer.financials_fye).slice(0, 10)}, {months} {months === 1 ? "month" : "months"} old</p>;
             })()}
           </div>
@@ -260,12 +262,10 @@ export function CustomerDetail({ customer }: { customer: any }) {
         <TabsContent value="invoices" className="mt-4">
           <div className="space-y-2">
             {(invoices ?? []).map((inv: any) => {
-              const dueDate = new Date(inv.due_date + "T00:00:00");
-              const today = new Date();
-              today.setHours(0, 0, 0, 0);
+              // Aged against the app's date (the demo's build day), as AR Aging does, not the visitor's clock.
               const liveDaysOverdue = inv.status === "paid" || inv.status === "written_off"
                 ? 0
-                : Math.max(0, Math.floor((today.getTime() - dueDate.getTime()) / 86400000));
+                : Math.max(0, daysBetween(inv.due_date, appToday));
               const liveStatus = (inv.status === "current" || inv.status === "overdue")
                 ? (liveDaysOverdue > 0 ? "overdue" : "current")
                 : inv.status;

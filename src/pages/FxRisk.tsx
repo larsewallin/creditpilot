@@ -10,6 +10,7 @@ import { useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { AlertTriangle, Activity } from "lucide-react";
 import { DemoDataNotice } from "@/components/DemoDataNotice";
+import { useAppToday } from "@/hooks/use-app-today";
 
 const SEVERITY_RANK: Record<string, number> = { critical: 92, high: 75, medium: 52, low: 27, info: 7 };
 function worstSeverity(events: { severity: string }[]): string | null {
@@ -45,6 +46,7 @@ function Metric({ label, children, sub }: { label: string; children: React.React
 }
 
 export default function FxRisk() {
+  const appToday = useAppToday();
   const [searchParams] = useSearchParams();
   const highlighted = searchParams.get("currency");
 
@@ -133,7 +135,7 @@ export default function FxRisk() {
             custMap.set(r.customer_id, e);
           }
           const custs = [...custMap.values()].sort((a, b) => b.unhedged - a.unhedged);
-          const today = new Date().toISOString().slice(0, 10);
+          const today = appToday; // the demo's build day on the demo, as the aging views use
 
           return (
             <div
