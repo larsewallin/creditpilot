@@ -94,7 +94,7 @@ export default function Customers() {
                     <td className="p-3 text-muted-foreground">{c.policy_group ? (groups[c.policy_group]?.name ?? c.policy_group) : "—"}</td>
                     <td className="p-3 text-right">{formatCurrency(c.credit_limit)}</td>
                     <td className="p-3 text-right">{formatCurrency(c.current_exposure)}</td>
-                    <td className={cn("p-3 text-right", util > 100 && "text-severity-critical font-medium")} title={util > 100 ? "Over the credit limit" : undefined}>{util.toFixed(1)}%</td>
+                    <td className={cn("p-3 text-right", util > 100 && "text-severity-critical font-medium")} title={util > 100 ? "Over the credit limit" : undefined}>{(Math.round(util * 10 + 1e-9) / 10).toFixed(1)}%</td>
                     <td className={cn("p-3 text-right font-medium whitespace-nowrap", scoreColor(score))}>
                       {score != null ? <>{score} <span className="font-normal">· {scoreLabel(score)}</span></> : <span className="text-muted-foreground font-normal">No score</span>}
                     </td>
