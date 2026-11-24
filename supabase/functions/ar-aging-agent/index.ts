@@ -153,6 +153,37 @@ Deno.serve(async (req) => {
     const scanned = rows?.length ?? 0;
     let conditionsFound = 0;
 
+    // Payment fields for every other active customer too (the breaching ones are refreshed in
+    // the loop below). They were written only for customers near their limit, so everyone else
+    // kept no or stale values: the Payments page then fell back to the company grace days and
+    // showed Vossberg (Export group, 10 grace days) on time 50% instead of 75%, and the limit
+    // proposal saw no on-time rate at all (review 2026-11-23).
+    {
+      const { data: others, error: othersError } = await supabase
+        .from("customers")
+        .select("id, payment_terms_days, policy_group")
+        .eq("lifecycle_status", "active");
+      if (othersError) console.error("[ar-aging-agent] customers query failed:", othersError.message);
+      for (const c of (others ?? []).filter((o: { id: string }) => !breachingIds.includes(o.id))) {
+        const { data: tx, error: txError } = await supabase
+          .from("payment_transactions")
+          .select("payment_date, days_to_pay, days_early_late, on_time, amount:amount_paid")
+          .eq("customer_id", c.id)
+          .order("payment_date", { ascending: false })
+          .limit(500);
+        if (txError) { console.error("[ar-aging-agent] payment_transactions query failed:", txError.message); continue; }
+        const b = analysePaymentBehaviour(tx ?? [], policyFor(policy, groups, c.policy_group).payments, Number(c.payment_terms_days) || 30);
+        const { error: upError } = await supabase.from("customers").update({
+          payment_on_time_rate: b.on_time_rate,
+          payment_avg_days_early_late: b.avg_days_early_late,
+          payment_trend: b.trend,
+          payment_health: b.health,
+          payment_behaviour_updated_at: new Date().toISOString(),
+        }).eq("id", c.id);
+        if (upError) console.error("[ar-aging-agent] payment behaviour update failed:", upError.message);
+      }
+    }
+
     for (const row of (rows ?? [])) {
       const customerId: string = row.customer_id;
       const companyName: string = row.company_name;
