@@ -1534,6 +1534,23 @@ serve(async (req: Request) => {
         if (rows.length) contextParts.push("## LIMIT USE — NAMED CUSTOMER(S) (computed in code; whether a customer is over or under its limit comes from here)\n" + rows.join("\n"));
       }
 
+    // The rules that apply to each named customer, with its group's overrides already applied
+    // (audit 2026-11-23: "how late can Carrick pay and still be on time?" got the company's 5 days;
+    // Carrick is in the High risk group, which has no grace days).
+    if (companyMentions.length) {
+      const namedPolicy = customerLines.filter(({ customer: c }) =>
+        companyMentions.some((m) => String(c.company_name ?? "").toLowerCase().includes(m.toLowerCase()))).slice(0, 10);
+      if (namedPolicy.length) {
+        contextParts.push(
+          "## POLICY FOR NAMED CUSTOMER(S) (computed in code: the company's policy with the customer's group applied; these values win over the company-wide ones)\n" +
+          namedPolicy.map(({ tag, customer: c }) => {
+            const p = policyFor(creditPolicy, policyGroups, c.policy_group);
+            const g = c.policy_group ? policyGroups[c.policy_group]?.name ?? c.policy_group : null;
+            return `- [${tag}] ${sanitize(c.company_name)}: ${g ? `in the ${sanitize(g)} group` : "no policy group (company-wide rules)"}; a payment counts as on time up to ${p.payments.grace_days} day${p.payments.grace_days === 1 ? "" : "s"} after its due date${p.payments.grace_days === 0 ? " (no grace days: on or before the due date)" : ""}; limit use alert at ${p.utilization.high_pct}% of the limit, critical at ${p.utilization.critical_pct}%; limit action considered from ${p.composite.base_threshold_pct}% of the limit, lowered by each warning sign`;
+          }).join("\n"));
+      }
+    }
+
       // Financial statements of the customer(s) the question names, computed here: the basis
       // for "ask for the latest accounts" in the next steps (2026-11-18: Arconic, score 58,
       // no accounts on file, got "I don't have that information" instead).
@@ -1554,23 +1571,6 @@ serve(async (req: Request) => {
               return `- [${tag}] ${sanitize(c.company_name)}: accounts for the year ended ${age.fye}, ${age.months} months old, limit ${age.max_months} months for this score — ${age.status === "stale" ? "OUT OF DATE, suggest asking for newer accounts" : age.status === "due_soon" ? "due soon, suggest asking for newer accounts" : "current"}`;
             }).join("\n"));
         }
-      }
-    }
-
-    // The rules that apply to each named customer, with its group's overrides already applied
-    // (audit 2026-11-23: "how late can Carrick pay and still be on time?" got the company's 5 days;
-    // Carrick is in the High risk group, which has no grace days).
-    if (companyMentions.length) {
-      const namedPolicy = customerLines.filter(({ customer: c }) =>
-        companyMentions.some((m) => String(c.company_name ?? "").toLowerCase().includes(m.toLowerCase()))).slice(0, 10);
-      if (namedPolicy.length) {
-        contextParts.push(
-          "## POLICY FOR NAMED CUSTOMER(S) (computed in code: the company's policy with the customer's group applied; these values win over the company-wide ones)\n" +
-          namedPolicy.map(({ tag, customer: c }) => {
-            const p = policyFor(creditPolicy, policyGroups, c.policy_group);
-            const g = c.policy_group ? policyGroups[c.policy_group]?.name ?? c.policy_group : null;
-            return `- [${tag}] ${sanitize(c.company_name)}: ${g ? `in the ${sanitize(g)} group` : "no policy group (company-wide rules)"}; a payment counts as on time up to ${p.payments.grace_days} day${p.payments.grace_days === 1 ? "" : "s"} after its due date${p.payments.grace_days === 0 ? " (no grace days: on or before the due date)" : ""}; limit use alert at ${p.utilization.high_pct}% of the limit, critical at ${p.utilization.critical_pct}%; limit action considered from ${p.composite.base_threshold_pct}% of the limit, lowered by each warning sign`;
-          }).join("\n"));
       }
     }
 
