@@ -264,10 +264,11 @@ const HIGH_UTIL_MARKER_TEST = /\{\{\s*HIGH_UTILIZATION_LIST\s*\}\}/;
 const HIGH_UTIL_MARKER_REPLACE = /\{\{\s*HIGH_UTILIZATION_LIST\s*\}\}/g;
 
 function buildHighUtilizationListBlock(
-  lines: { tag: string; company_name: string | null; credit_limit: number | null; current_exposure: number | null }[]
+  lines: { tag: string; company_name: string | null; credit_limit: number | null; current_exposure: number | null }[],
+  level = "80% of the limit",
 ): string {
   if (lines.length === 0) {
-    return "**No customers** are currently at or above 85% utilization.";
+    return `**No customers** are at or above the policy's alert level (${level}).`;
   }
   // Over the limit first (most over first), then close to it: "over their credit limit"
   // and "near their limit" are different answers (seen 2026-11-17: 4 over, 16 close).
@@ -280,7 +281,7 @@ function buildHighUtilizationListBlock(
   parts.push(over.length
     ? `**${over.length} customer${over.length === 1 ? " is" : "s are"} over their credit limit:**\n${over.map(bullet).join("\n")}`
     : "**No customers** are over their credit limit.");
-  if (near.length) parts.push(`**${near.length} more ${near.length === 1 ? "is" : "are"} close to it (85–100% of the limit):**\n${near.map(bullet).join("\n")}`);
+  if (near.length) parts.push(`**${near.length} more ${near.length === 1 ? "is" : "are"} close to it (at or above the policy's alert level, ${level}):**\n${near.map(bullet).join("\n")}`);
   return parts.join("\n\n");
 }
 
@@ -587,7 +588,7 @@ async function fetchRelevantData(
       if (error) { console.error("score sources error:", error.message); return; }
       const eff = effectiveSettings(Object.fromEntries((settingRows ?? []).map((r: any) => [r.key, r.value]))) as any;
       results.financials_settings = eff.financials;
-      results.score_sources = summarizeScoreSources(rows ?? [], eff.financials, new Date().toISOString().slice(0, 10));
+      results.score_sources = summarizeScoreSources(rows ?? [], eff.financials, await appToday(supabase));
     })(),
 
     // Every customer's open warnings (90 days), for the risk ranking below: the keyword-filtered
@@ -1399,6 +1400,7 @@ serve(async (req: Request) => {
     // (2026-11-18 eval: the model listed 10 of 21 "getting worse" customers).
     let paymentWorseBlock = "";
     let paymentBetterBlock = "";
+    let utilizationLevel = "80% of the limit";
     let highUtilizationLines: { tag: string; company_name: string | null; credit_limit: number | null; current_exposure: number | null }[] = [];
 
     // Hoisted for the same reason as highUtilizationLines above: still reachable
@@ -1474,11 +1476,21 @@ serve(async (req: Request) => {
       // so customerLines can be filtered directly — no separate complete-data-source
       // fallback needed anymore.
       highUtilizationLines = customerLines
-        .map(({ tag, customer: c }) => ({ tag, company_name: c.company_name, credit_limit: c.credit_limit, current_exposure: c.current_exposure }))
-        .filter((c) => (c.credit_limit ?? 0) > 0 && ((c.current_exposure ?? 0) / (c.credit_limit as number)) >= 0.85);
+        // Audit 2026-11-23: was a hard-coded 85%; the alert threshold is the policy's
+        // utilization.high_pct (80%, High risk group 70%), the same rule the AR agent alerts on.
+        .map(({ tag, customer: c }) => ({ tag, company_name: c.company_name, credit_limit: c.credit_limit, current_exposure: c.current_exposure, high_pct: policyFor(creditPolicy, policyGroups, c.policy_group).utilization.high_pct }))
+        .filter((c) => (c.credit_limit ?? 0) > 0 && ((c.current_exposure ?? 0) / (c.credit_limit as number)) * 100 >= c.high_pct)
+        .sort((a, b) => (b.current_exposure as number) / (b.credit_limit as number) - (a.current_exposure as number) / (a.credit_limit as number));
+      {
+        const lower = Object.values(policyGroups)
+          .map((g: any) => ({ name: g?.name, pct: g?.overrides?.utilization?.high_pct }))
+          .filter((g) => typeof g.pct === "number" && g.pct !== creditPolicy.utilization.high_pct);
+        utilizationLevel = `${creditPolicy.utilization.high_pct}% of the limit` +
+          (lower.length ? ` (${lower.map((g) => `${g.pct}% for ${g.name} accounts`).join(", ")})` : "");
+      }
       if (highUtilizationLines.length > 0) {
         contextParts.push(
-          `## OFFICIAL HIGH-UTILIZATION CUSTOMER LIST (computed from credit_limit/current_exposure across the complete customer set, threshold utilization >= 85% — the complete, authoritative answer to any "approaching their credit limit" / "near their limit" / "over their credit limit" question)\n` +
+          `## OFFICIAL HIGH-UTILIZATION CUSTOMER LIST (computed from credit_limit/current_exposure across the complete customer set, threshold: limit use at or above the company's policy alert level (${creditPolicy.utilization.high_pct}%, or the customer's group level) — the complete, authoritative answer to any "approaching their credit limit" / "near their limit" / "over their credit limit" question)\n` +
           highUtilizationLines.map((c) =>
             `- ${sanitize(c.company_name)} [${c.tag}] (utilization=${Math.round(((c.current_exposure as number) / (c.credit_limit as number)) * 100)}%, balance=$${c.current_exposure?.toLocaleString()}, credit_limit=$${c.credit_limit?.toLocaleString()})`
           ).join("\n")
@@ -1526,7 +1538,7 @@ serve(async (req: Request) => {
       // for "ask for the latest accounts" in the next steps (2026-11-18: Arconic, score 58,
       // no accounts on file, got "I don't have that information" instead).
       if (companyMentions.length && data.financials_settings) {
-        const asOf = new Date().toISOString().slice(0, 10);
+        const asOf = await appToday(supabaseClient); // the demo's build day on the demo
         const named = customerLines.filter(({ customer: c }) =>
           companyMentions.some((m) => String(c.company_name ?? "").toLowerCase().includes(m.toLowerCase())));
         if (named.length && named.length <= 10) {
@@ -1889,7 +1901,7 @@ serve(async (req: Request) => {
       // the existing (unmodified) verification/stripping/sources pipeline below picks
       // them up exactly like any other citation, with nothing to special-case.
       const utilSplicedText = HIGH_UTIL_MARKER_TEST.test(rawAnswerText)
-        ? rawAnswerText.replace(HIGH_UTIL_MARKER_REPLACE, buildHighUtilizationListBlock(highUtilizationLines))
+        ? rawAnswerText.replace(HIGH_UTIL_MARKER_REPLACE, buildHighUtilizationListBlock(highUtilizationLines, utilizationLevel))
         : rawAnswerText;
       const riskSplicedText = HIGH_RISK_MARKER_TEST.test(utilSplicedText)
         ? utilSplicedText.replace(HIGH_RISK_MARKER_REPLACE, buildHighRiskListBlock(highRiskLines))
