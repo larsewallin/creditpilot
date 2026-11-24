@@ -69,7 +69,8 @@ const customerEvents = events.length - portfolio.length;
 console.log(`\nOpen events: ${events.length}: ${customerEvents} on customers, ${portfolio.length} portfolio ${JSON.stringify(bySeverity)}. Pending proposals: ${actions.length} (target about 6).`);
 // Plan: about 25–30 open events, a handful of them portfolio-wide (one industry, one country,
 // currency moves).
-if (customerEvents > 35) problems.push(`customer events ${customerEvents} (target under 30)`);
+// 40 since 2026-11-24: the four news stories are now checked here too (they used to need the assistant).
+if (customerEvents > 40) problems.push(`customer events ${customerEvents} (target 40 or fewer)`);
 if (portfolio.length > 8) problems.push(`portfolio events ${portfolio.length} (target about 5)`);
 if (problems.length) { console.log(`\n${problems.length} problem(s): ${problems.join("; ")}`); process.exit(1); }
 console.log("\nEvery story shows exactly what it should.");
