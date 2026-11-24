@@ -2,7 +2,8 @@
 
 /** The answer's confidence from what its citations show, in code (no second model call). */
 export function gradeFromCitations(a: { cited: number; verified: number; web: number; computedList: boolean; noData: boolean; hasFigures: boolean }): { confidence: string; confidence_reason: string } {
-  if (a.noData) return { confidence: "Low", confidence_reason: "CreditPilot's data does not cover this question." };
+  // Saying the data has nothing is a sure answer, not a weak one (harness q8: an unknown customer).
+  if (a.noData) return { confidence: "High", confidence_reason: "CreditPilot's data has nothing on this, so nothing was guessed." };
   if (a.cited > a.verified) return { confidence: "Medium", confidence_reason: "Some statements could not be matched to a record in CreditPilot's data." };
   if (a.computedList) return { confidence: "High", confidence_reason: "The list is computed in code from CreditPilot's data, not written by the model." };
   if (a.verified > 0) return { confidence: "High", confidence_reason: `Every cited figure links to a record in CreditPilot's data${a.web ? " or a web page" : ""}.` };
