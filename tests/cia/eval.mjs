@@ -261,12 +261,12 @@ const CASES = [
 import { appendFileSync } from "node:fs";
 let failed = 0;
 const summary = [];
-const followUps = new Map(); // normalised → as suggested
+const followUps = new Map(); // normalised → { q, from: { question, answer } }
 for (const [i, c] of CASES.entries()) {
   const answer = await ask(c.q, c.previous, c.history);
   for (const f of last.relatedQuestions ?? []) {
     const k = String(f).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-    if (k && !followUps.has(k) && !CASES.some((x) => x.q.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() === k)) followUps.set(k, String(f));
+    if (k && !followUps.has(k) && !CASES.some((x) => x.q.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() === k)) followUps.set(k, { q: String(f), from: { question: c.q, answer } });
   }
   // Every answer: no database field names or demo labels shown to the user (2026-11-23: a
   // spliced list printed "credit_score=64/100, scenario=payment_issues").
@@ -305,16 +305,16 @@ function factsFor(q) {
     if (/bankrupt|chapter 11|pre.?petition/i.test(q)) add("bankruptcy", (a) => inBankruptcy ? (/bankrupt|chapter 11/i.test(a) || "does not say it is in bankruptcy") : (!/\b(?:is|filed for) (?:in )?(?:bankrupt|chapter 11)/i.test(a) || "says it is in bankruptcy"));
     else if (/over ?due|past ?due|late invoices/i.test(q)) add("overdue", (a) => overdue > 0 ? either(a, [overdue], "overdue amount") : (/no (?:overdue|invoices? (?:are )?overdue)|nothing (?:is )?overdue|not overdue|\$0\b/i.test(a) || "does not say nothing is overdue"));
     if (/limit (?:use|utili[sz])|utili[sz]ation|% of (?:its |their )?limit|close to (?:its |their )?limit|headroom/i.test(q) && limit > 0) add("limit use", (a) => either(a, [pct1(exposure, limit), limit - exposure], "limit use or headroom"));
-    else if (/\b(?:owe|balance|exposure|outstanding)\b/i.test(q) && !inBankruptcy) add("balance", (a) => either(a, [exposure], "balance"));
+    else if (/\b(?:owe|balance|outstanding)\b|\bexposure\b(?! limit)/i.test(q) && !/over ?due|past ?due|aging/i.test(q) && !inBankruptcy) add("balance", (a) => either(a, [exposure], "balance"));
     if (/\b(?:cut|reduc\w*|lower\w*|propos\w*|pending|approv\w*)\b/i.test(q) && cut) add("proposal", (a) => either(a, [cut[1]], "proposed limit"));
-    else if (/credit limit/i.test(q) && !/should|raise|increase|extend/i.test(q)) add("limit", (a) => either(a, [limit], "credit limit"));
+    else if (/credit limit|exposure limit/i.test(q) && !/should|raise|increase|extend/i.test(q)) add("limit", (a) => either(a, [limit], "credit limit"));
     if (/\bgrace\b|count(?:s|ed)? as on.?time/i.test(q)) add("grace", (a) => { const g = graceOf(n); return g === 0 ? (hasNumber(a, 0) || /no grace|on or before|due date itself/i.test(a) || "grace days 0 missing") : either(a, [g], "grace days"); });
     else if (/on.?time/i.test(q) && py.length) add("on-time rate", (a) => either(a, [py[2], py[3]], "on-time rate"));
     else if (/days? late|how late|days to pay|payment (?:trend|behaviou?r|speed|timing|pattern)|paying (?:later|slower|faster|earlier)|pays? (?:later|slower)/i.test(q) && py.length) add("days late", (a) => either(a, [py[0], py[1], Math.abs(py[0]), Math.abs(py[1])], "average days late, now or before"));
-    if (/\b(?:score|rating)\b/i.test(q) && Number.isFinite(score)) add("score", (a) => either(a, [score], "credit score"));
+    if (/\b(?:score|rating)\b/i.test(q) && !/source|provider|where (?:does|do)|who (?:rates|scores)/i.test(q) && Number.isFinite(score)) add("score", (a) => either(a, [score], "credit score"));
   } else if (names.length === 0) {
-    if (/total overdue|overdue (?:ar|balance|amount)|how much is overdue/i.test(q)) add("portfolio overdue", (a) => either(a, [truth.overdue], "total overdue"));
-    if (/total (?:exposure|outstanding|receivables?|ar\b)|how much (?:do|are) (?:customers|we) (?:owe|owed)/i.test(q)) add("portfolio outstanding", (a) => either(a, [truth.outstanding, truth.outstanding + prePetitionTotal], "total outstanding"));
+    if (/total overdue|how much is overdue|portfolio'?s? overdue/i.test(q) && !/\d+\s*(?:–|-|to)\s*\d+ days|by (?:customer|sector|country|currency)|which/i.test(q)) add("portfolio overdue", (a) => either(a, [truth.overdue], "total overdue"));
+    if (/total (?:exposure|outstanding|receivables?|ar\b)|how much (?:do|are) (?:customers|we) (?:owe|owed)/i.test(q) && !/\b(?:to|in|for|by|across|which)\b (?:the |our )?(?!portfolio)\w/i.test(q.replace(/^.*?total (?:exposure|outstanding|receivables?|ar)/i, ""))) add("portfolio outstanding", (a) => either(a, [truth.outstanding, truth.outstanding + prePetitionTotal], "total outstanding"));
     const list = (topic, re, want) => re.test(q) && add(topic, (a) => want.map((n) => mentions(a, n) || `${n} missing`));
     list("over limit", /over (?:their |its )?(?:credit )?limits?/i, truth.overLimit);
     list("multi-agent", /multiple agents|several agents|more than one agent|converg/i, C.convergence);
@@ -334,10 +334,13 @@ const graceOf = (n) => Number(one(`select coalesce((select s.value->c.policy_gro
 const fuSummary = [];
 let fuAudited = 0, fuFailed = 0, fuAsked = 0;
 const topics = {};
-for (const q of [...followUps.values()].slice(0, FOLLOWUP_MAX)) {
-  const answer = await ask(q);
+// Asked as the page asks a clicked follow-up: in the thread of the answer that suggested it.
+for (const { q, from } of [...followUps.values()].slice(0, FOLLOWUP_MAX)) {
+  const answer = await ask(q, undefined, [from]);
+  // "these", "that $7,057,000", "the other six": the facts come from the earlier answer, not the portfolio.
+  const relative = /\b(?:these|those|that|this|other|remaining|them|their)\b/i.test(q);
   fuAsked++;
-  const { names, checks } = factsFor(q);
+  const { names, checks } = relative && named(q).length === 0 ? { names: [], checks: [] } : factsFor(q);
   const problems = [];
   if (/I don't have that information|I don.t have (?:data|information) on/i.test(answer)) problems.push("suggested a follow-up the CIA then could not answer");
   if (/\{\{/.test(answer)) problems.push("placeholder in the answer");
@@ -345,7 +348,7 @@ for (const q of [...followUps.values()].slice(0, FOLLOWUP_MAX)) {
   const raw = answer.match(/\b[a-z]+(?:_[a-z]+)+=|\bscenario\b/);
   if (raw) problems.push(`shows a raw field: ${raw[0]}`);
   const invented = [...new Set([...q.matchAll(/\b([A-Z][\w&-]+(?: [A-Z][\w&-]+){0,3}) (?:Inc|Corp|GmbH|Ltd|LLC|plc|AG|KK)\b/g)].map((m) => m[1]))]
-    .filter((n) => !allCustomers.some((c) => c.toLowerCase().startsWith(n.toLowerCase())));
+    .filter((n) => !allCustomers.some((c) => n.toLowerCase().endsWith(c.split(/ (?:Inc|Corp|GmbH|Ltd|LLC|plc|AG|KK|Co)\b/)[0].toLowerCase())));
   if (invented.length) problems.push(`follow-up names a company that is not a customer: ${invented.join(", ")}`);
   for (const c of checks) {
     topics[c.topic] = (topics[c.topic] ?? 0) + 1;
