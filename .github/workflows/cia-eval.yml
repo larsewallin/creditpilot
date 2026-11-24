@@ -5,7 +5,8 @@
 name: CIA eval
 on:
   workflow_dispatch:
-  # Weekly (Mondays) since 2026-11-19: each run is ~63 live questions plus up to 120 suggested follow-ups (about $2.50).
+  # Weekly (Mondays) since 2026-11-19. Every question's facts are checked free (no answer call); 15 live answers
+  # (a different 15 each week) and 10 of their follow-ups cost about $0.40 (founder 2026-11-24).
   schedule:
     - cron: "17 11 * * 1"
   pull_request:

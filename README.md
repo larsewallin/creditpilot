@@ -13,7 +13,7 @@ Open source (MIT). **Live demo: [creditpilot.vercel.app](https://creditpilot.ver
 | | |
 |---|---|
 | **Answers from your data, with sources** | Every claim carries a numbered citation. Click it to see the record behind it: an invoice, a payment, an agent's alert. |
-| **Reads the web too** | For a question about a customer, a sector or "what's happening", it searches the web and puts the news next to your exposure. Web facts are cited to their pages. Figures about your own customers only ever come from your data. |
+| **Reads the web too** | For a question about a customer, a sector or "what's happening", it searches the web and puts the news next to your exposure. Web facts are cited to their pages. Figures about your own customers only ever come from your data. *Off in the public demo, which runs on fictional companies; on when you [run it yourself](#run-it-yourself).* |
 | **Shows its work** | You see each step as it happens ("Reading 1 customer, 8 payments, 5 credit events…", "Searching the web: …"), then the answer as it is written. |
 | **Never does the arithmetic itself** | Totals, aging buckets, payment trends, limit use and every chart are computed in code and handed to the model as facts. The model explains numbers; it does not produce them. |
 | **Ends advice with next steps** | "Should I reduce Marlow Industrial Castings' limit?" gets the facts, then 2–3 steps you can take, in CreditPilot first. Missing or out-of-date accounts become "ask for the latest annual accounts". |

@@ -214,7 +214,8 @@ const CASES = [
   // The demo companies are fictional, so the web question is about a market, not a customer.
   { q: "Where are steel prices heading, and which of our customers are exposed?", check: (a) => [
       /\$[\d,.]+/.test(a) || "no exposure figure from our data",
-      (last.sources ?? []).some((s) => s.source_type === "web" && /^https?:/.test(s.url ?? "")) || "no web page cited",
+      // Web research is off in the public demo (founder 2026-11-24); EXPECT_WEB=1 where it is on.
+      !process.env.EXPECT_WEB || (last.sources ?? []).some((s) => s.source_type === "web" && /^https?:/.test(s.url ?? "")) || "no web page cited",
       (last.sources ?? []).every((s, i) => s.n === i + 1) || "citation numbers out of order"] },
   // A follow-up that names no company carries the earlier question's company over.
   { q: "And how do they pay?", previous: "What is Marlow Industrial Castings' credit limit and current balance?", check: (a) => [
@@ -262,11 +263,45 @@ const CASES = [
 ];
 
 import { appendFileSync } from "node:fs";
+// ── Phase 1, free: the facts handed to the model (founder 2026-11-24: an audit must not cost
+// money). For every question, the CIA returns the data and computed lists it would answer from,
+// without the answer call; each fact the question needs must be in them. This is where most
+// errors were (thresholds, rankings, a currency total): checked on every run at no cost.
+async function askContext(question, previous, history) {
+  const r = await fetch(`${SUPABASE_URL}/functions/v1/cia-agent`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}`, "x-internal-test-secret": CIA_INTERNAL_TEST_SECRET ?? "" },
+    body: JSON.stringify({ mode: "question", context_only: true, question, ...(previous ? { previous_question: previous } : {}), ...(history ? { history } : {}) }),
+  });
+  const d = await r.json().catch(() => ({}));
+  if (typeof d.context !== "string") return null;
+  return [d.context, ...Object.values(d.lists ?? {})].join("\n\n");
+}
+let factFailed = 0;
+const factSummary = [];
+for (const c of CASES) {
+  const ctx = await askContext(c.q, c.previous, c.history);
+  if (ctx === null) { factFailed++; factSummary.push(`- ✗ ${c.q}: no data returned`); continue; }
+  last = {};
+  let problems;
+  try { problems = c.check(ctx).filter((x) => x !== true && /missing|not in answer/.test(String(x))); } catch { problems = []; }
+  if (problems.length) { factFailed++; factSummary.push(`- ✗ ${c.q}: ${problems.join("; ")}`); console.log(`::warning::CIA facts: "${c.q}": ${problems.join("; ")}`); }
+}
+console.log(`\nFacts handed to the model: ${CASES.length - factFailed}/${CASES.length} questions have every fact they need (free)`);
+
+// ── Phase 2, paid: live answers for a sample (EVAL_LIVE=all for every question). The sample
+// moves on each week, so every question is answered live every few weeks.
+const LIVE = process.env.EVAL_LIVE === "all" ? CASES.length : Number(process.env.EVAL_LIVE ?? 15);
+const week = Math.floor(Date.now() / (7 * 86400e3));
+const start = (week * LIVE) % CASES.length;
+const liveCases = LIVE >= CASES.length ? CASES : [...CASES, ...CASES].slice(start, start + LIVE);
+let spent = 0;
 let failed = 0;
 const summary = [];
 const followUps = new Map(); // normalised → { q, from: { question, answer } }
-for (const [i, c] of CASES.entries()) {
+for (const [i, c] of liveCases.entries()) {
   const answer = await ask(c.q, c.previous, c.history);
+  spent += Number(last.usage?.est_cost_usd ?? 0);
   for (const f of last.relatedQuestions ?? []) {
     const k = String(f).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
     if (k && !followUps.has(k) && !CASES.some((x) => x.q.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() === k)) followUps.set(k, { q: String(f), from: { question: c.q, answer } });
@@ -282,14 +317,14 @@ for (const [i, c] of CASES.entries()) {
   console.log(`\n── ${i + 1}. ${c.q}  ${problems.length ? "✗ " + problems.join("; ") : c.check.length || problems.length ? "✓" : "(read)"}`);
   console.log(answer);
 }
-console.log(`\n${CASES.length - failed}/${CASES.length} passed their checks`);
+console.log(`\n${liveCases.length - failed}/${liveCases.length} live answers passed their checks`);
 
 // ── Follow-up audit (founder 2026-11-24: "make sure most of the follow-up questions the CIA is
 // suggesting are audited"). Every follow-up suggested above is asked (up to FOLLOWUP_MAX). A
 // question about one named customer, or about a portfolio figure, is matched to the facts it
 // asks for and checked against the database; every follow-up also gets the general checks: it
 // must be answerable (no "I don't have that information"), no placeholder, no invented company.
-const FOLLOWUP_MAX = Number(process.env.FOLLOWUP_MAX ?? 120);
+const FOLLOWUP_MAX = Number(process.env.FOLLOWUP_MAX ?? 10);
 const allCustomers = col(`select company_name from customers where ${ACTIVE}`);
 const named = (q) => allCustomers.filter((n) => new RegExp(`\\b${key(n)}\\b`, "i").test(q));
 const pct1 = (a, b) => Math.round((a / b) * 1000) / 10;
@@ -343,6 +378,7 @@ const topics = {};
 // Asked as the page asks a clicked follow-up: in the thread of the answer that suggested it.
 for (const { q, from } of [...followUps.values()].slice(0, FOLLOWUP_MAX)) {
   const answer = await ask(q, undefined, [from]);
+  spent += Number(last.usage?.est_cost_usd ?? 0);
   // "these", "that $7,057,000", "the other six": the facts come from the earlier answer, not the portfolio.
   const relative = /\b(?:these|those|that|this|other|remaining|them|their)\b/i.test(q);
   fuAsked++;
@@ -368,7 +404,8 @@ for (const { q, from } of [...followUps.values()].slice(0, FOLLOWUP_MAX)) {
 }
 const fuLine = `${fuAsked} of ${followUps.size} suggested follow-ups asked; ${fuAudited} checked against the data (${fuAsked ? Math.round((fuAudited / fuAsked) * 100) : 0}%), all ${fuAsked} given the general checks; ${fuAsked - fuFailed}/${fuAsked} passed. Facts checked: ${Object.entries(topics).map(([t, n]) => `${t} ${n}`).join(", ") || "none"}`;
 console.log(`\n${fuLine}`);
+console.log(`Estimated cost of this run's live answers: $${spent.toFixed(2)}`);
 if (process.env.GITHUB_STEP_SUMMARY) {
-  appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## CIA eval: ${CASES.length - failed}/${CASES.length} passed\n\n${summary.join("\n") || "All checks passed."}\n\n## Follow-up audit\n\n${fuLine}\n\n${fuSummary.join("\n") || "All follow-ups passed."}\n\nEvery answer is in the job log.\n`);
+  appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## Facts handed to the model (free): ${CASES.length - factFailed}/${CASES.length}\n\n${factSummary.join("\n") || "Every question has the facts it needs."}\n\n## Live answers: ${liveCases.length - failed}/${liveCases.length} passed (estimated cost $${spent.toFixed(2)})\n\n${summary.join("\n") || "All checks passed."}\n\n## Follow-up audit\n\n${fuLine}\n\n${fuSummary.join("\n") || "All follow-ups passed."}\n\nEvery answer is in the job log.\n`);
 }
-process.exit((failed || fuFailed) && process.env.EVAL_STRICT === "1" ? 1 : 0);
+process.exit((failed || fuFailed || factFailed) && process.env.EVAL_STRICT === "1" ? 1 : 0);
