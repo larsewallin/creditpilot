@@ -248,6 +248,9 @@ const CASES = [
   { q: "What is the combined exposure of Marlow Industrial Castings and Carrick Process Equipment?", check: (a) => [hasNumber(a, C.marlowCarrick) || `combined ${C.marlowCarrick} missing`] },
   { q: "How many days late can Carrick Process Equipment pay and still count as on time?", check: (a) => [
       hasNumber(a, C.carrickGroupGrace) || /no grace|not (?:a single|one) day|due date itself|on or before/i.test(a) || `High risk grace ${C.carrickGroupGrace} days missing`, /high.?risk/i.test(a) || "does not say Carrick is in the High risk group"] },
+  { q: "How much EUR exposure do we have with Brennecke Antriebstechnik?", check: (a) => {
+      const own = Number(one(`select coalesce(sum(i.outstanding_amount),0) from invoices i join customers c on c.id = i.customer_id where c.company_name ilike 'Brennecke%' and i.currency = 'EUR' and i.outstanding_amount > 0`));
+      return [hasNumber(a, own) || `Brennecke's own EUR amount ${own} missing`]; } },
   { q: "Which customers' financial statements are out of date?", check: () => [] },
   { q: "Where do our customers' credit scores come from?", check: () => [] },
   { q: "What country risks affect our portfolio?", check: () => [] },
@@ -303,18 +306,21 @@ function factsFor(q) {
     const cut = sql(`select p.current_value, p.proposed_value from pending_actions p join customers c on c.id = p.customer_id where c.company_name = '${n.replace(/'/g, "''")}' and p.status = 'pending' and p.action_type = 'CREDIT_LIMIT_REDUCTION' limit 1`)[0]?.map(Number);
     const inBankruptcy = truth.prePetition.includes(n);
     if (/bankrupt|chapter 11|pre.?petition/i.test(q)) add("bankruptcy", (a) => inBankruptcy ? (/bankrupt|chapter 11/i.test(a) || "does not say it is in bankruptcy") : (!/\b(?:is|filed for) (?:in )?(?:bankrupt|chapter 11)/i.test(a) || "says it is in bankruptcy"));
-    else if (/over ?due|past ?due|late invoices/i.test(q)) add("overdue", (a) => overdue > 0 ? either(a, [overdue], "overdue amount") : (/\bno\b[^.]{0,40}\b(?:overdue|past ?due)|nothing (?:is )?(?:overdue|past ?due)|not (?:overdue|past ?due)|all (?:\w+ )?(?:invoices )?(?:are )?current|\$0\b/i.test(a) || "does not say nothing is overdue"));
+    else if (/over ?due|past ?due|late invoices|\bar aging\b|aging (?:breakdown|details|issues)|open invoices?|open ar\b/i.test(q)) add("overdue", (a) => overdue > 0 ? either(a, [overdue], "overdue amount") : (/\bno\b[^.]{0,40}\b(?:overdue|past ?due)|nothing (?:is )?(?:overdue|past ?due)|not (?:overdue|past ?due)|all (?:\w+ )?(?:invoices )?(?:are )?current|\$0\b/i.test(a) || "does not say nothing is overdue"));
     if (/limit (?:use|utili[sz])|utili[sz]ation|% of (?:its |their )?limit|close to (?:its |their )?limit|headroom/i.test(q) && limit > 0) add("limit use", (a) => either(a, [pct1(exposure, limit), limit - exposure], "limit use or headroom"));
     else if (/\b(?:owe|balance|outstanding)\b|\bexposure\b(?! limit)/i.test(q) && !/over ?due|past ?due|aging/i.test(q) && !inBankruptcy) add("balance", (a) => either(a, [exposure], "balance"));
-    if (/\b(?:cut|reduc\w*|lower\w*|propos\w*|pending|approv\w*)\b/i.test(q) && cut) add("proposal", (a) => either(a, [cut[1]], "proposed limit"));
+    if (/\b(?:cut|reduc\w*|lower\w*|propos\w*|pending|approv\w*)\b/i.test(q) && !/^\s*why\b/i.test(q) && cut) add("proposal", (a) => either(a, [cut[1]], "proposed limit"));
     else if (/credit limit|exposure limit/i.test(q) && !/should|raise|increase|extend/i.test(q)) add("limit", (a) => either(a, [limit], "credit limit"));
+    // A currency amount for this customer: its own open invoices in that currency.
+    const ccy = q.match(/\b(EUR|GBP|JPY)\b/)?.[1];
+    if (ccy) { const own = Number(one(`select coalesce(sum(i.outstanding_amount),0) from invoices i join customers c on c.id = i.customer_id where c.company_name = '${n.replace(/'/g, "''")}' and i.currency = '${ccy}' and i.outstanding_amount > 0`)); if (own > 0) add("currency amount", (a) => either(a, [own], `${ccy} open amount`)); }
     if (/\bgrace\b|count(?:s|ed)? as on.?time/i.test(q)) add("grace", (a) => { const g = graceOf(n); return g === 0 ? (hasNumber(a, 0) || /no grace|on or before|due date itself/i.test(a) || "grace days 0 missing") : either(a, [g], "grace days"); });
     else if (/on.?time/i.test(q) && py.length) add("on-time rate", (a) => either(a, [py[2], py[3]], "on-time rate"));
-    else if (!/^\s*(?:should|can|could|would|do) (?:we|i)\b/i.test(q) && /days? late|how late|days to pay|payment (?:trend|behaviou?r|speed|timing|pattern)|paying (?:later|slower|faster|earlier)|pays? (?:later|slower)/i.test(q) && py.length) add("days late", (a) => either(a, [py[0], py[1], Math.abs(py[0]), Math.abs(py[1])], "average days late, now or before"));
-    if (/\b(?:score|rating)\b/i.test(q) && !/source|provider|where (?:does|do)|who (?:rates|scores)/i.test(q) && Number.isFinite(score)) add("score", (a) => either(a, [score], "credit score"));
+    else if (!/^\s*(?:should|can|could|would|do) (?:we|i)\b/i.test(q) && /payment history|paid (?:on time|late)|days? late|how late|days to pay|payment (?:trend|behaviou?r|speed|timing|pattern)|paying (?:later|slower|faster|earlier)|pays? (?:later|slower)/i.test(q) && py.length) add("days late", (a) => either(a, [py[0], py[1], Math.abs(py[0]), Math.abs(py[1])], "average days late, now or before"));
+    if (/\b(?:score|rating)\b/i.test(q) && !/^(?:(?!\bscore\b).)*\b(?:source|provider)\b|where (?:does|do)|who (?:rates|scores)|financial statements|how old/i.test(q) && Number.isFinite(score)) add("score", (a) => either(a, [score], "credit score"));
   } else if (names.length === 0) {
-    if (/total overdue|how much is overdue|portfolio'?s? overdue/i.test(q) && !/\d+\s*(?:–|-|to)\s*\d+ days|by (?:customer|sector|country|currency)|which/i.test(q)) add("portfolio overdue", (a) => either(a, [truth.overdue], "total overdue"));
-    if (/total (?:exposure|outstanding|receivables?|ar\b)|how much (?:do|are) (?:customers|we) (?:owe|owed)/i.test(q) && !/\b(?:to|in|for|by|across|which)\b (?:the |our )?(?!portfolio)\w/i.test(q.replace(/^.*?total (?:exposure|outstanding|receivables?|ar)/i, ""))) add("portfolio outstanding", (a) => either(a, [truth.outstanding, truth.outstanding + prePetitionTotal], "total outstanding"));
+    if (/total overdue|how much is overdue|portfolio'?s? overdue/i.test(q) && !/beyond|over \d|more than|excluding|aging/i.test(q) && !/\d+\s*(?:–|-|to)\s*\d+ days|by (?:customer|sector|country|currency)|which/i.test(q)) add("portfolio overdue", (a) => either(a, [truth.overdue], "total overdue"));
+    if (!/aging|beyond|overdue|excluding|days/i.test(q) && /total (?:exposure|outstanding|receivables?|ar\b)|how much (?:do|are) (?:customers|we) (?:owe|owed)/i.test(q) && !/\b(?:to|in|for|by|across|which)\b (?:the |our )?(?!portfolio)\w/i.test(q.replace(/^.*?total (?:exposure|outstanding|receivables?|ar)/i, ""))) add("portfolio outstanding", (a) => either(a, [truth.outstanding, truth.outstanding + prePetitionTotal], "total outstanding"));
     const list = (topic, re, want) => re.test(q) && add(topic, (a) => want.map((n) => mentions(a, n) || `${n} missing`));
     list("over limit", /over (?:their |its )?(?:credit )?limits?/i, truth.overLimit);
     list("multi-agent", /multiple agents|several agents|more than one agent|converg/i, C.convergence);
