@@ -76,7 +76,9 @@ const C = {
   cutTotal: Number(one(`select coalesce(sum(current_value - proposed_value),0) from pending_actions where status = 'pending' and is_demo and action_type = 'CREDIT_LIMIT_REDUCTION' and proposed_value < current_value`)),
   carrickCut: sql(`select p.current_value, p.proposed_value from pending_actions p join customers c on c.id = p.customer_id where c.company_name ilike 'Carrick%' and p.status = 'pending' and p.action_type = 'CREDIT_LIMIT_REDUCTION' limit 1`)[0]?.map(Number) ?? [],
   highRiskScore: col(`select company_name from customers where ${ACTIVE} and credit_rating_score < coalesce((select (value->>'distress_score_below')::int from company_settings where key = 'policy.limit_review'), 25) order by 1`),
-  news: col(`select distinct c.company_name from credit_events e join customers c on c.id = e.customer_id where e.is_demo and e.event_type = 'NEGATIVE_NEWS' and e.created_at > now() - interval '90 days' order by 1`),
+  news: col(`select distinct c.company_name from credit_events e join customers c on c.id = e.customer_id where e.is_demo and e.event_type = 'NEWS_EVENT' and e.payload->>'sentiment' = 'negative' and e.created_at > now() - interval '90 days' order by 1`),
+  // High or critical alerts of the last 30 days (EVENTS_LIST).
+  alerts30: col(`select distinct c.company_name from credit_events e join customers c on c.id = e.customer_id where e.is_demo and e.severity in ('high','critical') and e.created_at > now() - interval '30 days' and c.${ACTIVE} order by 1`),
   // An industry signal is about a sector (payload.sector): every active customer in it is exposed.
   industry: col(`select distinct c.company_name from credit_events e join customers c on c.sector = e.payload->>'sector' or c.id = e.customer_id where e.is_demo and e.event_type = 'INDUSTRY_DOWNTURN' and e.created_at > now() - interval '90 days' and c.${ACTIVE} order by 1`),
   aeroOverdue: Number(one(`select coalesce(sum(bucket_1_30 + bucket_31_60 + bucket_61_90 + bucket_over_90),0) from v_ar_aging_current a join customers c on c.company_name = a.company_name where c.sector = 'Aerospace & Defense' and c.${ACTIVE}`)),
@@ -245,6 +247,7 @@ const CASES = [
   { q: "How much would the proposed limit cuts lower our credit limits by in total?", check: (a) => [hasNumber(a, C.cutTotal) || `total cut ${C.cutTotal} missing`] },
   { q: "Why is a credit limit cut proposed for Carrick Process Equipment?", check: (a) => C.carrickCut.length ? [
       hasNumber(a, C.carrickCut[1]) || `proposed limit ${C.carrickCut[1]} missing`, hasNumber(a, C.carrickCut[0]) || `current limit ${C.carrickCut[0]} missing`] : [] },
+  { q: "Which customers had high or critical alerts in the last 30 days?", check: (a) => C.alerts30.map((n) => mentions(a, n) || `${n} (alert) missing`) },
   { q: "Which customers have recent negative news?", check: (a) => C.news.map((n) => mentions(a, n) || `${n} (news) missing`) },
   // A whole sector (22 customers in the demo): the count and the combined balance, not every name.
   { q: "Which customers are exposed to an industry downturn?", check: (a) => {
@@ -284,6 +287,14 @@ async function askContext(question, previous, history) {
 }
 let factFailed = 0;
 const factSummary = [];
+// A check whose answer key is empty passes whatever the CIA says (2026-11-24: the news key asked
+// for an event type that does not exist, so the news question was never really checked). These
+// keys are never empty in the demo; an empty one is a broken test.
+for (const [k, v] of Object.entries({ news: C.news, industry: C.industry, alerts30: C.alerts30, cutCustomers: C.cutCustomers,
+  deteriorating: C.deteriorating, erratic: C.erratic, improving: C.improving, convergence: C.convergence, highRiskScore: C.highRiskScore,
+  prePetition: truth.prePetition, overLimit: truth.overLimit, nearOnly: truth.nearOnly })) {
+  if (!Array.isArray(v) || v.length === 0) { factFailed++; factSummary.push(`- ✗ answer key "${k}" is empty: the test checks nothing`); console.log(`::warning::CIA eval: answer key "${k}" is empty`); }
+}
 for (const c of CASES) {
   const ctx = await askContext(c.q, c.previous, c.history);
   if (ctx === null) { factFailed++; factSummary.push(`- ✗ ${c.q}: no data returned`); continue; }
