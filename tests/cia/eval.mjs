@@ -224,7 +224,8 @@ const CASES = [
   // The ranked list: bankruptcy first, then High risk scores, then pending limit cuts; every one named.
   { q: "Which customers have the highest credit risk right now?", check: (a) => {
       const first = (n) => a.toLowerCase().indexOf(key(n).toLowerCase());
-      const order = C.highRiskScore.filter((n) => !truth.prePetition.includes(n));
+      // Bankruptcy comes before everyone else in the list (2026-11-23: Larkspur, score 64, was named first).
+      const order = [...new Set([...C.highRiskScore, ...C.cutCustomers])].filter((n) => !truth.prePetition.includes(n));
       return [
         ...[...truth.prePetition, ...C.highRiskScore, ...C.cutCustomers].map((n) => mentions(a, n) || `${n} missing`),
         ...truth.prePetition.flatMap((b) => order.map((n) => first(b) < first(n) || `${b} (bankruptcy) not before ${n}`)),

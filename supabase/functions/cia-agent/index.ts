@@ -1557,6 +1557,23 @@ serve(async (req: Request) => {
       }
     }
 
+    // The rules that apply to each named customer, with its group's overrides already applied
+    // (audit 2026-11-23: "how late can Carrick pay and still be on time?" got the company's 5 days;
+    // Carrick is in the High risk group, which has no grace days).
+    if (companyMentions.length) {
+      const namedPolicy = customerLines.filter(({ customer: c }) =>
+        companyMentions.some((m) => String(c.company_name ?? "").toLowerCase().includes(m.toLowerCase()))).slice(0, 10);
+      if (namedPolicy.length) {
+        contextParts.push(
+          "## POLICY FOR NAMED CUSTOMER(S) (computed in code: the company's policy with the customer's group applied; these values win over the company-wide ones)\n" +
+          namedPolicy.map(({ tag, customer: c }) => {
+            const p = policyFor(creditPolicy, policyGroups, c.policy_group);
+            const g = c.policy_group ? policyGroups[c.policy_group]?.name ?? c.policy_group : null;
+            return `- [${tag}] ${sanitize(c.company_name)}: ${g ? `in the ${sanitize(g)} group` : "no policy group (company-wide rules)"}; a payment counts as on time up to ${p.payments.grace_days} day${p.payments.grace_days === 1 ? "" : "s"} after its due date${p.payments.grace_days === 0 ? " (no grace days: on or before the due date)" : ""}; limit use alert at ${p.utilization.high_pct}% of the limit, critical at ${p.utilization.critical_pct}%; limit action considered from ${p.composite.base_threshold_pct}% of the limit, lowered by each warning sign`;
+          }).join("\n"));
+      }
+    }
+
     if (data.score_sources) contextParts.push(...scoreSourceBlocks(data.score_sources));
     if (data.pending_actions) {
       const pa = data.pending_actions;
@@ -1707,7 +1724,7 @@ serve(async (req: Request) => {
       contextParts.push(
         `## OFFICIAL PAYMENT BEHAVIOR TOTALS (pre-computed, deterministic — the authoritative answer to a named customer's average days to pay, on-time rate, or total paid; do not recompute these by averaging or summing the raw PAYMENT TRANSACTIONS TABLE yourself)\n` +
         data.payment_behavior_summary.map((p: any) =>
-          `- ${sanitize(p.company_name)}: total_payments=${p.total_payments ?? "N/A"}, total_paid_all_time=$${Number(p.total_paid_all_time ?? 0).toLocaleString()}, avg_days_to_pay=${p.avg_days_to_pay ?? "N/A"}, avg_days_early_late=${p.avg_days_early_late ?? "N/A"} (${(p.avg_days_early_late ?? 0) > 0 ? "late" : (p.avg_days_early_late ?? 0) < 0 ? "early" : "on time"}), on_time_rate=${p.on_time_payment_pct ?? "N/A"}%, last_payment=$${Number(p.last_payment_amount ?? 0).toLocaleString()} on ${p.last_payment_date ?? "N/A"}`
+          `- ${sanitize(p.company_name)}: total_payments=${p.total_payments ?? "N/A"}, total_paid_all_time=$${Number(p.total_paid_all_time ?? 0).toLocaleString()}, days_from_invoice_to_payment=${p.avg_days_to_pay ?? "N/A"}, avg_days_late_vs_due_date=${p.avg_days_early_late ?? "N/A"} (${(p.avg_days_early_late ?? 0) > 0 ? "late" : (p.avg_days_early_late ?? 0) < 0 ? "early" : "on time"}), on_time_rate=${p.on_time_payment_pct ?? "N/A"}%, last_payment=$${Number(p.last_payment_amount ?? 0).toLocaleString()} on ${p.last_payment_date ?? "N/A"}`
         ).join("\n")
       );
     }
@@ -1720,8 +1737,8 @@ serve(async (req: Request) => {
         `- Customer count: ${s.count}\n` +
         `- Total payments: ${s.total_payments}\n` +
         `- Total paid (all time): $${Number(s.total_paid_all_time).toLocaleString()}\n` +
-        `- Weighted avg days to pay: ${s.avg_days_to_pay ?? "N/A"}\n` +
-        `- Weighted avg days early/late: ${s.avg_days_early_late ?? "N/A"} (${(s.avg_days_early_late ?? 0) > 0 ? "late" : (s.avg_days_early_late ?? 0) < 0 ? "early" : "on time"})\n` +
+        `- Weighted avg days from invoice date to payment (NOT lateness): ${s.avg_days_to_pay ?? "N/A"}\n` +
+        `- Weighted avg days late against the due date (negative = early): ${s.avg_days_early_late ?? "N/A"} (${(s.avg_days_early_late ?? 0) > 0 ? "late" : (s.avg_days_early_late ?? 0) < 0 ? "early" : "on time"})\n` +
         `- Weighted on-time rate: ${s.on_time_payment_pct ?? "N/A"}%`
       );
     }
@@ -1734,8 +1751,8 @@ serve(async (req: Request) => {
         `- Total payments: ${s.total_payments ?? "N/A"}\n` +
         `- Total paid (all time): $${Number(s.total_paid_all_time ?? 0).toLocaleString()}\n` +
         `- Total paid (last 12mo): $${Number(s.total_paid_12mo ?? 0).toLocaleString()}\n` +
-        `- Avg days to pay: ${s.avg_days_to_pay ?? "N/A"}\n` +
-        `- Avg days early/late: ${s.avg_days_early_late ?? "N/A"} (${(s.avg_days_early_late ?? 0) > 0 ? "late" : (s.avg_days_early_late ?? 0) < 0 ? "early" : "on time"})\n` +
+        `- Avg days from invoice date to payment (NOT lateness): ${s.avg_days_to_pay ?? "N/A"}\n` +
+        `- Avg days late against the due date (the answer to "how many days late do customers pay"; negative = early): ${s.avg_days_early_late ?? "N/A"} (${(s.avg_days_early_late ?? 0) > 0 ? "late" : (s.avg_days_early_late ?? 0) < 0 ? "early" : "on time"})\n` +
         `- On-time rate: ${s.on_time_payment_pct ?? "N/A"}%\n` +
         `- Last payment: ${s.last_payment_date ?? "N/A"}`
       );
