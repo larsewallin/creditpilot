@@ -71,7 +71,10 @@ export async function askQuestion(question) {
 
 export function evaluate(response, expected) {
   const failures = [];
-  const answer = (response.answer ?? "").toLowerCase();
+  // Typographic quotes count as plain ones: "I don’t have" is "I don't have" (2026-11-23: the
+  // model began writing curly apostrophes and q8 failed on a correct answer).
+  const plain = (t) => String(t).replace(/[\u2018\u2019\u02BC]/g, "'").replace(/[\u201C\u201D]/g, '"').toLowerCase();
+  const answer = plain(response.answer ?? "");
   const sources = Array.isArray(response.sources) ? response.sources : [];
   const confidence = response.confidence ?? "";
 
@@ -79,7 +82,7 @@ export function evaluate(response, expected) {
     // A term may be a list: any one of them is enough.
     for (const term of expected.must_mention) {
       const options = Array.isArray(term) ? term : [term];
-      if (!options.some((t) => answer.includes(t.toLowerCase()))) {
+      if (!options.some((t) => answer.includes(plain(t)))) {
         failures.push(`must_mention: "${options.join('" or "')}" not found in answer`);
       }
     }
@@ -87,7 +90,7 @@ export function evaluate(response, expected) {
 
   if (expected.must_not_say) {
     for (const term of expected.must_not_say) {
-      if (answer.includes(term.toLowerCase())) {
+      if (answer.includes(plain(term))) {
         failures.push(`must_not_say: "${term}" found in answer`);
       }
     }
@@ -97,7 +100,7 @@ export function evaluate(response, expected) {
     // A term may be a list: any one of them is enough (the same fact, worded differently).
     for (const term of expected.must_say) {
       const options = Array.isArray(term) ? term : [term];
-      if (!options.some((t) => answer.includes(t.toLowerCase()))) {
+      if (!options.some((t) => answer.includes(plain(t)))) {
         failures.push(`must_say: "${options.join('" or "')}" not found in answer`);
       }
     }
@@ -105,7 +108,7 @@ export function evaluate(response, expected) {
 
   if (expected.must_not_mention_inline) {
     for (const term of expected.must_not_mention_inline) {
-      if (answer.includes(term.toLowerCase())) {
+      if (answer.includes(plain(term))) {
         failures.push(`must_not_mention_inline: "${term}" found in answer`);
       }
     }
