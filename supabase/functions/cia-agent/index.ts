@@ -504,6 +504,7 @@ interface RetrievedData {
   financials_settings: any;
   pending_actions: { company_name: string; action_type: string; current_value: number | null; proposed_value: number | null; severity: string | null }[] | null;
   bankruptcy: { company_name: string; pre_petition: number; invoices: number }[] | null;
+  industry_signals?: any[] | null;
   risk_events?: { customer_id: string; event_type: string; severity: string | null; title: string | null }[] | null;
   payment_trend: any[] | null;
   payment_trend_named: any[] | null;
@@ -606,6 +607,20 @@ async function fetchRelevantData(
         .limit(2000);
       if (error) { console.error("risk events error:", error.message); return; }
       results.risk_events = data ?? [];
+    })(),
+
+    // Industry signals with the customers each one touches, from the whole portfolio (eval
+    // 2026-11-24: with web search off, "where are steel prices heading, which customers are
+    // exposed?" named two Materials customers instead of the ones the industry agent flagged).
+    (async () => {
+      const { data, error } = await supabase
+        .from("credit_events")
+        .select("title, severity, created_at, payload, customers(company_name, current_exposure, sector)")
+        .eq("is_demo", demoMode).eq("event_type", "INDUSTRY_DOWNTURN")
+        .gte("created_at", new Date(Date.now() - 90 * 86_400_000).toISOString())
+        .order("created_at", { ascending: false }).limit(200);
+      if (error) { console.error("industry signals error:", error.message); return; }
+      results.industry_signals = data ?? [];
     })(),
 
     // Proposed actions waiting for approval (Actions page): always small, listed in full.
@@ -1827,6 +1842,23 @@ serve(async (req: Request) => {
         });
         return `- [${tag}] ${sanitize(f.customers?.company_name) || "Unknown"}: ${f.filing_type} filed ${f.filing_date}, risk_signals=[${(f.risk_signals ?? []).map(sanitize).join(", ")}]`;
       }).join("\n"));
+    }
+
+    if (data.industry_signals && data.industry_signals.length > 0) {
+      // One line per signal: the customers it was raised for and their combined balance, in code.
+      const bySignal = new Map<string, { severity: string; names: Map<string, number>; sectors: Set<string> }>();
+      for (const e of data.industry_signals as any[]) {
+        const k = String(e.title ?? "Industry signal");
+        const g = bySignal.get(k) ?? { severity: String(e.severity ?? ""), names: new Map(), sectors: new Set() };
+        if (e.customers?.company_name) g.names.set(e.customers.company_name, Number(e.customers.current_exposure ?? 0));
+        if (e.customers?.sector) g.sectors.add(e.customers.sector);
+        bySignal.set(k, g);
+      }
+      contextParts.push(
+        `## OFFICIAL INDUSTRY SIGNALS (computed in code from the industry agent's alerts of the last 90 days, whole portfolio; the answer to "which customers are exposed to <an industry trend, input prices, a commodity such as steel>": name exactly these customers, never pick customers by sector yourself)\n` +
+        [...bySignal.entries()].map(([t, g]) => `- ${sanitize(t)} (${sanitize(g.severity.toLowerCase())}; ${[...g.sectors].map(sanitize).join(", ")}): ` +
+          `${g.names.size} customer${g.names.size === 1 ? "" : "s"}, combined balance $${[...g.names.values()].reduce((a, b) => a + b, 0).toLocaleString()} — ` +
+          [...g.names.entries()].sort((a, b) => b[1] - a[1]).map(([n, v]) => `${sanitize(n)} $${v.toLocaleString()}`).join(", ")).join("\n"));
     }
 
     if (data.multi_signal_convergence && data.multi_signal_convergence.length > 0) {

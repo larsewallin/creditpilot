@@ -214,6 +214,7 @@ const CASES = [
   // The demo companies are fictional, so the web question is about a market, not a customer.
   { q: "Where are steel prices heading, and which of our customers are exposed?", check: (a) => [
       /\$[\d,.]+/.test(a) || "no exposure figure from our data",
+      ...C.industry.map((n) => mentions(a, n) || `${n} (flagged by the industry agent) missing`),
       // Web research is off in the public demo (founder 2026-11-24); EXPECT_WEB=1 where it is on.
       !process.env.EXPECT_WEB || (last.sources ?? []).some((s) => s.source_type === "web" && /^https?:/.test(s.url ?? "")) || "no web page cited",
       (last.sources ?? []).every((s, i) => s.n === i + 1) || "citation numbers out of order"] },
