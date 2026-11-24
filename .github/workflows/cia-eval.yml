@@ -5,7 +5,7 @@
 name: CIA eval
 on:
   workflow_dispatch:
-  # Weekly (Mondays) since 2026-11-19: each run is ~60 live questions (API cost).
+  # Weekly (Mondays) since 2026-11-19: each run is ~63 live questions plus up to 120 suggested follow-ups (about $2.50).
   schedule:
     - cron: "17 11 * * 1"
   pull_request:

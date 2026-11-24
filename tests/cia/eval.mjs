@@ -261,8 +261,13 @@ const CASES = [
 import { appendFileSync } from "node:fs";
 let failed = 0;
 const summary = [];
+const followUps = new Map(); // normalised → as suggested
 for (const [i, c] of CASES.entries()) {
   const answer = await ask(c.q, c.previous, c.history);
+  for (const f of last.relatedQuestions ?? []) {
+    const k = String(f).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    if (k && !followUps.has(k) && !CASES.some((x) => x.q.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() === k)) followUps.set(k, String(f));
+  }
   // Every answer: no database field names or demo labels shown to the user (2026-11-23: a
   // spliced list printed "credit_score=64/100, scenario=payment_issues").
   const raw = answer.match(/\b[a-z]+(?:_[a-z]+)+=|\bscenario\b/);
@@ -275,7 +280,86 @@ for (const [i, c] of CASES.entries()) {
   console.log(answer);
 }
 console.log(`\n${CASES.length - failed}/${CASES.length} passed their checks`);
-if (process.env.GITHUB_STEP_SUMMARY) {
-  appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## CIA eval: ${CASES.length - failed}/${CASES.length} passed\n\n${summary.join("\n") || "All checks passed."}\n\nEvery answer is in the job log.\n`);
+
+// ── Follow-up audit (founder 2026-11-24: "make sure most of the follow-up questions the CIA is
+// suggesting are audited"). Every follow-up suggested above is asked (up to FOLLOWUP_MAX). A
+// question about one named customer, or about a portfolio figure, is matched to the facts it
+// asks for and checked against the database; every follow-up also gets the general checks: it
+// must be answerable (no "I don't have that information"), no placeholder, no invented company.
+const FOLLOWUP_MAX = Number(process.env.FOLLOWUP_MAX ?? 120);
+const allCustomers = col(`select company_name from customers where ${ACTIVE}`);
+const named = (q) => allCustomers.filter((n) => new RegExp(`\\b${key(n)}\\b`, "i").test(q));
+const pct1 = (a, b) => Math.round((a / b) * 1000) / 10;
+const either = (a, wants, label) => wants.some((w) => Number.isFinite(w) && hasNumber(a, w)) || `${label} (${wants.filter(Number.isFinite).join(" or ")}) missing`;
+function factsFor(q) {
+  const checks = [];
+  const add = (topic, fn) => checks.push({ topic, fn });
+  const names = named(q);
+  if (names.length === 1) {
+    const n = names[0], k = key(n);
+    const [terms, score, , prevScore, , , limit, exposure] = cust(k).map((x, i) => (i === 2 || i === 4 || i === 5 ? x : Number(x)));
+    const ag = aging(k), py = pay(k);
+    const overdue = ag.length ? ag[0] + ag[1] + ag[2] + ag[3] : 0;
+    const cut = sql(`select p.current_value, p.proposed_value from pending_actions p join customers c on c.id = p.customer_id where c.company_name = '${n.replace(/'/g, "''")}' and p.status = 'pending' and p.action_type = 'CREDIT_LIMIT_REDUCTION' limit 1`)[0]?.map(Number);
+    const inBankruptcy = truth.prePetition.includes(n);
+    if (/bankrupt|chapter 11|pre.?petition/i.test(q)) add("bankruptcy", (a) => inBankruptcy ? (/bankrupt|chapter 11/i.test(a) || "does not say it is in bankruptcy") : (!/\b(?:is|filed for) (?:in )?(?:bankrupt|chapter 11)/i.test(a) || "says it is in bankruptcy"));
+    else if (/over ?due|past ?due|late invoices/i.test(q)) add("overdue", (a) => overdue > 0 ? either(a, [overdue], "overdue amount") : (/no (?:overdue|invoices? (?:are )?overdue)|nothing (?:is )?overdue|not overdue|\$0\b/i.test(a) || "does not say nothing is overdue"));
+    if (/limit (?:use|utili[sz])|utili[sz]ation|% of (?:its |their )?limit|close to (?:its |their )?limit|headroom/i.test(q) && limit > 0) add("limit use", (a) => either(a, [pct1(exposure, limit), limit - exposure], "limit use or headroom"));
+    else if (/\b(?:owe|balance|exposure|outstanding)\b/i.test(q) && !inBankruptcy) add("balance", (a) => either(a, [exposure], "balance"));
+    if (/\b(?:cut|reduc\w*|lower\w*|propos\w*|pending|approv\w*)\b/i.test(q) && cut) add("proposal", (a) => either(a, [cut[1]], "proposed limit"));
+    else if (/credit limit/i.test(q) && !/should|raise|increase|extend/i.test(q)) add("limit", (a) => either(a, [limit], "credit limit"));
+    if (/\bgrace\b|count(?:s|ed)? as on.?time/i.test(q)) add("grace", (a) => { const g = graceOf(n); return g === 0 ? (hasNumber(a, 0) || /no grace|on or before|due date itself/i.test(a) || "grace days 0 missing") : either(a, [g], "grace days"); });
+    else if (/on.?time/i.test(q) && py.length) add("on-time rate", (a) => either(a, [py[2], py[3]], "on-time rate"));
+    else if (/days? late|how late|days to pay|payment (?:trend|behaviou?r|speed|timing|pattern)|paying (?:later|slower|faster|earlier)|pays? (?:later|slower)/i.test(q) && py.length) add("days late", (a) => either(a, [py[0], py[1], Math.abs(py[0]), Math.abs(py[1])], "average days late, now or before"));
+    if (/\b(?:score|rating)\b/i.test(q) && Number.isFinite(score)) add("score", (a) => either(a, [score], "credit score"));
+  } else if (names.length === 0) {
+    if (/total overdue|overdue (?:ar|balance|amount)|how much is overdue/i.test(q)) add("portfolio overdue", (a) => either(a, [truth.overdue], "total overdue"));
+    if (/total (?:exposure|outstanding|receivables?|ar\b)|how much (?:do|are) (?:customers|we) (?:owe|owed)/i.test(q)) add("portfolio outstanding", (a) => either(a, [truth.outstanding, truth.outstanding + prePetitionTotal], "total outstanding"));
+    const list = (topic, re, want) => re.test(q) && add(topic, (a) => want.map((n) => mentions(a, n) || `${n} missing`));
+    list("over limit", /over (?:their |its )?(?:credit )?limits?/i, truth.overLimit);
+    list("multi-agent", /multiple agents|several agents|more than one agent|converg/i, C.convergence);
+    list("paying later", /paying (?:later|slower)|payments? (?:are )?(?:getting )?worse|deteriorat/i, C.deteriorating);
+    list("paying earlier", /paying (?:earlier|faster)|improv/i, C.improving);
+    list("erratic", /erratic|volatil|unpredictabl/i, C.erratic);
+    list("bankruptcy", /bankrupt|chapter 11/i, truth.prePetition);
+    list("negative news", /negative news|news/i, C.news);
+    list("limit cuts", /limit cuts?|proposed (?:cuts|reductions)|waiting for approval|pending (?:actions|approvals)/i, C.cutCustomers);
+  }
+  return { names, checks };
 }
-process.exit(failed && process.env.EVAL_STRICT === "1" ? 1 : 0);
+
+const prePetitionTotal = Number(one(`select coalesce(sum(outstanding_amount),0) from invoices where status = 'pre_petition' and outstanding_amount > 0`));
+// A customer's grace days: its group's override, else the company's.
+const graceOf = (n) => Number(one(`select coalesce((select s.value->c.policy_group->'overrides'->'payments'->>'grace_days' from company_settings s where s.key = 'policy.groups'), '${policyGrace}') from customers c where c.company_name = '${n.replace(/'/g, "''")}'`));
+const fuSummary = [];
+let fuAudited = 0, fuFailed = 0, fuAsked = 0;
+const topics = {};
+for (const q of [...followUps.values()].slice(0, FOLLOWUP_MAX)) {
+  const answer = await ask(q);
+  fuAsked++;
+  const { names, checks } = factsFor(q);
+  const problems = [];
+  if (/I don't have that information|I don.t have (?:data|information) on/i.test(answer)) problems.push("suggested a follow-up the CIA then could not answer");
+  if (/\{\{/.test(answer)) problems.push("placeholder in the answer");
+  if (/used up its AI budget|daily limit of live answers/i.test(answer)) problems.push("not answered (AI limit)");
+  const raw = answer.match(/\b[a-z]+(?:_[a-z]+)+=|\bscenario\b/);
+  if (raw) problems.push(`shows a raw field: ${raw[0]}`);
+  const invented = [...new Set([...q.matchAll(/\b([A-Z][\w&-]+(?: [A-Z][\w&-]+){0,3}) (?:Inc|Corp|GmbH|Ltd|LLC|plc|AG|KK)\b/g)].map((m) => m[1]))]
+    .filter((n) => !allCustomers.some((c) => c.toLowerCase().startsWith(n.toLowerCase())));
+  if (invented.length) problems.push(`follow-up names a company that is not a customer: ${invented.join(", ")}`);
+  for (const c of checks) {
+    topics[c.topic] = (topics[c.topic] ?? 0) + 1;
+    const r = c.fn(answer);
+    for (const x of [r].flat()) if (x !== true) problems.push(`${c.topic}: ${x}`);
+  }
+  if (checks.length) fuAudited++;
+  if (problems.length) { fuFailed++; console.log(`::warning::CIA follow-up: "${q}": ${problems.join("; ")}`); fuSummary.push(`- ✗ ${q}: ${problems.join("; ")}`); }
+  console.log(`\n── F${fuAsked}. ${q}  ${problems.length ? "✗ " + problems.join("; ") : checks.length ? `✓ (${checks.map((c) => c.topic).join(", ")})` : "✓ general checks only"}${names.length > 1 ? ` [${names.length} customers named]` : ""}`);
+  console.log(answer);
+}
+const fuLine = `${fuAsked} of ${followUps.size} suggested follow-ups asked; ${fuAudited} checked against the data (${fuAsked ? Math.round((fuAudited / fuAsked) * 100) : 0}%), all ${fuAsked} given the general checks; ${fuAsked - fuFailed}/${fuAsked} passed. Facts checked: ${Object.entries(topics).map(([t, n]) => `${t} ${n}`).join(", ") || "none"}`;
+console.log(`\n${fuLine}`);
+if (process.env.GITHUB_STEP_SUMMARY) {
+  appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## CIA eval: ${CASES.length - failed}/${CASES.length} passed\n\n${summary.join("\n") || "All checks passed."}\n\n## Follow-up audit\n\n${fuLine}\n\n${fuSummary.join("\n") || "All follow-ups passed."}\n\nEvery answer is in the job log.\n`);
+}
+process.exit((failed || fuFailed) && process.env.EVAL_STRICT === "1" ? 1 : 0);
