@@ -212,9 +212,15 @@ Deno.serve(async (req) => {
           summary: article.summary,
           source: article.source,
           company_name: customer.company_name,
-          anthropic_api_key: anthropicKey,
+          // The demo's articles are fictional and written to be relevant: classified by keywords,
+          // with no AI call (2026-11-24: the 04:00 rebuild ran while the API credit was used up, the
+          // AI classification failed, the keyword fallback scored 0.6 < 0.7 and the demo had no news).
+          anthropic_api_key: DEMO_MODE ? undefined : anthropicKey,
           confidence_threshold: CONFIDENCE_THRESHOLD,
         });
+        if (DEMO_MODE && classification.classified_by !== "claude") {
+          classification.confidence = Math.max(classification.confidence, Number(article.relevance_score ?? 0));
+        }
 
         console.log(
           `[news-monitor-agent]   severity=${classification.severity}` +

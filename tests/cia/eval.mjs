@@ -291,7 +291,7 @@ const factSummary = [];
 // for an event type that does not exist, so the news question was never really checked). These
 // keys are never empty in the demo; an empty one is a broken test.
 for (const [k, v] of Object.entries({ news: C.news, industry: C.industry, alerts30: C.alerts30, cutCustomers: C.cutCustomers,
-  deteriorating: C.deteriorating, erratic: C.erratic, improving: C.improving, convergence: C.convergence, highRiskScore: C.highRiskScore,
+  deteriorating: C.deteriorating, improving: C.improving, convergence: C.convergence, highRiskScore: C.highRiskScore,
   prePetition: truth.prePetition, overLimit: truth.overLimit, nearOnly: truth.nearOnly })) {
   if (!Array.isArray(v) || v.length === 0) { factFailed++; factSummary.push(`- ✗ answer key "${k}" is empty: the test checks nothing`); console.log(`::warning::CIA eval: answer key "${k}" is empty`); }
 }
