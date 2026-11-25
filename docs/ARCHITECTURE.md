@@ -110,7 +110,7 @@ Reusable logic in `supabase/functions/_shared/skills/`:
 
 ## Database
 
-Supabase Postgres. Schema is defined by `supabase/migrations/00000000000000_baseline.sql` (a full dump of the live schema at the time it was created) plus a real, growing chain of dated migrations layered on top of it since — no longer a single self-contained baseline; both are applied in filename order by `supabase db push`. Prior (pre-baseline) migration history (57 files) is preserved for reference in `supabase/migrations_archive/` but is no longer applied. Demo seed data is separate, in `supabase/seed.sql`, loaded independently of the schema (`supabase db push` then `psql -f supabase/seed.sql`).
+Supabase Postgres. Schema is defined by `supabase/migrations/00000000000000_baseline.sql` (a full dump of the live schema at the time it was created) plus a real, growing chain of dated migrations layered on top of it since — no longer a single self-contained baseline; both are applied in filename order by `supabase db push`. Prior (pre-baseline) migration history (57 files) is preserved for reference in `supabase/migrations_archive/` but is no longer applied. The demo portfolio is not in the migrations: it is built from the story table (`_shared/demo/stories.ts`) by the rebuild; see [DEMO_MODE.md](DEMO_MODE.md).
 
 ### Core tables
 
@@ -187,10 +187,8 @@ User reviews /actions, approves/rejects
 
 ## Auth and security
 
-The demo uses open RLS policies so anyone can interact with the demo data without signing in. Before loading real company data:
-
-1. ✅ Done (2026-09-20) — anon write policies removed from `pending_actions`, `customers`, `credit_events`, `credit_actions`, `agent_runs`, `negative_news`, `sec_monitoring`. Approve/reject and demo-reset writes now go through the `demo-actions` edge function (service role), not directly via the anon key. See `supabase/migrations/20260920000000_tighten_anon_write_rls.sql`.
-2. Add Supabase Auth. — still open
-3. Use a dedicated Supabase project — not the demo project. — still open
-
-See the Security section in `README.md` for full guidance.
+- **Sign-in:** Supabase Auth. Users and their roles (admin, credit manager, credit analyst, sales) live in `app_users`; approval authority comes from the Credit Policy and each person's own limit.
+- **Row-level security on every table**, with restrictive policies: signed-out visitors can read only when the instance is marked as a public demo (`instance_settings.public_demo`); on any other install they can read nothing. Views run as the caller (`security_invoker`), and helper functions live in a `private` schema with no public execute rights.
+- **Writes go through edge functions** that check the caller's role (approve/reject, settings, demo reset); the browser never writes tables directly. `credit_events` is written only through `publishEvent`.
+- **Checked in CI:** `tests/security/check-public-access.sh` runs against a fresh install and fails if a signed-out visitor can read or call anything.
+- For your own data, use your own Supabase project, never the demo's. See [RUN_IT_YOURSELF.md](RUN_IT_YOURSELF.md).

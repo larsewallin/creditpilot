@@ -42,7 +42,7 @@ case "$DB_URL" in *127.0.0.1*|*localhost*) ;; *) echo "❌ Refusing: the databas
 echo "   Database, auth and functions are up (migrations applied)."
 
 if [ "$MODE" = "demo" ]; then
-  say "3/5 Loading the demo data (59 fictional customers, invoices, payments, news, filings)…"
+  say "3/5 Loading the starter data (Reset Demo then builds the 40-customer demo portfolio)…"
   # Marker: a seed customer (migrations alone add only the 23 fixture customers).
   HAS_SEED="$(psql "$DB_URL" -tAc "select count(*) from public.customers where id = 'c0000001-0000-0000-0000-000000000038'" 2>/dev/null || echo 0)"
   if [ "$HAS_SEED" = "0" ]; then
@@ -106,7 +106,7 @@ Now run these two commands, each in its own terminal window:
   npm run dev                                                # the web app
 
 Then open http://localhost:5173 and sign in with one of the accounts printed above.
-$( [ "$MODE" = "demo" ] && echo "Press Reset Demo on the Actions page to run the agents on the sample data." || echo "Upload your AR aging CSV on the AR Aging page; agents run on the schedules in Settings." )
+$( [ "$MODE" = "demo" ] && echo "Press Reset Demo on the Actions page: it builds the 40-customer demo portfolio from supabase/functions/_shared/demo/stories.ts and runs the agents on it." || echo "Upload your AR aging CSV on the AR Aging page; agents run on the schedules in Settings." )
 
 Stop everything later with: npx supabase@3.1.0 stop
 EOF
