@@ -250,6 +250,11 @@ const CASES = [
   { q: "Which customers had high or critical alerts in the last 30 days?", check: (a) => C.alerts30.map((n) => mentions(a, n) || `${n} (alert) missing`) },
   { q: "Which customers have recent negative news?", check: (a) => C.news.map((n) => mentions(a, n) || `${n} (news) missing`) },
   // A whole sector (22 customers in the demo): the count and the combined balance, not every name.
+  // Founder 2026-11-24: the steel-exposed customers' scores were said to be missing.
+  { q: "How many of the steel-exposed customers have credit scores below 55?", check: (a) => {
+      const weak = col(`select company_name from customers where ${ACTIVE} and sector = 'Industrial Manufacturing' and credit_rating_score < 55 order by 1`);
+      return [hasNumber(a, weak.length) || `count ${weak.length} missing`, ...weak.map((n) => mentions(a, n) || `${n} missing`),
+        !/(?:does not|doesn't|do not) (?:provide|include|have)[^.]*scores?/i.test(a) || "says the scores are missing"]; } },
   { q: "Which customers are exposed to an industry downturn?", check: (a) => {
       const total = Number(one(`select coalesce(sum(current_exposure),0) from customers where ${ACTIVE} and company_name = any(array[${C.industry.map((n) => `'${n.replace(/'/g, "''")}'`).join(",") || "''"}])`));
       return [hasNumber(a, C.industry.length) || `count ${C.industry.length} missing`, hasNumber(a, total) || `combined balance ${total} missing`]; } },
