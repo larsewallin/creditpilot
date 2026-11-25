@@ -460,7 +460,7 @@ async function extractQuestionEntities(anthropic: Anthropic, question: string): 
 {"company_mentions": string[], "sector": string|null, "tables": string[]}
 
 - company_mentions: the raw company name fragment(s) mentioned in the question, exactly as they appear or are clearly implied (e.g. "Cascade's" -> "Cascade", "l'entreprise Cascade" -> "Cascade"). Do NOT resolve to a canonical/official company name — just extract the mentioned fragment; a separate database search handles fuzzy matching against real records. Empty array if no company is named.
-- sector: exactly one of these 7 values if the question refers to an industry/sector broadly rather than one named company: "Aerospace & Defense", "Energy", "Industrial Manufacturing", "Materials", "Transportation", "Mining", "Other". Use null if no sector is referenced.
+- sector: exactly one of these 7 values if the question refers to an industry/sector broadly rather than one named company: "Aerospace & Defense", "Energy", "Industrial Manufacturing", "Materials", "Transportation", "Mining", "Other". Use null if no sector is referenced. A commodity or input (steel, copper, oil, energy prices) is not a sector: the customers exposed to it are the ones that buy it, which the data works out, so use null for it.
 - tables: which of these 6 table names are relevant to answering the question: "credit_events", "customers", "invoices", "payment_transactions", "negative_news", "sec_filings". Include "customers" whenever a specific company or a sector is mentioned. Include every table genuinely relevant, not just one. Always include at least one table.
 
 The question may be in any language — extract meaning and intent, not just English keyword matches.`,
@@ -2066,6 +2066,11 @@ serve(async (req: Request) => {
         .replace(/\{\{\s*NEWS_LIST\s*\}\}/g, newsBlock)
         .replace(/\{\{\s*EVENTS_LIST\s*\}\}/g, eventsBlock)
         .replace(/\{\{\s*INDUSTRY_LIST\s*\}\}/g, industryBlock)
+        // A question about who is exposed to an industry trend always gets the complete list, even
+        // when the model wrote a partial one of its own (eval 2026-11-24: 7 of 22 named).
+        .replace(/$/, () => (industryBlock && !/\{\{\s*INDUSTRY_LIST\s*\}\}/.test(rawAnswerText) && !rawAnswerText.includes(industryBlock.slice(0, 40)) && !companyMentions.length &&
+          /\b(?:exposed|exposure|affected|hit)\b/i.test(question) && /\b(?:steel|commodit\w*|input (?:costs?|prices?)|industry|downturn|prices?)\b/i.test(question) &&
+          !/No industry signals/.test(industryBlock) ? `\n\n**Every exposed customer:**\n\n${industryBlock}` : ""))
         // Any other {{…}} the model made up: a convergence one gets the list, the rest are dropped.
         .replace(/\{\{[^}\n]*(?:converg|multi)[^}\n]*\}\}/gi, convergenceBlock)
         .replace(/^[ \t]*\{\{[^}\n]*\}\}[ \t]*$\n?/gm, "")
