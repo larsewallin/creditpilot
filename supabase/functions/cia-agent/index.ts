@@ -2027,8 +2027,8 @@ serve(async (req: Request) => {
         .replace(advice ? /^\s*I don't have that information in the current data\.?\s*(?=\S[\s\S]{40,})/ : /(?!)/, "")
         // Any answer that goes on with figures from the data or a list does not open with what is
         // missing (eval 2026-11-24: "I don't have forward-looking steel price forecasts... However,
-        // ..."). An answer with nothing else in it keeps the sentence (harness q8).
-        .replace(/^\s*I (?:don't|do not) have [^.\n]*\.\s*(?:However,\s*)?(?=[\s\S]{80,})(?=[\s\S]*(?:\$\d|\d%|\[[A-Z]+\d+\]|\{\{[A-Z_]+\}\}))/i, "")
+        // ..."). The exact no-data sentence always stays (harness q8: an unknown customer).
+        .replace(/^\s*I (?:don't|do not) have (?!that information in the current data)[^.\n]*\.\s*(?:However,\s*)?(?=[\s\S]{80,})(?=[\s\S]*(?:\$\d|\d%|\[[A-Z]+\d+\]|\{\{[A-Z_]+\}\}))/i, "")
         .replace(/^(\W*)([a-z])/, (_m: string, p: string, c: string) => p + c.toUpperCase())
         // A list marker must stand on its own line: the model sometimes wraps it in
         // brackets or puts it mid-sentence ("over their limit [{{HIGH_UTILIZATION_LIST}}].").
