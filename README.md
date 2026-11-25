@@ -1,6 +1,6 @@
 # CreditPilot
 
-**Perplexity for trade credit.** Ask anything about your receivables in plain English. The assistant reads your customers, invoices, payments and the alerts its monitoring agents raise, checks the web for current news, and cites every figure it gives you. Agents can propose actions, such as a lower credit limit, but nothing changes until a person approves it.
+**Perplexity for trade credit.** Ask anything about your receivables in plain English. The assistant reads your customers, invoices, payments and the alerts its monitoring agents raise, checks the web for current news (on your own install), and cites every figure it gives you. Agents can propose actions, such as a lower credit limit, but nothing changes until a person approves it. Every rule behind an alert or a proposal comes from the company's own **[Credit Policy](#the-credit-policy)**.
 
 Open source (MIT). **Live demo: [creditpilot.vercel.app](https://creditpilot.vercel.app)**, no sign-up needed.
 
@@ -24,7 +24,7 @@ Open source (MIT). **Live demo: [creditpilot.vercel.app](https://creditpilot.ver
 ![An answer with citations from the ledger and the web](docs/images/cia-answer.jpg)
 
 <details>
-<summary>More screenshots: the steps while it works, and a web source opened</summary>
+<summary>More screenshots: the steps while it works, and a web source opened (web research runs on your own install; it is off in the public demo)</summary>
 
 ![Steps while answering](docs/images/cia-steps.jpg)
 ![A cited web page in the side panel](docs/images/cia-source.jpg)
@@ -39,7 +39,7 @@ Open source (MIT). **Live demo: [creditpilot.vercel.app](https://creditpilot.ver
 - Which customers have the highest credit risk right now?
 - Whose payments are getting worse?
 
-The demo runs on a fictional portfolio of 40 customers in the US, Germany, the UK and Japan: every company, score, invoice, payment, event and news item is invented. It replays the same story each day with today's dates. Answers are written live by Claude (10 questions per visitor per day).
+The demo runs on a fictional portfolio of 40 customers in the US, Germany, the UK and Japan: every company, score, invoice, payment, event and news item is invented. It replays the same story each day with today's dates. Answers are written live by Claude (10 questions per visitor per day); a question someone already asked today is answered from the saved answer. Web research is off in the demo, since its companies are fictional.
 
 ---
 
@@ -79,6 +79,25 @@ More detail: [docs/AGENTS.md](docs/AGENTS.md) and [docs/ARCHITECTURE.md](docs/AR
 
 ---
 
+## The Credit Policy
+
+Every alert, limit proposal and answer follows one set of rules: the company's own Credit Policy, in **Settings › Credit policy**. CreditPilot ships with starting values; a credit team sets them to match its written policy and risk appetite.
+
+| The policy decides | For example |
+|---|---|
+| **Payments** | How many days after the due date still count as on time; when a customer is paying late or getting slower, against its own terms |
+| **Alerts** | When overdue invoices, high limit use, a falling score or a currency move raise an alert, and how serious it is |
+| **Limit cuts** | The limit use at which a cut is proposed, how much each warning sign lowers it, the largest single cut, and what happens at a High risk score or in bankruptcy |
+| **Approvals** | The largest limit each role or person may approve; above it, a proposal waits for someone whose authority covers it |
+| **New customers** | What evidence to ask for, how the first limit is set, when screening sends an application to a person |
+| **Customer groups** | Rules set differently for a group, e.g. more room for strategic accounts, no grace days for high-risk ones |
+
+Changes are previewed before saving and every version is kept with who changed it and when. The assistant quotes the same rules, with their values, when it explains an alert or a proposal, and **Download policy** exports the whole policy as a document. The rules live in one module ([`_shared/policy`](supabase/functions/_shared/policy)) that every agent, page and the assistant read, so a threshold is never typed twice. In the demo the policy is read-only.
+
+Not yet in the policy: the age bands for overdue invoices, the severity of SEC filing findings, and the country and industry triggers.
+
+---
+
 ## Run it yourself
 
 The demo on your own computer, with one command (needs Docker and Node.js):
@@ -89,7 +108,7 @@ cd creditpilot
 scripts/setup-local.sh
 ```
 
-It starts a local Supabase stack, applies the schema, loads the demo data and prints sign-in accounts. Then run `npx supabase@3.1.0 functions serve --env-file supabase/functions/.env.local` and `npm run dev`, and open http://localhost:5173.
+It starts a local Supabase stack, applies the schema, loads the demo data and prints sign-in accounts. Then run `npx supabase@3.1.0 functions serve --env-file supabase/functions/.env.local` and `npm run dev`, open http://localhost:5173, sign in and press **Reset Demo** (Actions page) to build the 40-customer demo portfolio and run the agents on it.
 
 For a real install on your own Supabase project (your data, `DEMO_MODE=false`, agent schedules, score sources), follow **[docs/RUN_IT_YOURSELF.md](docs/RUN_IT_YOURSELF.md)**.
 
@@ -104,7 +123,7 @@ The only outside AI calls go to the Anthropic API:
 | Feature | What is sent |
 |---|---|
 | CIA answers | The question, plus the records relevant to it: customer names, limits, balances, scores, invoices and payments when the question needs them, and the agents' alerts. No database IDs. |
-| CIA web research | Search queries the model writes (they can include a customer's name), run by Anthropic's web search tool. Switch off with `CIA_WEB_SEARCH=off`. |
+| CIA web research | Search queries the model writes (they can include a customer's name), run by Anthropic's web search tool. Switch off with `CIA_WEB_SEARCH=off` (off by default in demo mode). |
 | News monitor | Public headlines and summaries, for classification. |
 
 Anthropic does not train on API data by default ([privacy policy](https://www.anthropic.com/privacy)). The model calls sit in a few files (`supabase/functions/cia-agent`, `_shared/claude_stream.ts`, the generative skills), so a local model can replace them.
@@ -135,9 +154,14 @@ docs/                    architecture, agents, deployment, run-it-yourself
 
 ## How it is tested
 
-- **375 unit tests** (Vitest) across the skills, the CIA's helpers and the app, plus a Deno type check of every edge function.
-- **CIA eval**: 45 questions whose answers are checked against the database (totals, lists, payment trends, advice, follow-ups, web sources), run daily and on every change to the assistant.
-- **CIA harness**: questions every pull request must pass against the live assistant.
+- **485 unit tests** (Vitest) across the skills, the policy, the CIA's helpers and the app, plus a Deno type check of every edge function.
+- **CIA eval**, weekly and on every change to it:
+  - **Facts, free:** for each of 66 questions, the assistant returns the facts and lists it would answer from, without calling the model, and each fact the question needs is checked against the database. Totals, rankings and lists are computed in code, so this is where an error would start.
+  - **Live answers:** 15 of those questions (a different 15 each week) answered live and checked against the database.
+  - **Follow-ups:** the follow-up questions the assistant suggests are asked too, checked against the data where they ask for a figure, and always for being answerable.
+- **CIA harness**: 9 questions every pull request and every deploy must pass against the live assistant.
+- **Demo stories**: the agents run on the 40 fictional customers in a throwaway install, and each customer must show exactly the events and proposal its story expects.
+- **Page check**: every page of a pull request's build is opened and fails on errors, `undefined`, `NaN` or raw codes.
 - **Onboarding golden cases**: 14 applications with known outcomes.
 - **Fresh install**: CI builds the whole stack from scratch in Docker and checks that a signed-out visitor can read nothing.
 - Every merge to `main` deploys automatically (functions, migrations after a dry run, frontend) and checks the live app afterwards.

@@ -1,95 +1,48 @@
 # Demo Mode
 
-CreditPilot ships with a full demo dataset: a fictional specialty alloys distributor with 59 customers across seven credit scenarios. Demo mode lets you explore the full UI against realistic data without touching real customer records.
-
-A live demo is available at [creditpilot.vercel.app](https://creditpilot.vercel.app) — no signup required.
+The public demo at [creditpilot.vercel.app](https://creditpilot.vercel.app) runs on a fictional portfolio, so anyone can try CreditPilot without signing up and without touching real data. It runs the same agents, pages and assistant as a real install.
 
 ---
 
-## How it works
+## The demo portfolio: one story table
 
-Demo mode is controlled by a single flag in two places:
+The whole demo comes from one file, [`supabase/functions/_shared/demo/stories.ts`](../supabase/functions/_shared/demo/stories.ts): **40 fictional customers** in the US, Germany, the UK and Japan. 27 are steady payers; 13 each have one story (a bankruptcy, a going-concern doubt, a customer over its limit, payments getting slower, negative news, a score drop, and so on).
 
-- **Frontend:** `import.meta.env.VITE_DEMO_MODE` — when `true`, the app calls `lib/initDemo.ts` on first page load (guarded by `sessionStorage`).
-- **Edge functions:** each agent reads `Deno.env.get("DEMO_MODE") === "true"`.
+`buildDemo(today)` derives every row from that table, relative to today: invoices (due = issue date + terms), payments (paid = due date + the story's lateness), open balances, scores, seed news and SEC filings. Nothing in the demo stores a calendar date of its own, so the same story plays every day with today's dates.
 
-The demo dataset is **not** loaded by the migrations — it lives in `supabase/seed.sql` and is loaded separately (see [Loading the demo data](#loading-the-demo-data)). A production deployment simply never loads it.
+Every company, person, score, invoice, payment, event and news item is invented. Websites are on `example.com` and news comes from "Demo Newswire".
 
-### The core principle: demo runs the real pipeline
+**The rule:** demo rows are never added or changed by a migration or by hand. Change the story table, and its expected outcome, in the same pull request.
 
-The three monitoring agents (AR Aging, News, SEC) run the **identical pipeline** in demo and production. `DEMO_MODE` switches only at the **data-fetch point** — demo reads from a seed table, production hits the live source — and everything downstream (processing, `publishEvent` emission, notification) is shared.
+## Rebuild and Reset Demo
 
-| Agent / mode | Demo data source | Calls Claude API? |
-|---|---|---|
-| ar-aging-agent | AR snapshots / invoices (seeded) | No |
-| news-monitor-agent | `seed_news` via `searchSeedNews()` | No |
-| sec-monitor-agent | `seed_sec_filings` via `fetchSeedSecFilings()` | No |
-| cia-agent — briefing | canned `DEMO_BRIEFING` (fast-path) | No |
-| cia-agent — suggestions | canned `DEMO_SUGGESTIONS` | No |
-| cia-agent — question | live `credit_events` (real Q&A) | **Yes** |
+- **Daily refresh** (04:00 New York) and the **Reset Demo** button both call `demo-actions` → `rebuildDemo` ([`_shared/demo/rebuild.ts`](../supabase/functions/_shared/demo/rebuild.ts)): the demo rows are deleted and rebuilt from the story table, then every agent runs on them, as it would on real data.
+- The rebuild stores the day it was built (`instance_settings.demo_as_of`). Every page, view and the assistant age invoices from that day (`private.app_today()`), so the numbers do not shift between the rebuild and midnight.
 
-For the monitors, `DEMO_MODE` is a `seed ? live` ternary at the fetch call; the seed-fetch functions (`searchSeedNews`, `fetchSeedSecFilings`) run the same classify → `publishEvent` → notify pipeline as production, deterministically.
+## What runs differently in demo mode
 
-### CIA is a special case
+`DEMO_MODE=true` on the edge functions (`VITE_DEMO_MODE=true` on the frontend). The pipeline is the same; only these differ:
 
-The CIA (Credit Intelligence Agent) is a Q&A agent, not a monitor, and behaves differently by mode:
+| Part | In the demo |
+|---|---|
+| News monitor | Reads the seeded fictional articles instead of live news, and classifies them by keywords (no AI call) |
+| SEC monitor | Reads seeded fictional filings instead of EDGAR |
+| Assistant (CIA) | Answers live with Claude Haiku; **web research is off** (the companies are fictional); a question already asked since the last rebuild is answered from the saved answer |
+| Cost limits | 10 questions per visitor per day; live answers stop for the day at 300 answers or about $3 of estimated cost (`CIA_DEMO_DAILY_LIVE_CAP`, `CIA_DEMO_DAILY_USD_CAP`) |
+| Sign-in | "Try it as" a credit manager, credit analyst or sales rep; each approves by role, the sales rep only looks around |
+| Settings | Read-only, including the Credit Policy (it shows the starting values) |
+| New customers (onboarding) | Off; it works on your own install |
 
-- **Briefing** (default) and **suggestions** take a demo fast-path that returns pre-composed content — no API call, instant.
-- **Question mode** always calls the Claude API, in demo *and* production, reading real `credit_events` from the database. Demo uses a cheaper model (`claude-haiku-4-5`, 600 tokens) vs production (`claude-sonnet`, 900 tokens). This means CIA Q&A works in demo but requires `ANTHROPIC_API_KEY`.
+Demo rows carry `is_demo = true`. Signed-out visitors can read only because this instance is marked as a public demo (`instance_settings.public_demo`); on any other install they can read nothing.
 
-### Demo repeatability (state reset)
+## How the demo is checked
 
-Each monitoring agent, when `DEMO_MODE=true`, clears its own prior demo output at the start of a run (its `is_demo` `credit_events` plus its pipeline-generated working rows) so re-runs regenerate cleanly rather than dedup-skipping. This is gated on `DEMO_MODE` — production never self-deletes.
+The **Demo stories** workflow (`.github/workflows/demo-stories.yml`, daily and on pull requests touching functions) builds the demo in a throwaway local install, runs every agent, and checks that each of the 40 customers shows exactly the events and proposal its story expects (`scripts/demo-story-check.mjs`). It needs no API key.
 
-### Data isolation
+## On your own computer
 
-Demo-generated rows carry `is_demo = true`. This column exists on: `credit_events`, `agent_messages`, `pending_actions`, `invoices`, `payment_transactions`, `negative_news`, `sec_filings`, and `sec_monitoring`. (Note: `customers` and `ar_aging_snapshots` are not tagged — the seed dataset and a production dataset are kept separate by loading, not by per-row flag.)
+`scripts/setup-local.sh` starts a local Supabase stack, applies the schema and loads the demo. See the [README](../README.md#run-it-yourself).
 
----
+## Moving to your own data
 
-## Loading the demo data
-
-```bash
-psql "$DATABASE_URL" -f supabase/seed.sql
-```
-
-Skip this for a production deployment. Real data enters via the AR aging CSV upload; the demo seed and production data are mutually exclusive.
-
----
-
-## Reset Demo
-
-The **Reset Demo** button on the Actions page calls `initDemo()` (`src/lib/initDemo.ts`). It:
-
-1. Resets demo row **state** — `pending_actions` back to `pending`, `agent_messages` to `pending`, `credit_events.cia_processed` cleared, `sec_monitoring`/`negative_news` review flags reset, and seed credit limits restored.
-2. Re-invokes all four agents, which regenerate their outputs.
-
-It does **not** recreate the underlying seed rows (customers, invoices, etc.) — those are loaded once via `supabase/seed.sql` and persist. Reset relies on them already being present.
-
----
-
-## Seed data overview
-
-| Table | Rows | Description |
-|-------|------|-------------|
-| `customers` | 59 | Fictional specialty alloys customers across 7 scenarios |
-| `credit_events` | 48 | Pre-seeded signals |
-| `agent_messages` | ~30 | Alerts and composed messages |
-| `pending_actions` | 5 | Credit limit reductions awaiting approval |
-| `negative_news` | 5 | Pipeline-generated news items |
-| `sec_monitoring` | 3 | Companies with SEC monitoring |
-| `sec_filings` | 8 | Seeded filings |
-| `seed_news` | 5 | Demo-mode news source rows |
-| `seed_sec_filings` | 2 | Demo-mode SEC source rows |
-
----
-
-## Moving to production
-
-1. Set `VITE_DEMO_MODE=false` in your frontend `.env`.
-2. Set `DEMO_MODE=false` (or remove it) in Supabase Edge Function secrets.
-3. Don't load `supabase/seed.sql` (or start from a fresh project). Load real data via the AR aging CSV upload.
-4. Harden RLS policies — remove anon write access from `pending_actions`, `customers`, and `credit_events`.
-5. Add Supabase Auth so users must sign in.
-
-See [docs/DEPLOYMENT.md](DEPLOYMENT.md) for full deployment instructions.
+Run your own install with `DEMO_MODE=false` and `VITE_DEMO_MODE=false`, and load your customers, invoices and payments (AR aging CSV upload or the onboarding flow). The demo story table is never loaded. Step by step: [RUN_IT_YOURSELF.md](RUN_IT_YOURSELF.md).

@@ -1,6 +1,10 @@
 # Agent Documentation
 
-CreditPilot currently ships with four autonomous agents — more are expected as the system grows (see 'Extending this system' at the end of this doc). Each is a Supabase Edge Function (TypeScript/Deno). They read from and write to a shared Postgres database. `credit_events` is written exclusively through `publishEvent` (a validating gateway — payloads are checked against per-event-type Zod schemas before insert). Proposed actions (`pending_actions`) are written only by the CIA agent; a human reviews them before anything takes effect.
+CreditPilot ships with nine monitoring agents plus the Credit Intelligence Agent (CIA): `ar-aging-agent`, `payment-behaviour-agent`, `news-monitor-agent`, `sec-monitor-agent`, `credit-rating-agent`, `industry-risk-agent`, `country-risk-agent`, `fx-risk-agent`, `risk-agent` (customers that several agents flag), and `cia-agent`; `agent-scheduler` runs them on the schedule set in Settings. This document details the AR aging, news, SEC and CIA agents; the others follow the same shape (see their folders under `supabase/functions/`).
+
+**Every threshold comes from the company's Credit Policy.** Grace days, what counts as paying later, overdue materiality, limit-use alerts, when a limit cut is proposed and by how much, score-change alerts and approval authority are read from `company_settings` through `_shared/policy` (`loadPolicy`, `policyFor` for a customer's group), never typed into an agent. The numbers below are the starting values. See the README's "The Credit Policy".
+
+Each is a Supabase Edge Function (TypeScript/Deno). They read from and write to a shared Postgres database. `credit_events` is written exclusively through `publishEvent` (a validating gateway — payloads are checked against per-event-type Zod schemas before insert). Proposed actions (`pending_actions`) are written only by the CIA agent; a human reviews them before anything takes effect.
 
 All three monitoring agents (AR, News, SEC) share a common shape, established with the SEC agent as the reference implementation:
 
@@ -45,9 +49,9 @@ Manual (Run Agent button in the AR Aging page), programmatic, or implicitly when
 
 ### Severity logic
 
-**UTILIZATION_THRESHOLD_BREACH:** `critical` if over-limit, `high` otherwise.
+**UTILIZATION_THRESHOLD_BREACH:** `critical` if over the limit; `high` at the policy's alert level (starting value 80% of the limit, 70% for the High risk group) when a weaker signal comes with it.
 
-**OVERDUE_AR:** scales with the worst non-empty aging bucket — over-90 → critical (score 92), 61–90 → high (75), 31–60 → medium (55), 1–30 → low (30).
+**OVERDUE_AR:** scales with the worst non-empty aging bucket — over-90 → critical (score 92), 61–90 → high (75), 31–60 → medium (55), 1–30 → low (30). An overdue amount under the policy's materiality (starting value the larger of $1,000 and 2% of the limit) raises nothing, and over-90 is critical only at 10% of the limit or more.
 
 ### Rate limit
 
@@ -68,7 +72,7 @@ Runs a live news pipeline per customer:
 5. Inserts qualifying articles into `negative_news`.
 6. For medium/high/critical severity, emits a credit event and composes a Teams alert.
 
-In demo mode, the fetch step reads from a seed table instead of calling Tavily live; all classification and emission logic downstream is unchanged.
+In demo mode, the fetch step reads the fictional seed articles instead of calling Tavily, and classifies them by keywords with the article's own relevance as confidence (no AI call, the same result every day); emission downstream is unchanged.
 
 ### Trigger
 
@@ -145,15 +149,17 @@ The full, current keyword-to-signal mapping lives in `supabase/functions/_shared
 
 ### What it does
 
-Synthesises signals from the three monitoring agents into structured intelligence, in three modes:
+Synthesises the monitoring agents' signals, in three modes: `briefing` (portfolio summary and credit-limit decisioning), `question` (the assistant on the Ask page) and `suggestions`. Question mode uses Claude Sonnet on a real install and Claude Haiku in the demo (check `cia-agent/index.ts` for the current model names).
 
-| Mode | Model (live) | Model (demo) | Purpose |
-|------|--------------|---------------|---------|
-| `briefing` | `claude-opus-4-5` | — | Portfolio summary; processes unread credit_events; runs credit-limit decisioning |
-| `question` | `claude-sonnet-4-20250514` | `claude-haiku-4-5` | Answers a specific question with cited, deterministic sources |
-| `suggestions` | `claude-haiku-4-5` | `claude-haiku-4-5` | Generates follow-up questions from recent events |
+### How a question is answered
 
-(Model identifiers current as of this writing — check `cia-agent/index.ts` directly if precision matters, as these are the kind of detail that changes without a doc update.)
+1. A small model call picks the customers, sector and data the question needs.
+2. The data is read and **every figure is computed in code**: totals, aging, payment trends, limit use, rankings, and the complete lists (highest risk, near the limit, paying later or earlier, flagged by several agents, negative news, recent alerts, customers exposed to an industry signal). These go to the model as facts.
+3. The model writes the answer and cites a tag on each claim. For a complete list it writes a marker such as `{{HIGH_RISK_LIST}}`, and the list built in code is put in its place, so the model never names, counts or adds up the members of a list itself.
+4. Code checks every citation against the records, removes internal names, and sets the confidence grade from what the citations show (no second model call). Web research runs on a real install only (`CIA_WEB_SEARCH`).
+5. A small model call suggests three follow-up questions; kinds the data cannot answer are dropped in code (`_shared/cia_followups.ts`).
+
+How this is tested: README › "How it is tested" (the CIA eval checks each question's facts for free, then a weekly sample of live answers and follow-ups).
 
 ### Sources are deterministic, not LLM-generated
 
@@ -192,6 +198,8 @@ Runs `assessCompositeRisk` (flags customers with corroborating signals across mu
   "confidence_reason": "One sentence"
 }
 ```
+
+(Simplified: the response also carries `charts`, `relatedQuestions`, `usage` with tokens and estimated cost, and the steps streamed while it worked.)
 
 ### Rate limit
 
